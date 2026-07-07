@@ -17,6 +17,7 @@
         </PackageReference>
         <PackageReference Include="Net.Codecrete.QrCodeGenerator" />
         <PackageReference Include="DrAbc.SilkSharp" />
+        <PackageReference Include="LightDl" />
         <PackageReference Include="ShiroBot.SDK" />
     </ItemGroup>
 
@@ -25,7 +26,11 @@
     </ItemGroup>
 
     <ItemGroup>
-        <Content Include="..\.github\workflows\release.yml" Link=".github\workflows\release.yml" />
+        <Compile Include="..\MyParser.Provider.*\**\*.cs"
+                 Exclude="..\MyParser.Provider.*\bin\**;..\MyParser.Provider.*\obj\**"
+                 Link="Providers\%(RecursiveDir)%(Filename)%(Extension)" />
+        <AvaloniaXaml Include="..\MyParser.Provider.*\**\*.axaml"
+                       Link="Providers\%(RecursiveDir)%(Filename)%(Extension)" />
     </ItemGroup>
 
     <Target Name="RepackPlugin" AfterTargets="Publish" Condition="'$(Configuration)'=='Release'">
@@ -42,7 +47,7 @@
 
         <ItemGroup>
             <RepackInput Include="$(PublishedPluginFile)" />
-            <ProviderOutput Include="$(PublishDir)myparser-provider-*.dll;$(PublishDir)myparser-provider-*.pdb;$(PublishDir)myparser-sharing.dll;$(PublishDir)myparser-sharing.pdb" />
+            <ProviderOutput Include="$(PublishDir)myparser-sharing.dll;$(PublishDir)myparser-sharing.pdb" />
             <RepackDependency Include="$(PublishDir)*.dll"
                               Exclude="$(PublishedPluginFile);
                                         $(MergedPluginFile);
@@ -92,11 +97,12 @@
             <PluginDebugOutput Include="$(TargetDir)**\*"
                                Exclude="$(TargetDir)myparser-provider-*.dll;$(TargetDir)myparser-provider-*.pdb;$(TargetDir)Avalonia*.dll;$(TargetDir)Avalonia*.pdb;$(TargetDir)HarfBuzzSharp.dll;$(TargetDir)HarfBuzzSharp.pdb;$(TargetDir)MicroCom.Runtime.dll;$(TargetDir)MicroCom.Runtime.pdb;$(TargetDir)SkiaSharp.dll;$(TargetDir)SkiaSharp.pdb;$(TargetDir)runtimes\**\*;$(TargetDir)$(AssemblyName).exe;$(TargetDir)$(AssemblyName).runtimeconfig.json;$(TargetDir)ShiroBot.AvaloniaSdk.dll;$(TargetDir)ShiroBot.AvaloniaSdk.pdb;$(TargetDir)ShiroBot.SDK.dll;$(TargetDir)ShiroBot.SDK.pdb;$(TargetDir)ShiroBot.Model.dll;$(TargetDir)ShiroBot.Model.pdb" />
             <PluginDebugNativeOutput Include="$(TargetDir)runtimes\win-x64\native\silkcodec.dll" Condition="Exists('$(TargetDir)runtimes\win-x64\native\silkcodec.dll')" />
-            <ProviderDebugOutput Include="$(TargetDir)myparser-provider-*.dll;$(TargetDir)myparser-provider-*.pdb" />
             <PluginPreviewOnlyOutput Include="$(HostPluginDir)Avalonia*.dll;$(HostPluginDir)Avalonia*.pdb;$(HostPluginDir)HarfBuzzSharp.dll;$(HostPluginDir)HarfBuzzSharp.pdb;$(HostPluginDir)MicroCom.Runtime.dll;$(HostPluginDir)MicroCom.Runtime.pdb;$(HostPluginDir)SkiaSharp.dll;$(HostPluginDir)SkiaSharp.pdb;$(HostPluginDir)$(AssemblyName).exe;$(HostPluginDir)$(AssemblyName).runtimeconfig.json;$(HostPluginDir)runtimes\**\*" />
+            <PluginLegacyProviderOutput Include="$(HostPluginDir)provider\myparser-provider-*.dll;$(HostPluginDir)provider\myparser-provider-*.pdb" />
         </ItemGroup>
 
         <Delete Files="@(PluginPreviewOnlyOutput)" />
+        <Delete Files="@(PluginLegacyProviderOutput)" />
         <RemoveDir Directories="$(HostPluginDir)runtimes" />
 
         <Copy SourceFiles="@(PluginDebugOutput)"
@@ -106,11 +112,6 @@
               DestinationFiles="@(PluginDebugNativeOutput->'$(HostPluginDir)%(Filename)%(Extension)')"
               SkipUnchangedFiles="true"
               Condition="'@(PluginDebugNativeOutput)' != ''" />
-
-        <MakeDir Directories="$(HostPluginDir)provider\" />
-        <Copy SourceFiles="@(ProviderDebugOutput)"
-              DestinationFiles="@(ProviderDebugOutput->'$(HostPluginDir)provider\%(Filename)%(Extension)')"
-              SkipUnchangedFiles="true" />
     </Target>
 
 </Project>

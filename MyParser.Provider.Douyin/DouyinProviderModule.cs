@@ -5,6 +5,7 @@ using ShiroBot.Model.Common;
 
 namespace MyParser.Provider.Douyin;
 
+[MyParserProvider("douyin")]
 public sealed class DouyinProviderModule : MyParserProviderModuleBase, IProviderMessageHandlerFactory, ICookieValidator, IProviderCookieStore, IProviderAutoParsePolicy, IProviderResultMessageClassifier, IProviderCommandContributor
 {
     public override string Id => "douyin";

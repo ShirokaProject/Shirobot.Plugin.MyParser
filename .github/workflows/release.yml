@@ -85,7 +85,7 @@ jobs:
           }
 
           New-Item -ItemType Directory -Force -Path (Join-Path $packageRoot "cookies") | Out-Null
-          foreach ($cookie in @("bilibili.txt", "douyin.txt", "xiaohongshu.txt", "netease.txt")) {
+          foreach ($cookie in @("bilibili.txt", "douyin.txt", "xiaohongshu.txt", "netease.txt", "heybox.txt", "weixinchannels-yuanbao.txt")) {
             New-Item -ItemType File -Force -Path (Join-Path $packageRoot "cookies/$cookie") | Out-Null
           }
 

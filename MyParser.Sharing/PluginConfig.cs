@@ -23,11 +23,23 @@ public sealed class PluginConfig
     [ConfigField("是否自动解析聊天中的网易云音乐歌曲链接。", Label = "自动解析网易云音乐链接")]
     public bool AutoParseNetEaseCloudMusicLinks { get; set; } = true;
 
+    [ConfigField("是否启用网易云音乐解析。关闭后网易云链接解析、搜索和登录命令均不可用。", Label = "启用网易云音乐解析")]
+    public bool EnableNetEaseCloudMusic { get; set; } = true;
+
+    [ConfigField("解析网易云音乐时是否发送歌曲介绍卡片。", Label = "发送网易云介绍卡片")]
+    public bool SendNetEaseCloudMusicIntroCard { get; set; } = true;
+
+    [ConfigField("解析网易云音乐时是否发送歌词卡片。", Label = "发送网易云歌词卡片")]
+    public bool SendNetEaseCloudMusicLyricCard { get; set; } = true;
+
     [ConfigField("是否自动解析聊天中的微信视频号链接。", Label = "自动解析微信视频号链接")]
     public bool AutoParseWeixinChannelsLinks { get; set; } = true;
 
-    [ConfigField("腾讯元宝网页 Cookie，用于解析 weixin.qq.com/sph 视频号分享链接。", Label = "腾讯元宝 Cookie", Type = "password")]
-    public string WeixinChannelsYuanbaoCookie { get; set; } = string.Empty;
+    [ConfigField("是否启用小黑盒解析。关闭后小黑盒链接解析不可用。", Label = "启用小黑盒解析")]
+    public bool EnableHeybox { get; set; } = true;
+
+    [ConfigField("是否自动解析聊天中的小黑盒链接。", Label = "自动解析小黑盒链接")]
+    public bool AutoParseHeyboxLinks { get; set; } = true;
 
     [ConfigField("发送网易云音乐语音时是否额外发送手机高音质版。关闭时默认只发送电脑兼容版。", Label = "网易云额外发送手机高音质语音")]
     public bool SendNetEaseMobileBestRecord { get; set; } = false;

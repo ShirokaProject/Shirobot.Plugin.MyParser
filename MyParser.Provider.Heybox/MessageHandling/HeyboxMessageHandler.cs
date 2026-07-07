@@ -17,6 +17,16 @@ internal sealed class HeyboxMessageHandler(ProviderMessageHandlerContext context
 
     public override async Task ParseAndReplyAsync(IncomingMessage message, string text, bool silentProviderMismatch = false)
     {
+        if (!Config.EnableHeybox)
+        {
+            if (!silentProviderMismatch)
+            {
+                await ReplyAsync(message, "小黑盒解析已关闭。");
+            }
+
+            return;
+        }
+
         await ReactAsync(message, "351", "小黑盒");
         try
         {

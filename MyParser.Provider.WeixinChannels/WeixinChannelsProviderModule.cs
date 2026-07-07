@@ -7,6 +7,7 @@ using ShiroBot.SDK.Plugin;
 
 namespace MyParser.Provider.WeixinChannels;
 
+[MyParserProvider("weixinchannels")]
 public sealed class WeixinChannelsProviderModule : MyParserProviderModuleBase, IProviderMessageHandlerFactory, ICookieValidator, IProviderCookieStore, IProviderAutoParsePolicy, IProviderResultMessageClassifier, IProviderCommandContributor
 {
     public override string Id => WeixinChannelsConstants.ProviderId;

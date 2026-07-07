@@ -87,6 +87,12 @@ public interface IMyParserProviderModule
     IReadOnlyList<IParseProvider> CreateProviders(PluginConfig config);
 }
 
+[AttributeUsage(AttributeTargets.Class, Inherited = false)]
+public sealed class MyParserProviderAttribute(string id) : Attribute
+{
+    public string Id { get; } = id;
+}
+
 public interface IProviderMessageHandlerFactory
 {
     IProviderMessageHandler? CreateMessageHandler(ProviderMessageHandlerContext context);

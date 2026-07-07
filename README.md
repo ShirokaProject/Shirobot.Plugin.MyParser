@@ -42,6 +42,7 @@ plugins/Shirobot.Plugin.MyParser/
     douyin.txt
     xiaohongshu.txt
     netease.txt
+    heybox.txt
     weixinchannels-yuanbao.txt
   provider/
     myparser-provider-bilibili.dll
@@ -111,8 +112,12 @@ plugins/Shirobot.Plugin.MyParser/
   "AutoParseBilibiliLinks": true,
   "AutoParseXiaohongshuLinks": false,
   "AutoParseNetEaseCloudMusicLinks": true,
+  "EnableNetEaseCloudMusic": true,
+  "SendNetEaseCloudMusicIntroCard": true,
+  "SendNetEaseCloudMusicLyricCard": true,
   "AutoParseWeixinChannelsLinks": true,
-  "WeixinChannelsYuanbaoCookie": "",
+  "EnableHeybox": true,
+  "AutoParseHeyboxLinks": true,
   "ParseCommandPrefix": "#parse",
   "XiaohongshuSignServerUrl": "",
   "XiaohongshuSignServerToken": "",
@@ -134,7 +139,7 @@ plugins/Shirobot.Plugin.MyParser/
 
 说明：旧配置项如 `SendVideoAsFile`、`SendVideoSegmentAsBase64`、`VideoSegmentBase64MaxMegabytes`、`AllowLanAccessToLocalVideoHttpServer`、`MaxImagesToShow` 已不再作为当前开发流程推荐配置；视频发送 URI 协议统一使用 `FileProtocol`，可选 `File` / `Base64` / `Http`。
 
-平台配置细节请查看各 provider README。微信视频号解析依赖腾讯元宝 Cookie，推荐通过 Owner/Admin 私信机器人发送 `#wx-cookie <Cookie>` 写入 `cookies/weixinchannels-yuanbao.txt`，也可临时使用配置项 `WeixinChannelsYuanbaoCookie`。
+平台配置细节请查看各 provider README。微信视频号解析依赖腾讯元宝 Cookie，推荐通过 Owner/Admin 私信机器人发送 `#wx-cookie <Cookie>` 写入 `cookies/weixinchannels-yuanbao.txt`，也可手动编辑该文件。
 
 ## 项目结构
 
@@ -406,6 +411,7 @@ cookies/bilibili.txt
 cookies/douyin.txt
 cookies/xiaohongshu.txt
 cookies/netease.txt
+cookies/heybox.txt
 cookies/weixinchannels-yuanbao.txt
 ```
 

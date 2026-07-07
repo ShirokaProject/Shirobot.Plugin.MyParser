@@ -9,5 +9,6 @@
     <PackageVersion Include="ILRepack.Lib.MSBuild.Task" Version="2.0.45" />
     <PackageVersion Include="Net.Codecrete.QrCodeGenerator" Version="3.0.0" />
     <PackageVersion Include="DrAbc.SilkSharp" Version="2.0.8" />
+    <PackageVersion Include="LightDl" Version="0.2.1" />
   </ItemGroup>
 </Project>

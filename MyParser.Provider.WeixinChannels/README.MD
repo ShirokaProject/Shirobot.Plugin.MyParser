@@ -87,7 +87,6 @@ plugins/Shirobot.Plugin.MyParser/cookies/weixinchannels-yuanbao.txt
 ```json
 {
   "AutoParseWeixinChannelsLinks": true,
-  "WeixinChannelsYuanbaoCookie": "",
   "SendVideoSegment": true,
   "UploadVideoAsFile": false,
   "UploadVideoAsFileOnlyOnVideoSendFailure": true,
@@ -97,19 +96,11 @@ plugins/Shirobot.Plugin.MyParser/cookies/weixinchannels-yuanbao.txt
 
 说明：
 
-- `AutoParseWeixinChannelsLinks`
-  - 是否自动解析聊天中的视频号分享链接。
-- `WeixinChannelsYuanbaoCookie`
-  - 可作为 Cookie 文件的 fallback。
-  - 推荐优先使用 `#wx-cookie` 或 `cookies/weixinchannels-yuanbao.txt`。
-- `SendVideoSegment`
-  - 是否下载并发送视频。
-- `UploadVideoAsFile`
-  - 是否额外上传为群/私聊文件。
-- `UploadVideoAsFileOnlyOnVideoSendFailure`
-  - `VideoSegment` 失败后再上传文件。
-- `FileProtocol`
-  - 视频发送 URI 协议：`File` / `Base64` / `Http`。
+- `AutoParseWeixinChannelsLinks`：是否自动解析聊天中的视频号分享链接。
+- `SendVideoSegment`：是否下载并发送视频。
+- `UploadVideoAsFile`：是否额外上传为群/私聊文件。
+- `UploadVideoAsFileOnlyOnVideoSendFailure`：`VideoSegment` 失败后再上传文件。
+- `FileProtocol`：视频发送 URI 协议：`File` / `Base64` / `Http`。
 
 ## Cookie 获取建议
 

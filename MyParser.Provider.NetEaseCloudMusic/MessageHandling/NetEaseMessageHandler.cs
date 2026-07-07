@@ -21,6 +21,12 @@ internal sealed partial class NetEaseMessageHandler(ProviderMessageHandlerContex
 
     public override async Task HandleLoginAsync(IncomingMessage message)
     {
+        if (!Config.EnableNetEaseCloudMusic)
+        {
+            await ReplyAsync(message, "网易云音乐解析已关闭。");
+            return;
+        }
+
         try
         {
             if (PrimaryProvider is not IQrLoginProvider qrLoginProvider)
@@ -72,6 +78,16 @@ internal sealed partial class NetEaseMessageHandler(ProviderMessageHandlerContex
 
     public override async Task ParseAndReplyAsync(IncomingMessage message, string text, bool silentProviderMismatch = false)
     {
+        if (!Config.EnableNetEaseCloudMusic)
+        {
+            if (!silentProviderMismatch)
+            {
+                await ReplyAsync(message, "网易云音乐解析已关闭。");
+            }
+
+            return;
+        }
+
         await ReactAsync(message, "351", "网易云音乐");
         try
         {
@@ -83,8 +99,16 @@ internal sealed partial class NetEaseMessageHandler(ProviderMessageHandlerContex
                 return;
             }
 
-            await SendCoverCardMessageAsync(message, result).ConfigureAwait(false);
-            await SendLyricCardMessageAsync(message, result).ConfigureAwait(false);
+            if (Config.SendNetEaseCloudMusicIntroCard)
+            {
+                await SendCoverCardMessageAsync(message, result).ConfigureAwait(false);
+            }
+
+            if (Config.SendNetEaseCloudMusicLyricCard)
+            {
+                await SendLyricCardMessageAsync(message, result).ConfigureAwait(false);
+            }
+
             await SendRecordAsync(message, result).ConfigureAwait(false);
             await ReactAsync(message, "426", "网易云音乐");
         }

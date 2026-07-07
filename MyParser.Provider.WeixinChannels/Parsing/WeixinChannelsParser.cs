@@ -161,9 +161,7 @@ public sealed class WeixinChannelsParser : IDisposable
 
     private string GetYuanbaoCookie()
     {
-        return string.IsNullOrWhiteSpace(MyParserRuntime.WeixinChannelsYuanbaoCookie)
-            ? _config.WeixinChannelsYuanbaoCookie
-            : MyParserRuntime.WeixinChannelsYuanbaoCookie;
+        return MyParserRuntime.WeixinChannelsYuanbaoCookie;
     }
 
     public static bool LooksLikeYuanbaoCookie(string cookie)

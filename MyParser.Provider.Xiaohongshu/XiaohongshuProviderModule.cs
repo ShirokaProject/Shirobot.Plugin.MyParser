@@ -5,6 +5,7 @@ using ShiroBot.Model.Common;
 
 namespace MyParser.Provider.Xiaohongshu;
 
+[MyParserProvider("xiaohongshu")]
 public sealed class XiaohongshuProviderModule : MyParserProviderModuleBase, IProviderMessageHandlerFactory, IProviderCookieStore, IProviderAutoParsePolicy, IProviderResultMessageClassifier, IProviderCommandContributor
 {
     public override string Id => "xiaohongshu";

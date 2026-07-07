@@ -1,5 +1,4 @@
 using System.Reflection;
-using System.Runtime.Loader;
 using System.Text;
 using Shirobot.Plugin.MyParser.MessageHandling;
 using Shirobot.Plugin.MyParser.Parsing;
@@ -11,7 +10,7 @@ using ShiroBot.SDK.Plugin;
 
 namespace Shirobot.Plugin.MyParser;
 
-[BotPlugin(id: "MyParser",
+[BotPlugin(id: "MyParser2",
     Name = "MyParser",
     Version = "0.2.0",
     Author = "PVPGood",
@@ -22,11 +21,6 @@ namespace Shirobot.Plugin.MyParser;
 ]
 public sealed class MyParserPlugin : PluginBase
 {
-    private static readonly object ProviderAssemblyResolverLock = new();
-    private static bool providerAssemblyResolverRegistered;
-    private static string? providerAssemblyResolverPluginDirectory;
-    private static AssemblyLoadContext? providerAssemblyLoadContext;
-
     private const string CookieDirectoryName = "cookies";
 
     private readonly Lock _reloadLock = new();
@@ -59,7 +53,7 @@ public sealed class MyParserPlugin : PluginBase
         ProviderMessageUtilities.ClearReactionCache();
         _config = Context.Config.Load<PluginConfig>();
         _hostServices = new ProviderHostServices(Context);
-        var modules = DiscoverProviderModules(GetPluginDirectory());
+        var modules = DiscoverProviderModules();
         RegisterProviderModuleCapabilities(modules);
         NormalizeRuntimeDirectories();
         LoadProviderCookiesFromPluginDirectory();
@@ -126,58 +120,22 @@ public sealed class MyParserPlugin : PluginBase
         BotLog.Info($"MyParser 已加载：provider 自动注册完成。命令：#parser / {_config.ParseCommandPrefix} <链接>");
     }
 
-    private static IMyParserProviderModule[] DiscoverProviderModules(string pluginDirectory)
+    private static IMyParserProviderModule[] DiscoverProviderModules()
     {
-        EnsureProviderAssemblyResolver(pluginDirectory);
-        LoadProviderAssemblies(pluginDirectory);
-
-        var contractAssemblyName = typeof(IMyParserProviderModule).Assembly.FullName;
-        BotLog.Info($"MyParser provider contract assembly：{contractAssemblyName}");
-
         var modules = new List<IMyParserProviderModule>();
-        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies().OrderBy(i => i.GetName().Name, StringComparer.OrdinalIgnoreCase))
+        var assembly = typeof(MyParserPlugin).Assembly;
+        foreach (var type in assembly.GetTypes()
+                     .Where(type => !type.IsAbstract
+                                    && type.GetCustomAttribute<MyParserProviderAttribute>() is not null
+                                    && typeof(IMyParserProviderModule).IsAssignableFrom(type))
+                     .OrderBy(type => type.GetCustomAttribute<MyParserProviderAttribute>()!.Id, StringComparer.OrdinalIgnoreCase))
         {
-            Type[] types;
-            try
-            {
-                types = assembly.GetTypes();
-            }
-            catch (ReflectionTypeLoadException ex)
-            {
-                types = ex.Types.Where(type => type is not null).Cast<Type>().ToArray();
-                var loaderErrors = string.Join("; ", ex.LoaderExceptions.Select(i => i?.Message).Where(i => !string.IsNullOrWhiteSpace(i)).Take(3));
-                if (assembly.GetName().Name?.StartsWith("myparser-provider-", StringComparison.OrdinalIgnoreCase) == true)
-                {
-                    BotLog.Warning($"MyParser provider 类型加载不完整：{assembly.FullName}, errors={loaderErrors}");
-                }
-            }
-
-            foreach (var type in types)
-            {
-                if (type.IsAbstract || typeof(IMyParserProviderModule).IsAssignableFrom(type) is false)
-                {
-                    continue;
-                }
-
-                BotLog.Info($"MyParser 发现 provider module 类型：{type.FullName}, assembly={assembly.FullName}");
-                modules.Add((IMyParserProviderModule)Activator.CreateInstance(type)!);
-            }
-
-            if (assembly.GetName().Name?.StartsWith("myparser-provider-", StringComparison.OrdinalIgnoreCase) == true
-                && !types.Any(type => !type.IsAbstract && typeof(IMyParserProviderModule).IsAssignableFrom(type)))
-            {
-                var candidates = types
-                    .Where(type => !type.IsAbstract && type.GetInterfaces().Any(i => string.Equals(i.FullName, typeof(IMyParserProviderModule).FullName, StringComparison.Ordinal)))
-                    .Select(type => type.FullName)
-                    .ToArray();
-                var candidateText = candidates.Length == 0 ? "none" : string.Join(", ", candidates);
-                BotLog.Warning($"MyParser provider assembly 中未发现可赋值 module：{assembly.FullName}, contract={contractAssemblyName}, same-name-candidates={candidateText}");
-            }
+            var attribute = type.GetCustomAttribute<MyParserProviderAttribute>()!;
+            BotLog.Info($"MyParser 发现 provider module 类型：id={attribute.Id}, type={type.FullName}");
+            modules.Add((IMyParserProviderModule)Activator.CreateInstance(type)!);
         }
 
-        return modules
-            .OrderBy(module => module.Id, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        return modules.ToArray();
     }
 
     private void RegisterProviderModuleCapabilities(IEnumerable<IMyParserProviderModule> modules)
@@ -230,115 +188,11 @@ public sealed class MyParserPlugin : PluginBase
         }
     }
 
-    private static AssemblyLoadContext GetProviderAssemblyLoadContext()
-    {
-        return AssemblyLoadContext.GetLoadContext(typeof(MyParserPlugin).Assembly)
-               ?? AssemblyLoadContext.Default;
-    }
-
-    private static void EnsureProviderAssemblyResolver(string pluginDirectory)
-    {
-        lock (ProviderAssemblyResolverLock)
-        {
-            providerAssemblyResolverPluginDirectory = pluginDirectory;
-            var loadContext = GetProviderAssemblyLoadContext();
-            providerAssemblyLoadContext = loadContext;
-            if (providerAssemblyResolverRegistered)
-            {
-                return;
-            }
-
-            loadContext.Resolving += ResolveProviderAssembly;
-            providerAssemblyResolverRegistered = true;
-            BotLog.Info($"MyParser provider load context：{loadContext.GetType().FullName}");
-        }
-    }
-
-    private static Assembly? ResolveProviderAssembly(AssemblyLoadContext context, AssemblyName assemblyName)
-    {
-        var loaded = AppDomain.CurrentDomain.GetAssemblies()
-            .FirstOrDefault(assembly => string.Equals(assembly.GetName().Name, assemblyName.Name, StringComparison.OrdinalIgnoreCase)
-                                        && AssemblyLoadContext.GetLoadContext(assembly) == context);
-        if (loaded is not null)
-        {
-            return loaded;
-        }
-
-        var pluginDirectory = providerAssemblyResolverPluginDirectory;
-        if (string.IsNullOrWhiteSpace(pluginDirectory))
-        {
-            return null;
-        }
-
-        var fileName = assemblyName.Name + ".dll";
-        var candidates = new[]
-        {
-            Path.Combine(pluginDirectory, fileName),
-            Path.Combine(pluginDirectory, "provider", fileName),
-            Path.Combine(AppContext.BaseDirectory, fileName),
-        };
-
-        foreach (var candidate in candidates)
-        {
-            if (!File.Exists(candidate))
-            {
-                continue;
-            }
-
-            try
-            {
-                return context.LoadFromAssemblyPath(Path.GetFullPath(candidate));
-            }
-            catch (Exception ex)
-            {
-                BotLog.Warning($"MyParser provider 依赖加载失败：{candidate}, error={ex.GetType().Name}: {ex.Message}");
-            }
-        }
-
-        return null;
-    }
-
-    private static void LoadProviderAssemblies(string pluginDirectory)
-    {
-        var providerDirectory = Path.Combine(pluginDirectory, "provider");
-        if (!Directory.Exists(providerDirectory))
-        {
-            BotLog.Warning($"MyParser provider 目录不存在：{providerDirectory}");
-            return;
-        }
-
-        var loadedPaths = AppDomain.CurrentDomain.GetAssemblies()
-            .Where(i => !string.IsNullOrWhiteSpace(i.Location))
-            .Select(i => Path.GetFullPath(i.Location))
-            .ToHashSet(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
-
-        foreach (var providerAssembly in Directory.EnumerateFiles(providerDirectory, "myparser-provider-*.dll", SearchOption.TopDirectoryOnly).Order(StringComparer.OrdinalIgnoreCase))
-        {
-            var fullPath = Path.GetFullPath(providerAssembly);
-            if (loadedPaths.Contains(fullPath))
-            {
-                continue;
-            }
-
-            try
-            {
-                var loadContext = providerAssemblyLoadContext ?? GetProviderAssemblyLoadContext();
-                var assembly = loadContext.LoadFromAssemblyPath(fullPath);
-                BotLog.Info($"MyParser 已加载 provider：{Path.GetFileName(fullPath)}, assembly={assembly.FullName}, loadContext={loadContext.GetType().FullName}");
-            }
-            catch (Exception ex)
-            {
-                BotLog.Warning($"MyParser provider 加载失败：{fullPath}, error={ex.GetType().Name}: {ex.Message}");
-            }
-        }
-    }
-
-
     private void LogLoadedProviderCapabilities(IReadOnlyCollection<IMyParserProviderModule> modules, IReadOnlyCollection<IParseProvider> providers)
     {
         if (modules.Count == 0)
         {
-            BotLog.Warning("MyParser 未发现任何 provider module。请检查 plugins/Shirobot.Plugin.MyParser/provider 下是否存在 myparser-provider-*.dll。");
+            BotLog.Warning("MyParser 未发现任何 provider module。请检查 provider 源码是否已通过 MyParserProviderAttribute 注册并编译进主插件。");
             return;
         }
 
@@ -1071,4 +925,3 @@ public sealed class MyParserPlugin : PluginBase
         _ => string.Empty,
     };
 }
-

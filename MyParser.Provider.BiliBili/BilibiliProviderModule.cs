@@ -9,6 +9,7 @@ using MyParser.Provider.BiliBili.Utilities;
 
 namespace MyParser.Provider.BiliBili;
 
+[MyParserProvider("bilibili")]
 public sealed class BilibiliProviderModule : MyParserProviderModuleBase, IProviderMessageHandlerFactory, IIncomingProviderTextNormalizer, ICookieValidator, IProviderCookieStore, IProviderAutoParsePolicy, IProviderResultMessageClassifier, IProviderCommandContributor, IProviderReplyParseTextBuilder
 {
     public override string Id => "bilibili";

@@ -7,6 +7,7 @@ using ShiroBot.SDK.Plugin;
 
 namespace MyParser.Provider.NetEaseCloudMusic;
 
+[MyParserProvider("neteasecloudmusic")]
 public sealed class NetEaseCloudMusicProviderModule : MyParserProviderModuleBase, IProviderMessageHandlerFactory, IProviderTextNormalizer, ICookieValidator, IProviderCookieStore, IProviderAutoParsePolicy, IProviderResultMessageClassifier, IProviderCommandContributor, IProviderReplyParseTextBuilder
 {
     private static readonly ConcurrentDictionary<string, IReadOnlyList<long>> SearchReplySongIds = new(StringComparer.Ordinal);
@@ -28,6 +29,11 @@ public sealed class NetEaseCloudMusicProviderModule : MyParserProviderModuleBase
 
     public override IReadOnlyList<IParseProvider> CreateProviders(PluginConfig config)
     {
+        if (!config.EnableNetEaseCloudMusic)
+        {
+            return [];
+        }
+
         return [new NetEaseParseProvider(new NetEaseParser(config))];
     }
 
@@ -37,12 +43,17 @@ public sealed class NetEaseCloudMusicProviderModule : MyParserProviderModuleBase
 
     public bool LooksLikeCookie(string cookie) => NetEaseParser.LooksLikeCookie(cookie);
 
-    public bool IsAutoParseEnabled(PluginConfig config) => config.AutoParseNetEaseCloudMusicLinks;
+    public bool IsAutoParseEnabled(PluginConfig config) => config.EnableNetEaseCloudMusic && config.AutoParseNetEaseCloudMusicLinks;
 
     public bool IsPluginResultMessage(string text) => text.StartsWith("网易云音乐解析", StringComparison.OrdinalIgnoreCase);
 
     public IReadOnlyList<ProviderCommandDescriptor> CreateCommands(ProviderCommandContext context)
     {
+        if (!context.Config.EnableNetEaseCloudMusic)
+        {
+            return [];
+        }
+
         return
         [
             new ProviderCommandDescriptor("#wyy", message => HandleSearchCommandAsync(context, message)),
@@ -72,6 +83,12 @@ public sealed class NetEaseCloudMusicProviderModule : MyParserProviderModuleBase
 
     private static async Task HandleSearchCommandAsync(ProviderCommandContext context, IncomingMessage message)
     {
+        if (!context.Config.EnableNetEaseCloudMusic)
+        {
+            await context.BotContext.Message.ReplyAsync(message, "网易云音乐解析已关闭。");
+            return;
+        }
+
         var keyword = GetPlainText(message).TrimStart();
         if (keyword.StartsWith("#wyy", StringComparison.OrdinalIgnoreCase)) keyword = keyword[4..].Trim();
         if (string.IsNullOrWhiteSpace(keyword))
@@ -112,12 +129,23 @@ public sealed class NetEaseCloudMusicProviderModule : MyParserProviderModuleBase
 
     private static Task HandleLoginAsync(ProviderCommandContext context, IncomingMessage message)
     {
+        if (!context.Config.EnableNetEaseCloudMusic)
+        {
+            return context.BotContext.Message.ReplyAsync(message, "网易云音乐解析已关闭。");
+        }
+
         return context.MessageHandler?.HandleLoginAsync(message)
                ?? context.BotContext.Message.ReplyAsync(message, "网易云音乐解析器尚未初始化或不支持登录。");
     }
 
     private static async Task HandleCookieCheckAsync(ProviderCommandContext context, IncomingMessage message)
     {
+        if (!context.Config.EnableNetEaseCloudMusic)
+        {
+            await context.BotContext.Message.ReplyAsync(message, "网易云音乐解析已关闭。");
+            return;
+        }
+
         if (context.PrimaryProvider is not IProviderLoginStatusProvider loginStatusProvider)
         {
             await context.BotContext.Message.ReplyAsync(message, "网易云音乐解析器尚未初始化或不支持 Cookie 检查。");

@@ -50,6 +50,15 @@ public sealed partial class HeyboxParser(PluginConfig config) : IDisposable
 
     public static bool ContainsHeyboxUrl(string text) => HeyboxUrlParser.ContainsHeyboxUrl(text);
 
+    public static bool LooksLikeCookie(string cookie)
+    {
+        return !string.IsNullOrWhiteSpace(cookie)
+               && cookie.Contains('=')
+               && (cookie.Contains(';')
+                   || cookie.Contains("heybox", StringComparison.OrdinalIgnoreCase)
+                   || cookie.Contains("hkey", StringComparison.OrdinalIgnoreCase));
+    }
+
     public async Task<HeyboxParseResult> ParseAsync(string text, CancellationToken cancellationToken = default)
     {
         var sourceUrl = HeyboxUrlParser.ExtractHeyboxUrl(text) ?? throw new HeyboxParseException("未找到小黑盒链接。");
@@ -882,6 +891,8 @@ public sealed partial class HeyboxParser(PluginConfig config) : IDisposable
         {
             request.Headers.TryAddWithoutValidation("Referer", referer);
         }
+
+        ApplyCookieHeader(request);
     }
 
     private static void ApplyApiHeaders(HttpRequestMessage request, string referer)
@@ -897,6 +908,22 @@ public sealed partial class HeyboxParser(PluginConfig config) : IDisposable
         request.Headers.TryAddWithoutValidation("sec-ch-ua-platform", "\"Windows\"");
         request.Headers.TryAddWithoutValidation("sec-ch-ua", "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Google Chrome\";v=\"146\"");
         request.Headers.TryAddWithoutValidation("sec-ch-ua-mobile", "?0");
+        ApplyCookieHeader(request);
+    }
+
+    private static void ApplyCookieHeader(HttpRequestMessage request)
+    {
+        var cookie = NormalizeCookie(MyParserRuntime.HeyboxCookie);
+        if (!string.IsNullOrWhiteSpace(cookie))
+        {
+            request.Headers.TryAddWithoutValidation("Cookie", cookie);
+        }
+    }
+
+    private static string NormalizeCookie(string cookie)
+    {
+        cookie = cookie.Trim();
+        return cookie.StartsWith("Cookie:", StringComparison.OrdinalIgnoreCase) ? cookie[7..].Trim() : cookie;
     }
 
     public void Dispose() => _http.Dispose();
