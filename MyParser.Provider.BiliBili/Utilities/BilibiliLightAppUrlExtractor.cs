@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using ShiroBot.Model.Common;
 
 namespace MyParser.Provider.BiliBili.Utilities;
@@ -103,9 +102,9 @@ internal static partial class BilibiliLightAppUrlExtractor
     private static IEnumerable<string> ExtractUrls(string value)
     {
         value = value.Replace("\\/", "/", StringComparison.Ordinal);
-        foreach (Match match in UrlRegex().Matches(value))
+        foreach (var url in BilibiliUrlMatcher.ExtractHttpUrls(value))
         {
-            yield return Uri.UnescapeDataString(match.Value);
+            yield return url;
         }
     }
 
@@ -124,7 +123,4 @@ internal static partial class BilibiliLightAppUrlExtractor
         TempIncomingMessage temp => temp.Segments.OfType<LightAppIncomingSegment>(),
         _ => [],
     };
-
-    [GeneratedRegex("https?://[^\\s\\\"'<>，。)）\\]}]+", RegexOptions.IgnoreCase)]
-    private static partial Regex UrlRegex();
 }

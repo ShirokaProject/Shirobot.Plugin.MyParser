@@ -1,4 +1,3 @@
-using System.Net;
 using System.Text.RegularExpressions;
 
 namespace MyParser.Provider.Xiaohongshu.Utilities;
@@ -7,25 +6,12 @@ internal static partial class XiaohongshuUrlParser
 {
     public static bool ContainsXiaohongshuUrl(string text)
     {
-        return ExtractXiaohongshuUrl(text) is not null;
+        return XiaohongshuUrlMatcher.ContainsXiaohongshuUrl(text);
     }
 
     public static string? ExtractXiaohongshuUrl(string text)
     {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return null;
-        }
-
-        var normalized = text.Trim().Replace("&amp;", "&", StringComparison.OrdinalIgnoreCase);
-        var match = UrlRegex().Match(normalized);
-        if (!match.Success)
-        {
-            return null;
-        }
-
-        var url = WebUtility.UrlDecode(match.Value.Trim().Trim('"', '\''));
-        return IsXiaohongshuHost(url) ? url : null;
+        return XiaohongshuUrlMatcher.ExtractXiaohongshuUrl(text);
     }
 
     public static string? ExtractNoteId(string url)
@@ -73,13 +59,6 @@ internal static partial class XiaohongshuUrlParser
                || url.Contains("xhs.cn", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool IsXiaohongshuHost(string url)
-    {
-        return url.Contains("xiaohongshu.com", StringComparison.OrdinalIgnoreCase)
-               || url.Contains("xhslink.com", StringComparison.OrdinalIgnoreCase)
-               || url.Contains("xhs.cn", StringComparison.OrdinalIgnoreCase);
-    }
-
     private static string? GetQueryValue(string url, string key)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
@@ -99,9 +78,6 @@ internal static partial class XiaohongshuUrlParser
 
         return null;
     }
-
-    [GeneratedRegex("https?://[^\\s，。)）>\\]]+", RegexOptions.IgnoreCase)]
-    private static partial Regex UrlRegex();
 
     [GeneratedRegex("xiaohongshu\\.com/(?:explore|discovery/item)/(?:[0-9a-fA-F]+/)?([0-9a-fA-F]{12,40})", RegexOptions.IgnoreCase)]
     private static partial Regex NoteRegex();

@@ -2,7 +2,7 @@ using Shirobot.Plugin.MyParser.Parsing;
 
 namespace MyParser.Provider.BiliBili.Parsing;
 
-public sealed class BilibiliArticleParseProvider(BilibiliParser parser) : IParseProvider, IProviderPriority
+public sealed class BilibiliArticleParseProvider(BilibiliParser parser) : IProviderParseTextMatcher, IParseProvider, IProviderPriority
 {
     public BilibiliParser Parser { get; } = parser;
 
@@ -15,6 +15,16 @@ public sealed class BilibiliArticleParseProvider(BilibiliParser parser) : IParse
         return Utilities.BilibiliUrlParser.ExtractCvid(text) is not null
                || Utilities.BilibiliUrlParser.ExtractOpusId(text) is not null
                || Utilities.BilibiliUrlParser.ExtractB23Url(text) is not null;
+    }
+
+    public string? TryNormalizeParseText(string text, ProviderParseTextContext context)
+    {
+        if (context.IsUrlLike)
+        {
+            return Utilities.BilibiliUrlParser.ExtractStrictBilibiliUrl(text);
+        }
+
+        return context.IsAutoParse ? null : Utilities.BilibiliUrlParser.NormalizeStandaloneArticleId(text);
     }
 
     public async Task<MediaParseResult> ParseAsync(string text, CancellationToken cancellationToken = default)

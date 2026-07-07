@@ -4,31 +4,17 @@ namespace MyParser.Provider.Heybox.Parsing;
 
 internal static partial class HeyboxUrlParser
 {
-    [GeneratedRegex("""https?://[^\s\u3000<>\"']*(?:xiaoheihe\.cn|heybox\.cn|maxjia\.com)[^\s\u3000<>\"']*""", RegexOptions.IgnoreCase)]
-    private static partial Regex HeyboxUrlRegex();
-
     [GeneratedRegex(@"/bbs/link/([A-Za-z0-9]+)", RegexOptions.IgnoreCase)]
     private static partial Regex LinkIdPathRegex();
 
     [GeneratedRegex("""(?:link_id|linkid)[\"'=:/\\\s]+([A-Za-z0-9]+)""", RegexOptions.IgnoreCase)]
     private static partial Regex LinkIdTextRegex();
 
-    public static bool ContainsHeyboxUrl(string text) => ExtractHeyboxUrl(text) is not null;
+    public static bool ContainsHeyboxUrl(string text) => HeyboxUrlMatcher.ContainsHeyboxUrl(text);
 
     public static string? ExtractHeyboxUrl(string text)
     {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return null;
-        }
-
-        var match = HeyboxUrlRegex().Match(text);
-        if (!match.Success)
-        {
-            return null;
-        }
-
-        return match.Value.TrimEnd(')', ']', '}', '。', '，', ',', '.', ';');
+        return HeyboxUrlMatcher.ExtractHeyboxUrl(text);
     }
 
     public static string? ExtractLinkId(params string?[] values)

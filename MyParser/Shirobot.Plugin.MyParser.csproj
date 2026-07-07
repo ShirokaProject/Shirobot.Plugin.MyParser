@@ -102,7 +102,7 @@
         </ItemGroup>
 
         <Delete Files="@(PluginPreviewOnlyOutput)" />
-        <Delete Files="@(PluginLegacyProviderOutput)" />
+        <Delete Files="@(PluginLegacyProviderOutput)" ContinueOnError="WarnAndContinue" />
         <RemoveDir Directories="$(HostPluginDir)runtimes" />
 
         <Copy SourceFiles="@(PluginDebugOutput)"

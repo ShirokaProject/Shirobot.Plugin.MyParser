@@ -671,24 +671,21 @@ public sealed class MyParserPlugin : PluginBase
 
     private bool IsParseCommand(IncomingMessage message)
     {
-        var text = GetPlainText(message).TrimStart();
-        return !string.IsNullOrWhiteSpace(_config.ParseCommandPrefix)
-               && text.StartsWith(_config.ParseCommandPrefix, StringComparison.OrdinalIgnoreCase);
+        return TryGetParseCommandContent(GetPlainText(message), out _);
     }
 
     private bool ShouldAutoParse(IncomingMessage message)
     {
         if (TryBuildProviderReplyParseText(message, out var replyParseText))
         {
-            return IsAutoParseEnabledForProvider(_providerRegistry?.FindProvider(replyParseText));
+            return IsAutoParseEnabledForProvider(_providerRegistry?.FindProvider(replyParseText, isAutoParse: false, out _));
         }
 
         var text = GetPlainText(message);
         if (!string.IsNullOrWhiteSpace(text))
         {
             var trimmed = text.TrimStart();
-            if (trimmed.StartsWith(_config.ParseCommandPrefix, StringComparison.OrdinalIgnoreCase)
-                || trimmed.StartsWith("#parser", StringComparison.OrdinalIgnoreCase)
+            if (TryGetParseCommandContent(trimmed, out _)
                 || IsPluginResultMessage(trimmed)
                 || IsDeferredProviderParseText(trimmed)
                 || _providerCommandDescriptors.Any(i => IsProviderCommand(trimmed, i)))
@@ -698,7 +695,7 @@ public sealed class MyParserPlugin : PluginBase
         }
 
         var parseText = GetStrictAutoParseText(message);
-        var provider = string.IsNullOrWhiteSpace(parseText) ? null : _providerRegistry?.FindProvider(parseText);
+        var provider = string.IsNullOrWhiteSpace(parseText) ? null : _providerRegistry?.FindProvider(parseText, isAutoParse: true, out _);
         if (provider is null && _providerRegistry?.FindProvider(message, out _) is { } fallbackProvider && !HasIncomingProviderNormalizer(fallbackProvider.Id))
         {
             provider = fallbackProvider;
@@ -711,18 +708,18 @@ public sealed class MyParserPlugin : PluginBase
     {
         if (TryBuildProviderReplyParseText(message, out var replyParseText))
         {
-            return DispatchParseAsync(message, replyParseText, silentProviderMismatch: true);
+            return DispatchParseAsync(message, replyParseText, silentProviderMismatch: true, isAutoParse: false);
         }
 
         var parseText = GetStrictAutoParseText(message);
-        if (!string.IsNullOrWhiteSpace(parseText) && _providerRegistry?.FindProvider(parseText) is not null)
+        if (!string.IsNullOrWhiteSpace(parseText) && _providerRegistry?.FindProvider(parseText, isAutoParse: true, out parseText) is not null)
         {
-            return DispatchParseAsync(message, parseText, silentProviderMismatch: true);
+            return DispatchParseAsync(message, parseText, silentProviderMismatch: true, isAutoParse: true);
         }
 
         if (_providerRegistry?.FindProvider(message, out parseText) is { } fallbackProvider && !HasIncomingProviderNormalizer(fallbackProvider.Id) && !string.IsNullOrWhiteSpace(parseText))
         {
-            return DispatchParseAsync(message, parseText, silentProviderMismatch: true);
+            return DispatchParseAsync(message, parseText, silentProviderMismatch: true, isAutoParse: true);
         }
 
         return Task.CompletedTask;
@@ -787,11 +784,38 @@ public sealed class MyParserPlugin : PluginBase
     private Task HandleParseCommandAsync(IncomingMessage message)
     {
         var text = GetPlainText(message);
-        var content = text.Length <= _config.ParseCommandPrefix.Length
-            ? string.Empty
-            : text[_config.ParseCommandPrefix.Length..].Trim();
+        var content = TryGetParseCommandContent(text, out var parsedContent) ? parsedContent : string.Empty;
 
         return DispatchParseAsync(message, string.IsNullOrWhiteSpace(content) ? text : content);
+    }
+
+    private bool TryGetParseCommandContent(string text, out string content)
+    {
+        var trimmed = text.TrimStart();
+        return TryStripParseCommandPrefix(trimmed, _config.ParseCommandPrefix, requireContent: false, out content)
+               || TryStripParseCommandPrefix(trimmed, "#parser", requireContent: true, out content);
+    }
+
+    private static bool TryStripParseCommandPrefix(string text, string prefix, bool requireContent, out string content)
+    {
+        content = string.Empty;
+        if (string.IsNullOrWhiteSpace(prefix) || !text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (text.Length == prefix.Length)
+        {
+            return !requireContent;
+        }
+
+        if (!char.IsWhiteSpace(text[prefix.Length]))
+        {
+            return false;
+        }
+
+        content = text[prefix.Length..].Trim();
+        return !requireContent || !string.IsNullOrWhiteSpace(content);
     }
 
     private void RegisterProviderCommands(IReadOnlyCollection<IMyParserProviderModule> modules, IReadOnlyList<IParseProvider> orderedProviders)
@@ -889,7 +913,7 @@ public sealed class MyParserPlugin : PluginBase
                || _providerRuntimeModules.Any(module => module.IsPluginResultMessage(text));
     }
 
-    private Task DispatchParseAsync(IncomingMessage message, string text, bool silentProviderMismatch = false)
+    private Task DispatchParseAsync(IncomingMessage message, string text, bool silentProviderMismatch = false, bool isAutoParse = false)
     {
         text = NormalizeParseText(text);
         if (IsDeferredProviderParseText(text))
@@ -897,13 +921,14 @@ public sealed class MyParserPlugin : PluginBase
             return Task.CompletedTask;
         }
 
-        var provider = _providerRegistry?.FindProvider(text);
+        var parseText = text;
+        var provider = _providerRegistry?.FindProvider(text, isAutoParse, out parseText);
         if (provider is null)
         {
             return Context.Message.ReplyAsync(message, "未找到可处理该链接的解析提供商。");
         }
 
-        return TryGetProviderMessageHandler(provider.Id)?.ParseAndReplyAsync(message, text, silentProviderMismatch)
+        return TryGetProviderMessageHandler(provider.Id)?.ParseAndReplyAsync(message, parseText, silentProviderMismatch)
                ?? Context.Message.ReplyAsync(message, $"{provider.Name} 已识别，但该 provider 未接入消息发送流程。");
     }
 

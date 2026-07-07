@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using MyParser.Provider.Heybox.Parsing;
 using ShiroBot.Model.Common;
 using ShiroBot.SDK.Abstractions;
@@ -195,9 +194,9 @@ internal static partial class HeyboxLightAppUrlExtractor
     private static IEnumerable<string> ExtractUrls(string value)
     {
         value = value.Replace("\\/", "/", StringComparison.Ordinal);
-        foreach (Match match in UrlRegex().Matches(value))
+        foreach (var url in HeyboxUrlMatcher.ExtractHttpUrls(value))
         {
-            yield return Uri.UnescapeDataString(match.Value.TrimEnd('\\', '"', '\'', ',', '，', ')', '）', ']', '】'));
+            yield return url.TrimEnd('\\', '"', '\'', ',', '，', ')', '）', ']', '】');
         }
     }
 
@@ -222,7 +221,4 @@ internal static partial class HeyboxLightAppUrlExtractor
         TempIncomingMessage temp => temp.Segments.OfType<LightAppIncomingSegment>(),
         _ => [],
     };
-
-    [GeneratedRegex("https?://[^\\s\\\"'<>，。)）\\]}]+", RegexOptions.IgnoreCase)]
-    private static partial Regex UrlRegex();
 }

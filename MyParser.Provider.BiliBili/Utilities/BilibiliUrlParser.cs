@@ -6,24 +6,12 @@ internal static partial class BilibiliUrlParser
 {
     public static bool ContainsStrictBilibiliUrl(string text)
     {
-        return ExtractStrictBilibiliUrl(text) is not null;
+        return BilibiliUrlMatcher.ContainsStrictBilibiliUrl(text);
     }
 
     public static string? ExtractStrictBilibiliUrl(string text)
     {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return null;
-        }
-
-        var match = StrictBilibiliUrlRegex().Match(text);
-        if (!match.Success)
-        {
-            return null;
-        }
-
-        var url = match.Value.TrimEnd('.', '。', ',', '，', ')', '）', ']', '】', '>', '》');
-        return url.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? url : "https://" + url;
+        return BilibiliUrlMatcher.ExtractStrictBilibiliUrl(text);
     }
 
     public static string? NormalizeStandaloneBilibiliId(string text)
@@ -53,6 +41,33 @@ internal static partial class BilibiliUrlParser
             "md" => $"https://www.bilibili.com/bangumi/media/md{id}",
             _ => null,
         };
+    }
+
+    public static string? NormalizeStandaloneBvid(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        var value = text.Trim().TrimEnd('.', '。', ',', '，');
+        var match = StandaloneBvidRegex().Match(value);
+        return match.Success ? $"https://www.bilibili.com/video/{match.Value}/" : null;
+    }
+
+    public static string? NormalizeStandaloneVideoId(string text)
+    {
+        return NormalizeStandaloneId(text, ["bv", "av"]);
+    }
+
+    public static string? NormalizeStandaloneBangumiId(string text)
+    {
+        return NormalizeStandaloneId(text, ["ep", "ss", "md"]);
+    }
+
+    public static string? NormalizeStandaloneArticleId(string text)
+    {
+        return NormalizeStandaloneId(text, ["cv", "opus"]);
     }
 
     public static bool ContainsBilibiliUrl(string text)
@@ -145,19 +160,7 @@ internal static partial class BilibiliUrlParser
 
     public static string? ExtractB23Url(string text)
     {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return null;
-        }
-
-        var match = B23UrlRegex().Match(text);
-        if (!match.Success)
-        {
-            return null;
-        }
-
-        var url = match.Value.TrimEnd('.', '。', ',', '，', ')', '）', ']', '】');
-        return url.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? url : "https://" + url;
+        return BilibiliUrlMatcher.ExtractB23Url(text);
     }
 
     public static string? ExtractBilibiliUrl(string text)
@@ -194,11 +197,29 @@ internal static partial class BilibiliUrlParser
         return match.Success && long.TryParse(match.Groups[1].Value, out var aid) ? aid : null;
     }
 
-    [GeneratedRegex(@"(?:https?://)?(?:(?:www|m|live|t|space)\.)?bilibili\.com/[^\s<>\""'，。]+|(?:https?://)?b23\.tv/[0-9A-Za-z]+|(?:https?://)?bili2233\.cn/[0-9A-Za-z]+", RegexOptions.IgnoreCase)]
-    private static partial Regex StrictBilibiliUrlRegex();
+    private static string? NormalizeStandaloneId(string text, string[] allowedPrefixes)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        var value = text.Trim().TrimEnd('.', '。', ',', '，');
+        var match = StandaloneBilibiliIdRegex().Match(value);
+        if (!match.Success)
+        {
+            return null;
+        }
+
+        var prefix = match.Groups["prefix"].Value.ToLowerInvariant();
+        return allowedPrefixes.Contains(prefix, StringComparer.OrdinalIgnoreCase) ? NormalizeStandaloneBilibiliId(value) : null;
+    }
 
     [GeneratedRegex(@"^(?<prefix>BV)(?<id>[0-9A-Za-z]{10})$|^(?<prefix>av|cv|opus|ep|ss|md)(?<id>\d+)$", RegexOptions.IgnoreCase)]
     private static partial Regex StandaloneBilibiliIdRegex();
+
+    [GeneratedRegex(@"^BV[0-9A-Za-z]{10}$", RegexOptions.IgnoreCase)]
+    private static partial Regex StandaloneBvidRegex();
 
     [GeneratedRegex("BV[0-9A-Za-z]{10}", RegexOptions.IgnoreCase)]
     private static partial Regex BvidRegex();
@@ -215,19 +236,16 @@ internal static partial class BilibiliUrlParser
     [GeneratedRegex(@"live\.bilibili\.com/(?:blanc/)?(\d+)", RegexOptions.IgnoreCase)]
     private static partial Regex LiveRoomRegex();
 
-    [GeneratedRegex(@"(?:https?://)?b23\.tv/[0-9A-Za-z]+", RegexOptions.IgnoreCase)]
-    private static partial Regex B23UrlRegex();
-
     [GeneratedRegex(@"[?&]p=(\d+)", RegexOptions.IgnoreCase)]
     private static partial Regex VideoPageRegex();
 
-    [GeneratedRegex(@"(?:/bangumi/play/)?ep(\d+)", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"(?:/bangumi/play/)?ep(\d+)\b", RegexOptions.IgnoreCase)]
     private static partial Regex BangumiEpRegex();
 
-    [GeneratedRegex(@"(?:/bangumi/play/)?ss(\d+)", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"(?:/bangumi/play/)?ss(\d+)\b", RegexOptions.IgnoreCase)]
     private static partial Regex BangumiSeasonRegex();
 
-    [GeneratedRegex(@"(?:/bangumi/media/)?md(\d+)", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"(?:/bangumi/media/)?md(\d+)\b", RegexOptions.IgnoreCase)]
     private static partial Regex BangumiMediaRegex();
 }
 

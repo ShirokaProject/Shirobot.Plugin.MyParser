@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using MyParser.Provider.Xiaohongshu.Parsing;
 using ShiroBot.Model.Common;
 using ShiroBot.SDK.Abstractions;
@@ -196,9 +195,9 @@ internal static partial class XiaohongshuLightAppUrlExtractor
     private static IEnumerable<string> ExtractUrls(string value)
     {
         value = value.Replace("\\/", "/", StringComparison.Ordinal);
-        foreach (Match match in UrlRegex().Matches(value))
+        foreach (var url in XiaohongshuUrlMatcher.ExtractHttpUrls(value))
         {
-            yield return Uri.UnescapeDataString(match.Value.TrimEnd('\\', '"', '\'', ',', '，', ')', '）', ']', '】'));
+            yield return url.TrimEnd('\\', '"', '\'', ',', '，', ')', '）', ']', '】');
         }
     }
 
@@ -224,6 +223,4 @@ internal static partial class XiaohongshuLightAppUrlExtractor
         _ => [],
     };
 
-    [GeneratedRegex("https?://[^\\s\\\"'<>，。)）\\]}]+", RegexOptions.IgnoreCase)]
-    private static partial Regex UrlRegex();
 }

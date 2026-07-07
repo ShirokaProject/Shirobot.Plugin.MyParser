@@ -8,8 +8,7 @@ internal static partial class NetEaseUrlParser
     {
         return TryParseInternalSongUri(text, out _)
                || TryParseInternalPickUri(text, out _, out _)
-               || SongUrlRegex().IsMatch(text)
-               || ShortUrlRegex().IsMatch(text);
+               || NetEaseUrlMatcher.ContainsNetEaseSongUrl(text);
     }
 
     public static string? NormalizeParseText(string text)
@@ -71,10 +70,10 @@ internal static partial class NetEaseUrlParser
             return internalId;
         }
 
-        var urlMatch = SongUrlRegex().Match(text);
-        if (urlMatch.Success && long.TryParse(urlMatch.Groups[1].Value, out var urlId) && urlId > 0)
+        var urlId = NetEaseUrlMatcher.ExtractSongIdFromUrl(text);
+        if (urlId is not null)
         {
-            return urlId;
+            return urlId.Value;
         }
 
         var match = SongIdRegex().Match(text);
@@ -88,21 +87,12 @@ internal static partial class NetEaseUrlParser
 
     public static string? ExtractSongUrl(string text)
     {
-        var match = SongUrlRegex().Match(text);
-        if (!match.Success)
-        {
-            return null;
-        }
-
-        return long.TryParse(match.Groups[1].Value, out var id) && id > 0
-            ? BuildSongUrl(id)
-            : match.Value;
+        return NetEaseUrlMatcher.ExtractSongUrl(text);
     }
 
     public static string? ExtractShortUrl(string text)
     {
-        var match = ShortUrlRegex().Match(text);
-        return match.Success ? match.Value : null;
+        return NetEaseUrlMatcher.ExtractShortUrl(text);
     }
 
     [GeneratedRegex(@"netease://song\?id=(\d+)", RegexOptions.IgnoreCase)]
@@ -110,12 +100,6 @@ internal static partial class NetEaseUrlParser
 
     [GeneratedRegex(@"netease://pick\?index=(\d+)&ids=([\d,]+)", RegexOptions.IgnoreCase)]
     private static partial Regex InternalPickRegex();
-
-    [GeneratedRegex(@"https?://(?:y\.)?music\.163\.com/(?:#/)?song\?(?:[^\s\]\)）>&]*&)*id=(\d+)(?:&[^\s\]\)）>]*)?", RegexOptions.IgnoreCase)]
-    private static partial Regex SongUrlRegex();
-
-    [GeneratedRegex(@"https?://163cn\.tv/[0-9A-Za-z]+", RegexOptions.IgnoreCase)]
-    private static partial Regex ShortUrlRegex();
 
     [GeneratedRegex(@"(?:^|[?&#])id=(\d+)", RegexOptions.IgnoreCase)]
     private static partial Regex SongIdRegex();

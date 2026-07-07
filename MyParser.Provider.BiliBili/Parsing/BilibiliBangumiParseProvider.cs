@@ -5,7 +5,7 @@ using MyParser.Provider.BiliBili.Utilities;
 
 namespace MyParser.Provider.BiliBili.Parsing;
 
-public sealed class BilibiliBangumiParseProvider(BilibiliBangumiParser parser) : IParseProvider, IProviderPriority
+public sealed class BilibiliBangumiParseProvider(BilibiliBangumiParser parser) : IProviderParseTextMatcher, IParseProvider, IProviderPriority
 {
     public BilibiliBangumiParser Parser { get; } = parser;
 
@@ -17,6 +17,16 @@ public sealed class BilibiliBangumiParseProvider(BilibiliBangumiParser parser) :
     {
         return BilibiliUrlParser.ExtractStrictBilibiliUrl(text) is not null
                && BilibiliUrlParser.ExtractBangumiIds(text).HasAny;
+    }
+
+    public string? TryNormalizeParseText(string text, ProviderParseTextContext context)
+    {
+        if (context.IsUrlLike)
+        {
+            return BilibiliUrlParser.ExtractStrictBilibiliUrl(text);
+        }
+
+        return context.IsAutoParse ? null : BilibiliUrlParser.NormalizeStandaloneBangumiId(text);
     }
 
     public async Task<MediaParseResult> ParseAsync(string text, CancellationToken cancellationToken = default)

@@ -10,7 +10,7 @@ using MyParser.Provider.BiliBili.Utilities;
 namespace MyParser.Provider.BiliBili;
 
 [MyParserProvider("bilibili")]
-public sealed class BilibiliProviderModule : MyParserProviderModuleBase, IProviderMessageHandlerFactory, IIncomingProviderTextNormalizer, ICookieValidator, IProviderCookieStore, IProviderAutoParsePolicy, IProviderResultMessageClassifier, IProviderCommandContributor, IProviderReplyParseTextBuilder
+public sealed class BilibiliProviderModule : MyParserProviderModuleBase, IProviderMessageHandlerFactory, IProviderTextNormalizer, IIncomingProviderTextNormalizer, ICookieValidator, IProviderCookieStore, IProviderAutoParsePolicy, IProviderResultMessageClassifier, IProviderCommandContributor, IProviderReplyParseTextBuilder
 {
     public override string Id => "bilibili";
 
@@ -47,14 +47,15 @@ public sealed class BilibiliProviderModule : MyParserProviderModuleBase, IProvid
 
     public string? NormalizeParseText(string text)
     {
-        return BilibiliUrlParser.NormalizeStandaloneBilibiliId(text)
-               ?? BilibiliUrlParser.ExtractStrictBilibiliUrl(text);
+        return BilibiliUrlParser.ExtractStrictBilibiliUrl(text)
+               ?? BilibiliUrlParser.NormalizeStandaloneBilibiliId(text);
     }
 
     public string? NormalizeParseText(IncomingMessage message)
     {
         var text = string.Concat(GetSegments(message).OfType<TextIncomingSegment>().Select(i => i.Text));
-        return NormalizeParseText(text)
+        return BilibiliUrlParser.ExtractStrictBilibiliUrl(text)
+               ?? BilibiliUrlParser.NormalizeStandaloneBvid(text)
                ?? (BilibiliLightAppUrlExtractor.ExtractParseText(message) is { } extracted
                    ? BilibiliUrlParser.ExtractStrictBilibiliUrl(extracted)
                    : null);

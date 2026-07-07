@@ -8,17 +8,42 @@ public sealed class ParseProviderRegistry(IEnumerable<IParseProvider> providers)
 
     public IParseProvider? FindProvider(string text)
     {
-        return _providers.FirstOrDefault(provider => provider.CanHandle(text));
+        return FindProvider(text, isAutoParse: false, out _);
+    }
+
+    public IParseProvider? FindProvider(string text, bool isAutoParse, out string parseText)
+    {
+        parseText = text;
+        var context = new ProviderParseTextContext(isAutoParse, IsUrlLike(text));
+        foreach (var provider in _providers)
+        {
+            var candidate = provider is IProviderParseTextMatcher matcher
+                ? matcher.TryNormalizeParseText(text, context)
+                : context.IsUrlLike ? text : null;
+            if (string.IsNullOrWhiteSpace(candidate) || !provider.CanHandle(candidate))
+            {
+                continue;
+            }
+
+            parseText = candidate;
+            return provider;
+        }
+
+        return null;
     }
 
     public IParseProvider? FindProvider(IncomingMessage message, out string parseText)
     {
         var plainText = GetPlainText(message);
+        var context = new ProviderParseTextContext(IsAutoParse: true, IsUrlLike: IsUrlLike(plainText));
         foreach (var provider in _providers)
         {
             var candidate = provider is IIncomingMessageParseProvider incomingProvider
                 ? incomingProvider.ExtractParseText(message)
-                : plainText;
+                : null;
+            candidate ??= provider is IProviderParseTextMatcher matcher
+                ? matcher.TryNormalizeParseText(plainText, context)
+                : context.IsUrlLike ? plainText : null;
             if (string.IsNullOrWhiteSpace(candidate) || !provider.CanHandle(candidate))
             {
                 continue;
@@ -34,7 +59,17 @@ public sealed class ParseProviderRegistry(IEnumerable<IParseProvider> providers)
 
     public async Task<MediaParseResult> ParseAsync(string text, CancellationToken cancellationToken = default)
     {
-        var candidates = _providers.Where(provider => provider.CanHandle(text)).ToArray();
+        var context = new ProviderParseTextContext(IsAutoParse: false, IsUrlLike: IsUrlLike(text));
+        var candidates = _providers
+            .Select(provider => new
+            {
+                Provider = provider,
+                ParseText = provider is IProviderParseTextMatcher matcher
+                    ? matcher.TryNormalizeParseText(text, context)
+                    : context.IsUrlLike ? text : null,
+            })
+            .Where(item => !string.IsNullOrWhiteSpace(item.ParseText) && item.Provider.CanHandle(item.ParseText))
+            .ToArray();
         if (candidates.Length == 0)
         {
             throw new InvalidOperationException("未找到可处理该链接的解析提供商。");
@@ -45,7 +80,7 @@ public sealed class ParseProviderRegistry(IEnumerable<IParseProvider> providers)
         {
             try
             {
-                return await provider.ParseAsync(text, cancellationToken);
+                return await provider.Provider.ParseAsync(provider.ParseText!, cancellationToken);
             }
             catch (Exception ex) when (candidates.Length > 1 && IsProviderMismatch(ex))
             {
@@ -82,5 +117,20 @@ public sealed class ParseProviderRegistry(IEnumerable<IParseProvider> providers)
             _ => [],
         };
         return string.Concat(segments.OfType<TextIncomingSegment>().Select(i => i.Text));
+    }
+
+    private static bool IsUrlLike(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        var value = text.Trim();
+        return value.Contains("://", StringComparison.Ordinal)
+               || value.StartsWith("www.", StringComparison.OrdinalIgnoreCase)
+               || value.Contains(".com/", StringComparison.OrdinalIgnoreCase)
+               || value.Contains(".cn/", StringComparison.OrdinalIgnoreCase)
+               || value.Contains(".tv/", StringComparison.OrdinalIgnoreCase);
     }
 }

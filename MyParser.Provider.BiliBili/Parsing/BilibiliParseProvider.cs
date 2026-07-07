@@ -5,7 +5,7 @@ using ShiroBot.Model.Common;
 
 namespace MyParser.Provider.BiliBili.Parsing;
 
-public sealed class BilibiliParseProvider(BilibiliParser parser) : IIncomingMessageParseProvider, IParseProviderWithParser, IProviderLoginStatusProvider, IQrLoginProvider, IProviderPriority, IDisposable
+public sealed class BilibiliParseProvider(BilibiliParser parser) : IIncomingMessageParseProvider, IProviderParseTextMatcher, IParseProviderWithParser, IProviderLoginStatusProvider, IQrLoginProvider, IProviderPriority, IDisposable
 {
     public BilibiliParser Parser { get; } = parser;
     public object ParserObject => Parser;
@@ -19,6 +19,18 @@ public sealed class BilibiliParseProvider(BilibiliParser parser) : IIncomingMess
         return BilibiliUrlParser.ExtractBvid(text) is not null
                || BilibiliUrlParser.ExtractAid(text) is not null
                || BilibiliUrlParser.ExtractB23Url(text) is not null;
+    }
+
+    public string? TryNormalizeParseText(string text, ProviderParseTextContext context)
+    {
+        if (context.IsUrlLike)
+        {
+            return BilibiliUrlParser.ExtractStrictBilibiliUrl(text) ?? BilibiliUrlParser.ExtractB23Url(text);
+        }
+
+        return context.IsAutoParse
+            ? BilibiliUrlParser.NormalizeStandaloneBvid(text)
+            : BilibiliUrlParser.NormalizeStandaloneVideoId(text);
     }
 
     public string? ExtractParseText(IncomingMessage message)

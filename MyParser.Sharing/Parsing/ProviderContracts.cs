@@ -36,10 +36,17 @@ public interface IProviderTextNormalizer
     string? NormalizeParseText(string text);
 }
 
-public interface IIncomingProviderTextNormalizer : IProviderTextNormalizer
+public interface IIncomingProviderTextNormalizer
 {
     string? NormalizeParseText(IncomingMessage message);
 }
+
+public interface IProviderParseTextMatcher
+{
+    string? TryNormalizeParseText(string text, ProviderParseTextContext context);
+}
+
+public sealed record ProviderParseTextContext(bool IsAutoParse, bool IsUrlLike);
 
 public interface ICookieValidator
 {
