@@ -52,6 +52,12 @@ jobs:
             if (-not (Test-Path $path)) { throw "Missing expected package file: $path" }
           }
 
+          $pluginAssembly = Join-Path $packageRoot "Shirobot.Plugin.MyParser.dll"
+          $assemblyName = [Reflection.AssemblyName]::GetAssemblyName($pluginAssembly).Name
+          if ($assemblyName -ne "Shirobot.Plugin.MyParser") {
+            throw "Unexpected plugin assembly name: $assemblyName"
+          }
+
           Get-ChildItem $packageRoot -Recurse -File | Select-Object FullName, Length
 
       - name: Upload build artifacts
