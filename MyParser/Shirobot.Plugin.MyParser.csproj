@@ -35,12 +35,14 @@
 
     <Target Name="RepackPlugin" AfterTargets="Publish" Condition="'$(Configuration)'=='Release'">
         <PropertyGroup>
-            <MergedPluginFile>$(PublishDir)$(AssemblyName).merged.dll</MergedPluginFile>
-            <MergedPluginPdb>$(PublishDir)$(AssemblyName).merged.pdb</MergedPluginPdb>
+            <MergedPluginDir>$(PublishDir)__merged\</MergedPluginDir>
+            <MergedPluginFile>$(MergedPluginDir)$(AssemblyName).dll</MergedPluginFile>
+            <MergedPluginPdb>$(MergedPluginDir)$(AssemblyName).pdb</MergedPluginPdb>
             <PublishedPluginFile>$(PublishDir)$(AssemblyName).dll</PublishedPluginFile>
             <PublishedPluginPdb>$(PublishDir)$(AssemblyName).pdb</PublishedPluginPdb>
         </PropertyGroup>
 
+        <MakeDir Directories="$(MergedPluginDir)" />
         <Delete Files="$(MergedPluginFile);$(MergedPluginPdb)" />
         <Copy SourceFiles="$(TargetPath)" DestinationFiles="$(PublishedPluginFile)" OverwriteReadOnlyFiles="true" />
         <Copy SourceFiles="$(TargetDir)$(AssemblyName).pdb" DestinationFiles="$(PublishedPluginPdb)" OverwriteReadOnlyFiles="true" Condition="Exists('$(TargetDir)$(AssemblyName).pdb')" />
@@ -50,9 +52,10 @@
             <ProviderOutput Include="$(PublishDir)myparser-sharing.dll;$(PublishDir)myparser-sharing.pdb" />
             <RepackDependency Include="$(PublishDir)*.dll"
                               Exclude="$(PublishedPluginFile);
-                                        $(MergedPluginFile);
-                                        @(ProviderOutput);
-                                        $(PublishDir)Avalonia*.dll;
+                                         $(MergedPluginFile);
+                                         @(ProviderOutput);
+                                         $(PublishDir)silkcodec.dll;
+                                         $(PublishDir)Avalonia*.dll;
                                         $(PublishDir)HarfBuzzSharp.dll;
                                         $(PublishDir)MicroCom.Runtime.dll;
                                         $(PublishDir)SkiaSharp.dll;
@@ -78,6 +81,7 @@
         <Copy SourceFiles="$(MergedPluginPdb)" DestinationFiles="$(PublishedPluginPdb)" OverwriteReadOnlyFiles="true" Condition="Exists('$(MergedPluginPdb)')" />
         <Delete Files="$(MergedPluginFile)" />
         <Delete Files="$(MergedPluginPdb)" />
+        <RemoveDir Directories="$(MergedPluginDir)" />
         <Delete Files="@(RepackDependency)" />
 
         <ItemGroup>
