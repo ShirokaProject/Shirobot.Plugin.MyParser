@@ -380,8 +380,8 @@ dotnet build -c Debug
   "profiles": {
     "Run Host": {
       "commandName": "Executable",
-      "executablePath": "C:\Users\JustMe\RiderProjects\ShiroBot\ShiroBot\bin\Debug\net10.0\ShiroBot.exe",
-      "workingDirectory": "C:\Users\JustMe\RiderProjects\ShiroBot\ShiroBot\bin\Debug\net10.0",
+      "executablePath": "C:\Path\To\ShiroBot\bin\Debug\net10.0\ShiroBot.exe",
+      "workingDirectory": "C:\Path\To\ShiroBot\bin\Debug\net10.0",
       "commandLineArgs": ""
     }
   }
