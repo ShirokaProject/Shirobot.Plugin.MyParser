@@ -33,7 +33,7 @@ internal static partial class NetEaseUrlMatcher
         return match.Success ? match.Value : null;
     }
 
-    [GeneratedRegex(@"https?://(?:y\.)?music\.163\.com/(?:#/)?song\?(?:[^\s\]\)）>&]*&)*id=(\d+)(?:&[^\s\]\)）>]*)?", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"https?://(?:y\.)?music\.163\.com/(?:m/|#/)?song\?(?:[^\s\]\)）>&]*&)*id=(\d+)(?:&[^\s\]\)）>]*)?", RegexOptions.IgnoreCase)]
     private static partial Regex SongUrlRegex();
 
     [GeneratedRegex(@"https?://163cn\.tv/[0-9A-Za-z]+", RegexOptions.IgnoreCase)]
