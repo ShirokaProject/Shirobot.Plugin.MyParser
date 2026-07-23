@@ -39,16 +39,10 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $packageRoot = Join-Path $PWD "artifact/Shirobot.Plugin.MyParser"
-          $mainOut = Join-Path $PWD "MyParser/bin/Release/net10.0"
-
-          $silkCodec = Join-Path $mainOut "runtimes/win-x64/native/silkcodec.dll"
-          if (-not (Test-Path $silkCodec)) { throw "Missing silkcodec native dependency: $silkCodec" }
-          Copy-Item $silkCodec $packageRoot -Force
 
           $required = @(
             (Join-Path $packageRoot "Shirobot.Plugin.MyParser.dll"),
-            (Join-Path $packageRoot "myparser-sharing.dll"),
-            (Join-Path $packageRoot "silkcodec.dll")
+            (Join-Path $packageRoot "myparser-sharing.dll")
           )
           foreach ($path in $required) {
             if (-not (Test-Path $path)) { throw "Missing expected package file: $path" }

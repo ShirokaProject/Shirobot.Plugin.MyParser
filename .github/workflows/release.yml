@@ -45,11 +45,6 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $packageRoot = Join-Path $PWD "release/Shirobot.Plugin.MyParser"
-          $mainOut = Join-Path $PWD "MyParser/bin/Release/net10.0"
-
-          $silkCodec = Join-Path $mainOut "runtimes/win-x64/native/silkcodec.dll"
-          if (-not (Test-Path $silkCodec)) { throw "Missing silkcodec native dependency: $silkCodec" }
-          Copy-Item $silkCodec $packageRoot -Force
 
           New-Item -ItemType Directory -Force -Path (Join-Path $packageRoot "cookies") | Out-Null
           foreach ($cookie in @("bilibili.txt", "douyin.txt", "xiaohongshu.txt", "netease.txt", "heybox.txt", "weixinchannels-yuanbao.txt")) {
@@ -58,8 +53,7 @@ jobs:
 
           $required = @(
             (Join-Path $packageRoot "Shirobot.Plugin.MyParser.dll"),
-            (Join-Path $packageRoot "myparser-sharing.dll"),
-            (Join-Path $packageRoot "silkcodec.dll")
+            (Join-Path $packageRoot "myparser-sharing.dll")
           )
           foreach ($path in $required) {
             if (-not (Test-Path $path)) { throw "Missing expected release package file: $path" }
