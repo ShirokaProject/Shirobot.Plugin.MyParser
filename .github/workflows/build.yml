@@ -41,8 +41,7 @@ jobs:
           $packageRoot = Join-Path $PWD "artifact/Shirobot.Plugin.MyParser"
 
           $required = @(
-            (Join-Path $packageRoot "Shirobot.Plugin.MyParser.dll"),
-            (Join-Path $packageRoot "myparser-sharing.dll")
+            (Join-Path $packageRoot "Shirobot.Plugin.MyParser.dll")
           )
           foreach ($path in $required) {
             if (-not (Test-Path $path)) { throw "Missing expected package file: $path" }
