@@ -149,7 +149,7 @@ internal sealed partial class BilibiliMessageHandler(
         catch (TaskCanceledException)
         {
             await TryReactToSourceMessageAsync(message, "9");
-            await ReplyAsync(message, "Bilibili 解析超时，请稍后再试。若经常超时，请检查 BilibiliCookie/网络/ffmpeg。");
+            await ReplyAsync(message, "Bilibili 解析超时，请稍后再试。若经常超时，请检查 BilibiliCookie、网络和媒体处理配置。");
         }
         catch (Exception ex)
         {
@@ -575,7 +575,7 @@ internal sealed partial class BilibiliMessageHandler(
         if (selected is not null) sb.AppendLine($"清晰度：{selected.QualityName} {selected.Width}x{selected.Height} {selected.Fps:0.###}fps {selected.CodecName}");
 
         var videoStatus = videoSent
-            ? "视频：已下载音视频流、ffmpeg 合并，并已调用 VideoSegment 发送接口"
+            ? "视频：已下载音视频流、SharpMP4 合并（不支持时回退 ffmpeg），并已调用 VideoSegment 发送接口"
             : videoDownloadAttempted
                 ? $"视频：下载/合并/发送未完成；原因：{TrimLine(videoSendError ?? "未知错误", 100)}"
                 : "视频：已解析，未下载发送";

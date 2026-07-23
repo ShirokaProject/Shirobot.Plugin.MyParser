@@ -5,19 +5,18 @@
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+        <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+        <LocalSharpMp4Root>$(MSBuildProjectDirectory)\..\SharpMP4\src</LocalSharpMp4Root>
         <!--        在此处配置你的宿主插件目录-->
         <HostPluginDir>..\ShiroBot\plugins\$(AssemblyName)\</HostPluginDir>
     </PropertyGroup>
 
     <ItemGroup>
         <PackageReference Include="ShiroBot.AvaloniaSdk" />
-        <PackageReference Include="ILRepack.Lib.MSBuild.Task">
-            <PrivateAssets>all</PrivateAssets>
-            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-        </PackageReference>
         <PackageReference Include="Net.Codecrete.QrCodeGenerator" />
-        <PackageReference Include="DrAbc.SilkSharp" />
         <PackageReference Include="LightDl" />
+        <PackageReference Include="NLayer" />
+        <PackageReference Include="SilkCodec.NET" />
         <PackageReference Include="ShiroBot.SDK" />
     </ItemGroup>
 
@@ -26,96 +25,36 @@
     </ItemGroup>
 
     <ItemGroup>
+        <Reference Include="SharpMP4" HintPath="$(LocalSharpMp4Root)\SharpMP4\bin\$(Configuration)\net10.0\SharpMP4.dll" />
+        <Reference Include="SharpISOBMFF" HintPath="$(LocalSharpMp4Root)\SharpISOBMFF\bin\$(Configuration)\net10.0\SharpISOBMFF.dll" />
+        <Reference Include="SharpMP4Common" HintPath="$(LocalSharpMp4Root)\SharpMP4Common\bin\$(Configuration)\net10.0\SharpMP4Common.dll" />
+        <Reference Include="SharpAV1" HintPath="$(LocalSharpMp4Root)\SharpAV1\bin\$(Configuration)\net10.0\SharpAV1.dll" />
+        <Reference Include="SharpH264" HintPath="$(LocalSharpMp4Root)\SharpH264\bin\$(Configuration)\net10.0\SharpH264.dll" />
+        <Reference Include="SharpH265" HintPath="$(LocalSharpMp4Root)\SharpH265\bin\$(Configuration)\net10.0\SharpH265.dll" />
+        <Reference Include="SharpH266" HintPath="$(LocalSharpMp4Root)\SharpH266\bin\$(Configuration)\net10.0\SharpH266.dll" />
+        <Reference Include="SharpH26X" HintPath="$(LocalSharpMp4Root)\SharpH26X\bin\$(Configuration)\net10.0\SharpH26X.dll" />
+    </ItemGroup>
+
+    <ItemGroup>
         <Compile Include="..\MyParser.Provider.*\**\*.cs"
                  Exclude="..\MyParser.Provider.*\bin\**;..\MyParser.Provider.*\obj\**"
                  Link="Providers\%(RecursiveDir)%(Filename)%(Extension)" />
         <AvaloniaXaml Include="..\MyParser.Provider.*\**\*.axaml"
-                       Link="Providers\%(RecursiveDir)%(Filename)%(Extension)" />
+                      Link="Providers\%(RecursiveDir)%(Filename)%(Extension)" />
     </ItemGroup>
 
-    <Target Name="RepackPlugin" AfterTargets="Publish" Condition="'$(Configuration)'=='Release'">
-        <PropertyGroup>
-            <MergedPluginDir>$(PublishDir)__merged\</MergedPluginDir>
-            <MergedPluginFile>$(MergedPluginDir)$(AssemblyName).dll</MergedPluginFile>
-            <MergedPluginPdb>$(MergedPluginDir)$(AssemblyName).pdb</MergedPluginPdb>
-            <PublishedPluginFile>$(PublishDir)$(AssemblyName).dll</PublishedPluginFile>
-            <PublishedPluginPdb>$(PublishDir)$(AssemblyName).pdb</PublishedPluginPdb>
-        </PropertyGroup>
-
-        <MakeDir Directories="$(MergedPluginDir)" />
-        <Delete Files="$(MergedPluginFile);$(MergedPluginPdb)" />
-        <Copy SourceFiles="$(TargetPath)" DestinationFiles="$(PublishedPluginFile)" OverwriteReadOnlyFiles="true" />
-        <Copy SourceFiles="$(TargetDir)$(AssemblyName).pdb" DestinationFiles="$(PublishedPluginPdb)" OverwriteReadOnlyFiles="true" Condition="Exists('$(TargetDir)$(AssemblyName).pdb')" />
-
-        <ItemGroup>
-            <RepackInput Include="$(PublishedPluginFile)" />
-            <ProviderOutput Include="$(PublishDir)myparser-sharing.dll;$(PublishDir)myparser-sharing.pdb" />
-            <RepackDependency Include="$(PublishDir)*.dll"
-                              Exclude="$(PublishedPluginFile);
-                                         $(MergedPluginFile);
-                                         @(ProviderOutput);
-                                         $(PublishDir)silkcodec.dll;
-                                         $(PublishDir)Avalonia*.dll;
-                                        $(PublishDir)HarfBuzzSharp.dll;
-                                        $(PublishDir)MicroCom.Runtime.dll;
-                                        $(PublishDir)SkiaSharp.dll;
-                                        $(PublishDir)ShiroBot.AvaloniaSdk.dll;
-                                        $(PublishDir)ShiroBot.SDK.dll;
-                                        $(PublishDir)ShiroBot.Model.dll;
-                                        $(PublishDir)System*.dll;
-                                       $(PublishDir)mscorlib.dll;
-                                       $(PublishDir)netstandard.dll" />
-            <RepackInput Include="@(RepackDependency)" />
-        </ItemGroup>
-
-        <ILRepack
-                TargetKind="Dll"
-                OutputFile="$(MergedPluginFile)"
-                InputAssemblies="@(RepackInput)"
-                LibraryPath="$(PublishDir);$(TargetDir);@(ReferencePath->'%(RootDir)%(Directory)')"
-                Internalize="false"
-                Parallel="true"
-                DebugInfo="true" />
-
-        <Copy SourceFiles="$(MergedPluginFile)" DestinationFiles="$(PublishDir)$(AssemblyName).dll" OverwriteReadOnlyFiles="true" />
-        <Copy SourceFiles="$(MergedPluginPdb)" DestinationFiles="$(PublishedPluginPdb)" OverwriteReadOnlyFiles="true" Condition="Exists('$(MergedPluginPdb)')" />
-        <Delete Files="$(MergedPluginFile)" />
-        <Delete Files="$(MergedPluginPdb)" />
-        <RemoveDir Directories="$(MergedPluginDir)" />
-        <Delete Files="@(RepackDependency)" />
-
-        <ItemGroup>
-            <PublishHostProvidedOutput Include="$(PublishDir)Avalonia*.dll;$(PublishDir)Avalonia*.pdb;$(PublishDir)HarfBuzzSharp.dll;$(PublishDir)HarfBuzzSharp.pdb;$(PublishDir)MicroCom.Runtime.dll;$(PublishDir)MicroCom.Runtime.pdb;$(PublishDir)SkiaSharp.dll;$(PublishDir)SkiaSharp.pdb;$(PublishDir)ShiroBot.AvaloniaSdk.dll;$(PublishDir)ShiroBot.AvaloniaSdk.pdb;$(PublishDir)ShiroBot.SDK.dll;$(PublishDir)ShiroBot.SDK.pdb;$(PublishDir)ShiroBot.Model.dll;$(PublishDir)ShiroBot.Model.pdb" />
-        </ItemGroup>
-
-        <Delete Files="@(PublishHostProvidedOutput)" />
-        <RemoveDir Directories="$(PublishDir)runtimes" />
+    <!-- ShiroBot.SDK 0.7.1 overwrites the compiler output with its bundle. Recreate a clean
+         compiler output before publishing so incremental publishes do not merge recursively. -->
+    <Target Name="ResetShiroBotPluginBundleBeforePublish"
+            BeforeTargets="CoreCompile"
+            Condition="'$(_IsPublishing)' == 'true'">
+        <Delete Files="$(IntermediateOutputPath)$(TargetFileName);$(IntermediateOutputPath)shirobot-bundle\$(TargetFileName)" />
     </Target>
 
-    <Target Name="CopyPluginToHost"
-            AfterTargets="Build"
-            Condition="'$(CopyPluginToHost)' != 'false' And '$(Configuration)'=='Debug'">
-        <MakeDir Directories="$(HostPluginDir)" />
-
-        <ItemGroup>
-            <PluginDebugOutput Include="$(TargetDir)**\*"
-                               Exclude="$(TargetDir)myparser-provider-*.dll;$(TargetDir)myparser-provider-*.pdb;$(TargetDir)Avalonia*.dll;$(TargetDir)Avalonia*.pdb;$(TargetDir)HarfBuzzSharp.dll;$(TargetDir)HarfBuzzSharp.pdb;$(TargetDir)MicroCom.Runtime.dll;$(TargetDir)MicroCom.Runtime.pdb;$(TargetDir)SkiaSharp.dll;$(TargetDir)SkiaSharp.pdb;$(TargetDir)runtimes\**\*;$(TargetDir)$(AssemblyName).exe;$(TargetDir)$(AssemblyName).runtimeconfig.json;$(TargetDir)ShiroBot.AvaloniaSdk.dll;$(TargetDir)ShiroBot.AvaloniaSdk.pdb;$(TargetDir)ShiroBot.SDK.dll;$(TargetDir)ShiroBot.SDK.pdb;$(TargetDir)ShiroBot.Model.dll;$(TargetDir)ShiroBot.Model.pdb" />
-            <PluginDebugNativeOutput Include="$(TargetDir)runtimes\win-x64\native\silkcodec.dll" Condition="Exists('$(TargetDir)runtimes\win-x64\native\silkcodec.dll')" />
-            <PluginPreviewOnlyOutput Include="$(HostPluginDir)Avalonia*.dll;$(HostPluginDir)Avalonia*.pdb;$(HostPluginDir)HarfBuzzSharp.dll;$(HostPluginDir)HarfBuzzSharp.pdb;$(HostPluginDir)MicroCom.Runtime.dll;$(HostPluginDir)MicroCom.Runtime.pdb;$(HostPluginDir)SkiaSharp.dll;$(HostPluginDir)SkiaSharp.pdb;$(HostPluginDir)$(AssemblyName).exe;$(HostPluginDir)$(AssemblyName).runtimeconfig.json;$(HostPluginDir)runtimes\**\*" />
-            <PluginLegacyProviderOutput Include="$(HostPluginDir)provider\myparser-provider-*.dll;$(HostPluginDir)provider\myparser-provider-*.pdb" />
-        </ItemGroup>
-
-        <Delete Files="@(PluginPreviewOnlyOutput)" />
-        <Delete Files="@(PluginLegacyProviderOutput)" ContinueOnError="WarnAndContinue" />
-        <RemoveDir Directories="$(HostPluginDir)runtimes" />
-
-        <Copy SourceFiles="@(PluginDebugOutput)"
-              DestinationFiles="@(PluginDebugOutput->'$(HostPluginDir)%(RecursiveDir)%(Filename)%(Extension)')"
-              SkipUnchangedFiles="true" />
-        <Copy SourceFiles="@(PluginDebugNativeOutput)"
-              DestinationFiles="@(PluginDebugNativeOutput->'$(HostPluginDir)%(Filename)%(Extension)')"
-              SkipUnchangedFiles="true"
-              Condition="'@(PluginDebugNativeOutput)' != ''" />
+    <Target Name="BuildLocalSharpMp4" BeforeTargets="ResolveAssemblyReferences">
+        <MSBuild Projects="$(LocalSharpMp4Root)\SharpMP4\SharpMP4.csproj"
+                 Targets="Restore;Build"
+                 Properties="Configuration=$(Configuration);TargetFramework=net10.0;AutoGenerateCode=false;GeneratePackageOnBuild=false;ManagePackageVersionsCentrally=false" />
     </Target>
 
 </Project>

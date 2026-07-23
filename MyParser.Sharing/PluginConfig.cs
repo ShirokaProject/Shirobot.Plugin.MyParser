@@ -8,7 +8,7 @@ public sealed class PluginConfig
     public VideoSegmentFileProtocol FileProtocol { get; set; } = VideoSegmentFileProtocol.File;
     [ConfigField("单个视频最大下载大小，单位 MB。", Label = "最大视频下载 MB", Min = 1, Max = 51200)]
     public int MaxVideoDownloadMegabytes { get; set; } = 1024;
-    [ConfigField("ffmpeg 可执行文件路径。留空时自动从 PATH 或程序目录查找。", Label = "ffmpeg 路径", Placeholder = "ffmpeg")]
+    [ConfigField("SharpMP4 不支持当前媒体时使用的 ffmpeg 回退路径。留空时自动从 PATH 或程序目录查找。", Label = "ffmpeg 回退路径", Placeholder = "ffmpeg")]
     public string FfmpegPath { get; set; } = string.Empty;
     
     [ConfigField("是否自动解析聊天中的抖音链接。", Label = "自动解析抖音链接")]

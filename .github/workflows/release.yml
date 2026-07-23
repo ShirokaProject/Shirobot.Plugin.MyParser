@@ -26,6 +26,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -35,54 +37,19 @@ jobs:
       - name: Restore
         run: dotnet restore MyParser.sln
 
-      - name: Build
-        run: dotnet build MyParser.sln --configuration Release --no-restore -p:CopyPluginToHost=false -p:BuildMyParserProvidersOnMainPluginBuild=false -v:minimal
+      - name: Publish plugin
+        run: dotnet publish MyParser/Shirobot.Plugin.MyParser.csproj --configuration Release --no-restore -p:CopyPluginToHost=false --output release/Shirobot.Plugin.MyParser -v:minimal
 
       - name: Collect release package
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           $packageRoot = Join-Path $PWD "release/Shirobot.Plugin.MyParser"
-          $providerRoot = Join-Path $packageRoot "provider"
-          New-Item -ItemType Directory -Force -Path $providerRoot | Out-Null
-
           $mainOut = Join-Path $PWD "MyParser/bin/Release/net10.0"
-          $providers = @{
-            "bilibili" = Join-Path $PWD "MyParser.Provider.BiliBili/bin/Release/net10.0"
-            "douyin" = Join-Path $PWD "MyParser.Provider.Douyin/bin/Release/net10.0"
-            "xiaohongshu" = Join-Path $PWD "MyParser.Provider.Xiaohongshu/bin/Release/net10.0"
-            "heybox" = Join-Path $PWD "MyParser.Provider.Heybox/bin/Release/net10.0"
-            "neteasecloudmusic" = Join-Path $PWD "MyParser.Provider.NetEaseCloudMusic/bin/Release/net10.0"
-            "weixinchannels" = Join-Path $PWD "MyParser.Provider.WeixinChannels/bin/Release/net10.0"
-          }
-
-          $mainFiles = @(
-            "Shirobot.Plugin.MyParser.dll",
-            "myparser-sharing.dll",
-            "QrCodeGenerator.dll",
-            "SilkSharp.dll"
-          )
-          foreach ($file in $mainFiles) {
-            $source = Join-Path $mainOut $file
-            if (-not (Test-Path $source)) { throw "Missing release file: $source" }
-            Copy-Item $source $packageRoot -Force
-          }
-
-          foreach ($name in $providers.Keys) {
-            $out = $providers[$name]
-            $providerDll = Join-Path $out "myparser-provider-$name.dll"
-            if (-not (Test-Path $providerDll)) { throw "Missing provider file: $providerDll" }
-            Copy-Item $providerDll $providerRoot -Force
-          }
 
           $silkCodec = Join-Path $mainOut "runtimes/win-x64/native/silkcodec.dll"
           if (-not (Test-Path $silkCodec)) { throw "Missing silkcodec native dependency: $silkCodec" }
           Copy-Item $silkCodec $packageRoot -Force
-
-          $providerCount = (Get-ChildItem $providerRoot -Filter "myparser-provider-*.dll" -File).Count
-          if ($providerCount -ne 6) {
-            throw "Expected 6 provider dlls, found $providerCount"
-          }
 
           New-Item -ItemType Directory -Force -Path (Join-Path $packageRoot "cookies") | Out-Null
           foreach ($cookie in @("bilibili.txt", "douyin.txt", "xiaohongshu.txt", "netease.txt", "heybox.txt", "weixinchannels-yuanbao.txt")) {
@@ -92,15 +59,7 @@ jobs:
           $required = @(
             (Join-Path $packageRoot "Shirobot.Plugin.MyParser.dll"),
             (Join-Path $packageRoot "myparser-sharing.dll"),
-            (Join-Path $packageRoot "QrCodeGenerator.dll"),
-            (Join-Path $packageRoot "SilkSharp.dll"),
-            (Join-Path $packageRoot "silkcodec.dll"),
-            (Join-Path $providerRoot "myparser-provider-bilibili.dll"),
-            (Join-Path $providerRoot "myparser-provider-douyin.dll"),
-            (Join-Path $providerRoot "myparser-provider-xiaohongshu.dll"),
-            (Join-Path $providerRoot "myparser-provider-heybox.dll"),
-            (Join-Path $providerRoot "myparser-provider-neteasecloudmusic.dll"),
-            (Join-Path $providerRoot "myparser-provider-weixinchannels.dll")
+            (Join-Path $packageRoot "silkcodec.dll")
           )
           foreach ($path in $required) {
             if (-not (Test-Path $path)) { throw "Missing expected release package file: $path" }

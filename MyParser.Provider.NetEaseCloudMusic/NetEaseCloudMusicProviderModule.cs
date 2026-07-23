@@ -8,7 +8,7 @@ using ShiroBot.SDK.Plugin;
 namespace MyParser.Provider.NetEaseCloudMusic;
 
 [MyParserProvider("neteasecloudmusic")]
-public sealed class NetEaseCloudMusicProviderModule : MyParserProviderModuleBase, IProviderMessageHandlerFactory, IProviderTextNormalizer, ICookieValidator, IProviderCookieStore, IProviderAutoParsePolicy, IProviderResultMessageClassifier, IProviderCommandContributor, IProviderReplyParseTextBuilder
+public sealed class NetEaseCloudMusicProviderModule : MyParserProviderModuleBase, IProviderMessageHandlerFactory, IProviderTextNormalizer, IIncomingProviderTextNormalizer, ICookieValidator, IProviderCookieStore, IProviderAutoParsePolicy, IProviderResultMessageClassifier, IProviderCommandContributor, IProviderReplyParseTextBuilder
 {
     private static readonly ConcurrentDictionary<string, IReadOnlyList<long>> SearchReplySongIds = new(StringComparer.Ordinal);
 
@@ -40,6 +40,14 @@ public sealed class NetEaseCloudMusicProviderModule : MyParserProviderModuleBase
     public IProviderMessageHandler? CreateMessageHandler(ProviderMessageHandlerContext context) => new NetEaseMessageHandler(context);
 
     public string? NormalizeParseText(string text) => NetEaseUrlParser.NormalizeParseText(text);
+
+    public string? NormalizeParseText(IncomingMessage message)
+    {
+        var text = GetPlainText(message);
+        return NetEaseUrlParser.ContainsNetEaseSongUrl(text)
+            ? NetEaseUrlParser.NormalizeParseText(text)
+            : null;
+    }
 
     public bool LooksLikeCookie(string cookie) => NetEaseParser.LooksLikeCookie(cookie);
 

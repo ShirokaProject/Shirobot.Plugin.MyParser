@@ -1,0 +1,4 @@
+[submodule "SharpMP4"]
+	path = SharpMP4
+	url = https://github.com/greepar/SharpMP4.git
+	branch = fix/preserve-sample-timing-clean

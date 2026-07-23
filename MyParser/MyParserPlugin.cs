@@ -10,7 +10,7 @@ using ShiroBot.SDK.Plugin;
 
 namespace Shirobot.Plugin.MyParser;
 
-[BotPlugin(id: "MyParser2",
+[BotPlugin(id: "MyParser",
     Name = "MyParser",
     Version = "0.2.0",
     Author = "PVPGood",
@@ -446,11 +446,11 @@ public sealed class MyParserPlugin : PluginBase
         MyParserRuntime.WeixinChannelsDownloadDirectory = Path.Combine(pluginDir, "tmp", "weixinchannels");
 
         Directory.CreateDirectory(Path.Combine(pluginDir, CookieDirectoryName));
+        LocalMediaCleanup.CleanupStartupResidues(_config);
         Directory.CreateDirectory(MyParserRuntime.DownloadDirectory);
         Directory.CreateDirectory(MyParserRuntime.BilibiliDownloadDirectory);
         Directory.CreateDirectory(MyParserRuntime.XiaohongshuDownloadDirectory);
         Directory.CreateDirectory(MyParserRuntime.WeixinChannelsDownloadDirectory);
-        LocalMediaCleanup.CleanupStartupResidues(_config);
     }
 
     private string ResolveCookiePath(string fileName)

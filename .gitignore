@@ -9,6 +9,7 @@ artifacts/
 .idea/
 .vs/
 .vscode/
+.playwright-mcp/
 *.DotSettings.user
 Directory.Build.local.props
 *.suo
@@ -19,6 +20,7 @@ Properties/launchSettings.json
 
 # Runtime data / downloaded media
 downloads/
+ShiroBot/
 Shirobot.Plugin.MyParser/
 *.tmp
 *.temp
@@ -46,3 +48,4 @@ Thumbs.db
 
 # Local launch profiles
 **/Properties/launchSettings.json
+sharpmp4-demo.cs

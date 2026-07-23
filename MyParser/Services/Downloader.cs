@@ -73,7 +73,8 @@ internal sealed class Downloader(HttpClient http, DownloadProgressLogger progres
                 EnableResume = false,
             };
 
-            var result = await LightDownload.DownloadAsync(lightRequest, config, cancellationToken);
+            using var downloader = new LightDownloader(config);
+            var result = await downloader.DownloadAsync(lightRequest, cancellationToken);
             var totalBytes = new FileInfo(result.FilePath).Length;
             if (totalBytes <= 0)
             {

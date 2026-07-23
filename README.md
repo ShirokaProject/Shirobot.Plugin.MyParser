@@ -137,7 +137,7 @@ plugins/Shirobot.Plugin.MyParser/
 }
 ```
 
-说明：旧配置项如 `SendVideoAsFile`、`SendVideoSegmentAsBase64`、`VideoSegmentBase64MaxMegabytes`、`AllowLanAccessToLocalVideoHttpServer`、`MaxImagesToShow` 已不再作为当前开发流程推荐配置；视频发送 URI 协议统一使用 `FileProtocol`，可选 `File` / `Base64` / `Http`。
+说明：`FfmpegPath` 仅在 SharpMP4 不支持当前媒体时作为回退使用。旧配置项如 `SendVideoAsFile`、`SendVideoSegmentAsBase64`、`VideoSegmentBase64MaxMegabytes`、`AllowLanAccessToLocalVideoHttpServer`、`MaxImagesToShow` 已不再作为当前开发流程推荐配置；视频发送 URI 协议统一使用 `FileProtocol`，可选 `File` / `Base64` / `Http`。
 
 平台配置细节请查看各 provider README。微信视频号解析依赖腾讯元宝 Cookie，推荐通过 Owner/Admin 私信机器人发送 `#wx-cookie <Cookie>` 写入 `cookies/weixinchannels-yuanbao.txt`，也可手动编辑该文件。
 
@@ -263,7 +263,7 @@ provider 不应直接引用主插件中的具体实现，也不要在主插件�
 
 - 回复文本、发送图片、发送 reaction。
 - 下载、Range 下载、进度日志和缓存。
-- 音视频分离下载、ffmpeg 合并、直播回溯切片、音频下载、SILK Record 构造。
+- 音视频分离下载、SharpMP4 合并、fMP4 直播回溯拼接、网易云 MP3 纯托管解码与 SILK Record 构造；不支持的媒体格式回退 ffmpeg。
 - 上传本地视频 / 音频文件。
 - 远程图片获取与图片解码。
 - VideoSegment URI 构造，包括 `File` / `Base64` / `Http` 策略。
@@ -421,7 +421,7 @@ Cookie 文件清空或删除后，对应平台登录态会立即清空；文件�
 
 ## 许可证
 
-本项目使用 GNU General Public License v3.0。
+本项目使用 Apache License 2.0。
 详见 [LICENSE](./LICENSE)。
 
 ## 合规与免责声明

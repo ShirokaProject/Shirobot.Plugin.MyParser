@@ -1,6 +1,0 @@
-<Project>
-  <!--
-    Disable ILRepack.Lib.MSBuild.Task's default Release build target.
-    MyParser uses the explicit RepackPlugin target after Publish instead, while normal Release builds should keep regular output for provider-module packaging/testing.
-  -->
-</Project>

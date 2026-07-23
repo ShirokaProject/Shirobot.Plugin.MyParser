@@ -181,11 +181,11 @@ public sealed class BilibiliLiveParser(HttpClient http, PluginConfig config)
     {
         return (stream.Protocol, stream.Format, stream.Codec) switch
         {
-            ("http_hls", "ts", "avc") => 0,
-            ("http_hls", "fmp4", "avc") => 1,
+            ("http_hls", "fmp4", "avc") => 0,
+            ("http_hls", "ts", "avc") => 1,
             ("http_stream", "flv", "avc") => 2,
-            ("http_hls", "ts", "hevc") => 3,
-            ("http_hls", "fmp4", "hevc") => 4,
+            ("http_hls", "fmp4", "hevc") => 3,
+            ("http_hls", "ts", "hevc") => 4,
             ("http_stream", "flv", "hevc") => 5,
             ("http_hls", "fmp4", "av1") => 6,
             _ => 99,

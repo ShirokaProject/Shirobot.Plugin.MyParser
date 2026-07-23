@@ -1,8 +1,6 @@
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using System.Text;
-using SilkSharp;
-using SilkSharp.Codec;
+using SilkCodec.NET;
 using Shirobot.Plugin.MyParser.Parsing;
 using Shirobot.Plugin.MyParser.Utility;
 using ShiroBot.SDK.Abstractions;
@@ -11,11 +9,6 @@ namespace Shirobot.Plugin.MyParser.Services;
 
 internal sealed class ProviderDownloadService
 {
-    private static readonly Lock SilkNativeResolverLock = new();
-    private static bool SilkNativeResolverRegistered;
-    private static IntPtr SilkNativeHandle;
-    private static string? SilkNativePath;
-
     public Task<(string FileUri, string LocalPath)> DownloadProviderVideoAsync(
         PluginConfig config,
         ProviderVideoDownloadRequest request,
@@ -75,14 +68,14 @@ internal sealed class ProviderDownloadService
         var mobile = new ProviderRecordVariant(
             "mobile-best",
             "手机最优",
-            "pcm_rate=48000 silk_rate=100000 max=24000 packet=20 tencent=true filter=soxr",
-            Path.Combine(directory, safeBaseName + "_mobile_48k_100k_soxr_full.silk"),
+            "pcm_rate=48000 silk_rate=100000 max=24000 packet=20 tencent=true decoder=NLayer resampler=managed encoder=SilkCodec.NET/1.0.1",
+            Path.Combine(directory, safeBaseName + "_mobile_48k_100k_silkcodecnet_101.silk"),
             100000);
         var pc = new ProviderRecordVariant(
             "pc-best",
             "电脑最优",
-            "pcm_rate=48000 silk_rate=35000 max=24000 packet=20 tencent=true filter=soxr",
-            Path.Combine(directory, safeBaseName + "_pc_48k_35000_soxr_full.silk"),
+            "pcm_rate=48000 silk_rate=35000 max=24000 packet=20 tencent=true decoder=NLayer resampler=managed encoder=SilkCodec.NET",
+            Path.Combine(directory, safeBaseName + "_pc_48k_35000_silkcodecnet_full.silk"),
             35000);
 
         var variants = request.IncludeMobileBest
@@ -96,7 +89,7 @@ internal sealed class ProviderDownloadService
                 continue;
             }
 
-            await EncodeSilkAsync(config, request, variant.Path, variant.SilkRate, cancellationToken).ConfigureAwait(false);
+            await EncodeSilkAsync(request, variant.Path, variant.SilkRate, cancellationToken).ConfigureAwait(false);
         }
 
         return variants;
@@ -250,12 +243,6 @@ internal sealed class ProviderDownloadService
         ProviderMuxedMediaStream audio,
         CancellationToken cancellationToken)
     {
-        var ffmpeg = ResolveFfmpegPath(config);
-        if (string.IsNullOrWhiteSpace(ffmpeg))
-        {
-            throw new InvalidOperationException("未找到 ffmpeg。请在配置 FfmpegPath 中填写 ffmpeg.exe 路径，或将 ffmpeg 加入 PATH。");
-        }
-
         var dir = ResolveDownloadDirectory(request.DownloadDirectory, request.PlatformId);
         Directory.CreateDirectory(dir);
         var title = SanitizeFileName(string.IsNullOrWhiteSpace(request.Title) ? request.MediaId : request.Title!, 80);
@@ -289,8 +276,8 @@ internal sealed class ProviderDownloadService
                 throw;
             }
 
-            BotLog.Info($"MyParser {request.PlatformDisplayName} 音视频流并发下载完成，开始 ffmpeg 合并: {request.IdentifierName}={request.MediaId}");
-            await MuxAsync(ffmpeg, videoPath, audioPath, outputPath, cancellationToken);
+            BotLog.Info($"MyParser {request.PlatformDisplayName} 音视频流并发下载完成，开始 SharpMP4 合并: {request.IdentifierName}={request.MediaId}");
+            await MuxAsync(config, videoPath, audioPath, outputPath, cancellationToken);
             await ValidateMuxedVideoAsync(outputPath, cancellationToken);
         }
         finally
@@ -422,9 +409,8 @@ internal sealed class ProviderDownloadService
         return (new Uri(path).AbsoluteUri, path);
     }
 
-    private async Task EncodeSilkAsync(PluginConfig config, ProviderRecordBuildRequest request, string outputSilkPath, int silkRate, CancellationToken cancellationToken)
+    private async Task EncodeSilkAsync(ProviderRecordBuildRequest request, string outputSilkPath, int silkRate, CancellationToken cancellationToken)
     {
-        var ffmpeg = ResolveFfmpegPath(config) ?? throw new InvalidOperationException("未找到 ffmpeg。请在配置 FfmpegPath 中填写 ffmpeg.exe 路径，或将 ffmpeg 加入 PATH。");
         var workDirectory = Path.Combine(Path.GetTempPath(), "Shirobot.Plugin.MyParser", request.PlatformId, "silk-work");
         Directory.CreateDirectory(workDirectory);
         var tempBaseName = request.PlatformId + "_" + Guid.NewGuid().ToString("N");
@@ -433,22 +419,22 @@ internal sealed class ProviderDownloadService
 
         try
         {
-            await ConvertToPcmAsync(ffmpeg, request.LocalAudioPath, tempPcmPath, cancellationToken).ConfigureAwait(false);
-            EnsureSilkNativeResolver();
-
-            var encoder = new SilkEncoder
+            await Task.Run(() => ManagedMp3PcmConverter.ConvertToMonoS16Le(request.LocalAudioPath, tempPcmPath, cancellationToken), cancellationToken).ConfigureAwait(false);
+            var encoder = new SilkEncoder(new SilkEncoderOptions
             {
-                FS_API = 48000,
-                Rate = silkRate,
-                FS_MaxInternal = 24000,
-                PacketLength = 20,
+                SampleRate = 48000,
+                BitRate = silkRate,
+                MaxInternalSampleRate = 24000,
+                PacketLengthMilliseconds = 20,
                 Tencent = true,
-                Complecity = SilkComplecity.High,
-                Loss = 0,
-                DTX = false,
-                BandFEC = false,
-            };
-            await encoder.EncodeAsync(tempPcmPath, tempSilkPath).ConfigureAwait(false);
+                Complexity = 2,
+                PacketLossPercentage = 0,
+                UseDtx = false,
+                UseInBandFec = false,
+            });
+            var pcm = await File.ReadAllBytesAsync(tempPcmPath, cancellationToken).ConfigureAwait(false);
+            var silk = await Task.Run(() => encoder.EncodePcm16LittleEndian(pcm), cancellationToken).ConfigureAwait(false);
+            await File.WriteAllBytesAsync(tempSilkPath, silk, cancellationToken).ConfigureAwait(false);
 
             if (!File.Exists(tempSilkPath) || new FileInfo(tempSilkPath).Length == 0)
             {
@@ -457,174 +443,12 @@ internal sealed class ProviderDownloadService
 
             if (File.Exists(outputSilkPath)) File.Delete(outputSilkPath);
             File.Move(tempSilkPath, outputSilkPath);
-            BotLog.Info($"MyParser {request.PlatformDisplayName} SILK 编码完成: input={request.LocalAudioPath}, output={outputSilkPath}, silk_rate={silkRate}, size_kb={new FileInfo(outputSilkPath).Length / 1024d:F1}, encoder=DrAbc.SilkSharp");
+            BotLog.Info($"MyParser {request.PlatformDisplayName} SILK 编码完成: input={request.LocalAudioPath}, output={outputSilkPath}, silk_rate={silkRate}, size_kb={new FileInfo(outputSilkPath).Length / 1024d:F1}, encoder=SilkCodec.NET");
         }
         finally
         {
             TryDelete(tempPcmPath);
             TryDelete(tempSilkPath);
-        }
-    }
-
-    private static void EnsureSilkNativeResolver()
-    {
-        lock (SilkNativeResolverLock)
-        {
-            if (!SilkNativeResolverRegistered)
-            {
-                NativeLibrary.SetDllImportResolver(typeof(SilkEncoder).Assembly, ResolveSilkNativeLibrary);
-                SilkNativeResolverRegistered = true;
-                BotLog.Info($"MyParser SILK native resolver registered: assembly={typeof(SilkEncoder).Assembly.Location}, base_dir={AppContext.BaseDirectory}");
-            }
-
-            if (SilkNativeHandle != IntPtr.Zero)
-            {
-                BotLog.Info($"MyParser SILK native codec ready: {SilkNativePath}");
-                return;
-            }
-
-            var candidates = EnumerateSilkNativeCandidates().Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-            BotLog.Info("MyParser SILK native codec probing: " + string.Join(" | ", candidates.Select(path => File.Exists(path) ? "exists=" + path : "missing=" + path)));
-            var handle = TryLoadSilkNativeLibraryNoLock();
-            if (handle == IntPtr.Zero)
-            {
-                throw new DllNotFoundException("未找到 silkcodec 原生库。请确认插件目录存在 silkcodec.dll，或存在 runtimes/win-x64/native/silkcodec.dll。候选路径：" + string.Join("; ", candidates));
-            }
-        }
-    }
-
-    private static IntPtr ResolveSilkNativeLibrary(string libraryName, System.Reflection.Assembly assembly, DllImportSearchPath? searchPath)
-    {
-        if (!libraryName.Contains("silkcodec", StringComparison.OrdinalIgnoreCase))
-        {
-            return IntPtr.Zero;
-        }
-
-        lock (SilkNativeResolverLock)
-        {
-            if (SilkNativeHandle != IntPtr.Zero)
-            {
-                return SilkNativeHandle;
-            }
-
-            return TryLoadSilkNativeLibraryNoLock();
-        }
-    }
-
-    private static IntPtr TryLoadSilkNativeLibraryNoLock()
-    {
-        foreach (var candidate in EnumerateSilkNativeCandidates().Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            if (!File.Exists(candidate))
-            {
-                continue;
-            }
-
-            if (NativeLibrary.TryLoad(candidate, out var handle))
-            {
-                SilkNativeHandle = handle;
-                SilkNativePath = candidate;
-                BotLog.Info($"MyParser SILK native codec loaded: {candidate}");
-                return handle;
-            }
-
-            BotLog.Warning($"MyParser SILK native codec load failed: {candidate}");
-        }
-
-        return IntPtr.Zero;
-    }
-
-    private static IEnumerable<string> EnumerateSilkNativeCandidates()
-    {
-        var fileName = OperatingSystem.IsWindows()
-            ? "silkcodec.dll"
-            : OperatingSystem.IsMacOS()
-                ? "libsilkcodec.dylib"
-                : "libsilkcodec.so";
-        var rid = GetSilkNativeRuntimeIdentifier();
-        var assemblyDir = Path.GetDirectoryName(typeof(ProviderDownloadService).Assembly.Location);
-        var baseDir = AppContext.BaseDirectory;
-        var roots = new[]
-        {
-            assemblyDir,
-            baseDir,
-            Path.Combine(baseDir, "plugins", "Shirobot.Plugin.MyParser"),
-        }.Where(i => !string.IsNullOrWhiteSpace(i)).Distinct(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var root in roots)
-        {
-            yield return Path.Combine(root!, fileName);
-            yield return Path.Combine(root!, "runtimes", rid, "native", fileName);
-        }
-    }
-
-    private static string GetSilkNativeRuntimeIdentifier()
-    {
-        if (OperatingSystem.IsWindows())
-        {
-            return RuntimeInformation.ProcessArchitecture == Architecture.X86 ? "win-x86" : "win-x64";
-        }
-
-        if (OperatingSystem.IsMacOS())
-        {
-            return RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "osx-arm64" : "osx-x64";
-        }
-
-        return RuntimeInformation.ProcessArchitecture switch
-        {
-            Architecture.Arm => "linux-arm",
-            Architecture.Arm64 => "linux-arm64",
-            Architecture.X86 => "linux-x86",
-            _ => "linux-x64",
-        };
-    }
-
-    private static async Task ConvertToPcmAsync(string ffmpeg, string inputPath, string outputPcmPath, CancellationToken cancellationToken)
-    {
-        var psi = new ProcessStartInfo
-        {
-            FileName = ffmpeg,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-        };
-        foreach (var arg in new[]
-        {
-            "-y", "-hide_banner", "-loglevel", "error",
-            "-i", inputPath,
-            "-vn",
-            "-af", "aresample=resampler=soxr:precision=28",
-            "-ac", "1",
-            "-ar", "48000",
-            "-f", "s16le",
-            outputPcmPath,
-        })
-        {
-            psi.ArgumentList.Add(arg);
-        }
-
-        using var process = Process.Start(psi) ?? throw new InvalidOperationException("ffmpeg PCM 转换进程启动失败。");
-        var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
-        var timeout = TimeSpan.FromMinutes(3);
-        var waitTask = process.WaitForExitAsync(cancellationToken);
-        if (await Task.WhenAny(waitTask, Task.Delay(timeout, cancellationToken)).ConfigureAwait(false) != waitTask)
-        {
-            try { process.Kill(entireProcessTree: true); } catch { /* ignore */ }
-            throw new TimeoutException($"ffmpeg PCM 转换超时（>{timeout.TotalSeconds:F0}s）。");
-        }
-
-        var stdout = await stdoutTask.ConfigureAwait(false);
-        var stderr = await stderrTask.ConfigureAwait(false);
-        if (process.ExitCode != 0)
-        {
-            throw new InvalidOperationException($"ffmpeg PCM 转换失败(exit={process.ExitCode}): {stderr}\n{stdout}");
-        }
-
-        if (!File.Exists(outputPcmPath) || new FileInfo(outputPcmPath).Length == 0)
-        {
-            throw new InvalidDataException("ffmpeg PCM 转换输出为空。");
         }
     }
 
@@ -762,7 +586,30 @@ internal sealed class ProviderDownloadService
         TryDelete(path + ".download");
     }
 
-    private static async Task MuxAsync(string ffmpeg, string videoPath, string audioPath, string outputPath, CancellationToken cancellationToken)
+    private static async Task MuxAsync(PluginConfig config, string videoPath, string audioPath, string outputPath, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Run(() => SharpMp4MediaService.Mux(videoPath, audioPath, outputPath), cancellationToken).ConfigureAwait(false);
+            BotLog.Info($"MyParser SharpMP4 音视频合并完成: output={outputPath}");
+            return;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            TryDelete(outputPath);
+            BotLog.Warning($"MyParser SharpMP4 音视频合并失败，回退 ffmpeg: error={ex.Message}");
+        }
+
+        var ffmpeg = ResolveFfmpegPath(config)
+                     ?? throw new InvalidOperationException("SharpMP4 无法合并当前音视频流，且未找到 ffmpeg 回退程序。请配置 FfmpegPath 或将 ffmpeg 加入 PATH。");
+        await MuxWithFfmpegAsync(ffmpeg, videoPath, audioPath, outputPath, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task MuxWithFfmpegAsync(string ffmpeg, string videoPath, string audioPath, string outputPath, CancellationToken cancellationToken)
     {
         var psi = new ProcessStartInfo
         {
@@ -810,7 +657,7 @@ internal sealed class ProviderDownloadService
         var info = new FileInfo(path);
         if (!info.Exists || info.Length < 1024)
         {
-            throw new InvalidDataException("ffmpeg 输出文件为空或过小。");
+            throw new InvalidDataException("音视频合并输出文件为空或过小。");
         }
 
         await using var file = File.OpenRead(path);
@@ -819,7 +666,7 @@ internal sealed class ProviderDownloadService
         var ascii = Encoding.ASCII.GetString(header, 0, read);
         if (!ascii.Contains("ftyp", StringComparison.Ordinal))
         {
-            throw new InvalidDataException("ffmpeg 输出文件不像 MP4，可能合并失败。");
+            throw new InvalidDataException("音视频合并输出文件不像 MP4，可能合并失败。");
         }
     }
 

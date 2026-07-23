@@ -22,12 +22,6 @@ internal sealed class LiveReplayClipDownloader(PluginConfig config, ProviderDown
     {
         var stream = request.Streams.OrderBy(request.StreamRank).FirstOrDefault()
                      ?? throw new InvalidOperationException($"{request.PlatformDisplayName} 未返回可用于截取的播放流。");
-        var ffmpeg = ResolveFfmpegPath();
-        if (string.IsNullOrWhiteSpace(ffmpeg))
-        {
-            throw new InvalidOperationException("未找到 ffmpeg。请在配置 FfmpegPath 中填写 ffmpeg.exe 路径，或将 ffmpeg 加入 PATH。");
-        }
-
         var dir = ResolveClipDirectory(request);
         Directory.CreateDirectory(dir);
         try
@@ -39,7 +33,12 @@ internal sealed class LiveReplayClipDownloader(PluginConfig config, ProviderDown
 
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             linkedCts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
-            await CutStaticLiveClipAsync(ffmpeg, playlist.Path, outputPath, timeoutSeconds, linkedCts.Token);
+            if (!await TryBuildFmp4ClipAsync(request, stream, playlist.Path, outputPath, linkedCts.Token))
+            {
+                var ffmpeg = ResolveFfmpegPath()
+                             ?? throw new InvalidOperationException("当前直播流无法由 SharpMP4 直接处理，且未找到 ffmpeg 回退程序。请配置 FfmpegPath 或将 ffmpeg 加入 PATH。");
+                await CutStaticLiveClipAsync(ffmpeg, playlist.Path, outputPath, timeoutSeconds, linkedCts.Token);
+            }
             await ValidateClipAsync(outputPath, cancellationToken);
 
             BotLog.Info($"MyParser {request.PlatformDisplayName} 直播回看片段生成完成: {request.IdentifierName}={request.MediaId}, requested_duration={durationSeconds}s, actual_seconds={playlist.ActualSeconds:F1}, segments={playlist.SelectedSegments}/{playlist.TotalSegments}, stream={stream.Protocol}/{stream.Format}/{stream.Codec}, qn={stream.CurrentQn}, file_mb={new FileInfo(outputPath).Length / 1024d / 1024d:F2}, file={outputPath}");
@@ -268,6 +267,75 @@ internal sealed class LiveReplayClipDownloader(PluginConfig config, ProviderDown
         }
     }
 
+    private async Task<bool> TryBuildFmp4ClipAsync(
+        ProviderLiveReplayClipDownloadRequest request,
+        ProviderLiveReplayStream stream,
+        string playlistPath,
+        string outputPath,
+        CancellationToken cancellationToken)
+    {
+        if (!string.Equals(stream.Format, "fmp4", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var lines = await File.ReadAllLinesAsync(playlistPath, cancellationToken);
+        if (lines.Any(line => line.StartsWith("#EXT-X-KEY:", StringComparison.OrdinalIgnoreCase)
+                              && !line.Contains("METHOD=NONE", StringComparison.OrdinalIgnoreCase))
+            || lines.Any(line => line.StartsWith("#EXT-X-BYTERANGE", StringComparison.OrdinalIgnoreCase)
+                                 || line.StartsWith("#EXT-X-DISCONTINUITY", StringComparison.OrdinalIgnoreCase)
+                                 || line.StartsWith("#EXT-X-GAP", StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        var mapLine = lines.FirstOrDefault(line => line.StartsWith("#EXT-X-MAP:", StringComparison.OrdinalIgnoreCase));
+        var mapUri = mapLine is null ? null : ExtractUriAttribute(mapLine);
+        var segmentPaths = lines
+            .Select(line => line.Trim())
+            .Where(line => line.Length > 0 && !line.StartsWith('#'))
+            .ToArray();
+        if (string.IsNullOrWhiteSpace(mapUri) || segmentPaths.Length == 0 || segmentPaths.Any(path => !File.Exists(path)))
+        {
+            return false;
+        }
+
+        var initPath = outputPath + ".init.m4s";
+        try
+        {
+            var maxBytes = config.BilibiliLiveReplayClipMaxMegabytes <= 0
+                ? long.MaxValue
+                : config.BilibiliLiveReplayClipMaxMegabytes * 1024L * 1024L;
+            await DownloadSegmentAsync(request, mapUri, initPath, maxBytes, cancellationToken);
+            await using (var output = new BufferedStream(new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.Read)))
+            {
+                foreach (var path in new[] { initPath }.Concat(segmentPaths))
+                {
+                    await using var input = new BufferedStream(new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read));
+                    await input.CopyToAsync(output, cancellationToken);
+                }
+            }
+
+            await Task.Run(() => SharpMp4MediaService.Validate(outputPath), cancellationToken);
+            BotLog.Info($"MyParser {request.PlatformDisplayName} SharpMP4 fMP4 直播片段拼接完成: segments={segmentPaths.Length}, output={outputPath}");
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            TryDelete(outputPath);
+            BotLog.Warning($"MyParser {request.PlatformDisplayName} SharpMP4 fMP4 直播片段处理失败，回退 ffmpeg: error={ex.Message}");
+            return false;
+        }
+        finally
+        {
+            TryDelete(initPath);
+        }
+    }
+
     private async Task<long> DownloadSegmentAsync(ProviderLiveReplayClipDownloadRequest request, string url, string localPath, long remainingBytes, CancellationToken cancellationToken)
     {
         if (remainingBytes <= 0)
@@ -451,6 +519,20 @@ internal sealed class LiveReplayClipDownloader(PluginConfig config, ProviderDown
         return line[..start] + absolute + line[end..];
     }
 
+    private static string? ExtractUriAttribute(string line)
+    {
+        const string marker = "URI=\"";
+        var start = line.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (start < 0)
+        {
+            return null;
+        }
+
+        start += marker.Length;
+        var end = line.IndexOf('"', start);
+        return end > start ? line[start..end] : null;
+    }
+
     private static string ResolveUrl(string baseUrl, string value)
     {
         return Uri.TryCreate(value, UriKind.Absolute, out var absolute)
@@ -463,7 +545,7 @@ internal sealed class LiveReplayClipDownloader(PluginConfig config, ProviderDown
         var info = new FileInfo(path);
         if (!info.Exists || info.Length < 1024)
         {
-            throw new InvalidDataException("ffmpeg 输出的直播片段为空或过小。");
+            throw new InvalidDataException("直播片段输出为空或过小。");
         }
 
         var maxBytes = config.BilibiliLiveReplayClipMaxMegabytes <= 0
@@ -481,7 +563,7 @@ internal sealed class LiveReplayClipDownloader(PluginConfig config, ProviderDown
         var ascii = Encoding.ASCII.GetString(header, 0, read);
         if (!ascii.Contains("ftyp", StringComparison.Ordinal))
         {
-            throw new InvalidDataException("ffmpeg 输出文件不像 MP4，可能截取失败。");
+            throw new InvalidDataException("直播片段输出不像 MP4，可能处理失败。");
         }
     }
 

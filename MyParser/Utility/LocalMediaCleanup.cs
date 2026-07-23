@@ -8,10 +8,14 @@ internal static class LocalMediaCleanup
     {
         try
         {
-            var roots = GetAllowedMediaRoots(config).Where(Directory.Exists).Distinct(GetPathComparer()).ToArray();
+            var roots = GetStartupTempRoots(config)
+                .Where(Directory.Exists)
+                .Distinct(GetPathComparer())
+                .OrderBy(path => path.Length)
+                .ToArray();
             foreach (var root in roots)
             {
-                CleanupRootResidues(root);
+                CleanupRootContents(root);
             }
         }
         catch
@@ -119,53 +123,60 @@ internal static class LocalMediaCleanup
         yield return Path.Combine(Path.GetTempPath(), "Shirobot.Plugin.MyParser");
     }
 
-    private static void CleanupRootResidues(string root)
+    private static IEnumerable<string> GetStartupTempRoots(PluginConfig config)
     {
-        var rootFullPath = Path.GetFullPath(root);
-        var entries = new List<FileSystemInfo>();
-        var rootInfo = new DirectoryInfo(rootFullPath);
-        entries.AddRange(rootInfo.EnumerateFiles("*.download", SearchOption.AllDirectories));
-        entries.AddRange(rootInfo.EnumerateFiles("*_video.m4s", SearchOption.TopDirectoryOnly));
-        entries.AddRange(rootInfo.EnumerateFiles("*_audio.m4s", SearchOption.TopDirectoryOnly));
-        entries.AddRange(rootInfo.EnumerateFiles("video.m4s", SearchOption.AllDirectories));
-        entries.AddRange(rootInfo.EnumerateFiles("audio.m4s", SearchOption.AllDirectories));
-
-        var liveClips = Path.Combine(rootFullPath, "live-clips");
-        if (Directory.Exists(liveClips))
+        var mediaRoots = GetAllowedMediaRoots(config).Select(Path.GetFullPath).ToArray();
+        var pluginTempRoot = mediaRoots
+            .Select(Path.GetDirectoryName)
+            .FirstOrDefault(path => string.Equals(Path.GetFileName(path), "tmp", StringComparison.OrdinalIgnoreCase));
+        if (!string.IsNullOrWhiteSpace(pluginTempRoot))
         {
-            entries.AddRange(new DirectoryInfo(liveClips).EnumerateDirectories("*", SearchOption.TopDirectoryOnly));
+            yield return pluginTempRoot;
         }
 
-        foreach (var entry in entries.OrderBy(i => i.LastWriteTimeUtc))
+        foreach (var root in mediaRoots)
+        {
+            yield return root;
+        }
+    }
+
+    private static void CleanupRootContents(string root)
+    {
+        var rootInfo = new DirectoryInfo(Path.GetFullPath(root));
+        if (!rootInfo.Exists)
+        {
+            return;
+        }
+
+        var deleted = 0;
+        var failed = 0;
+        foreach (var entry in rootInfo.EnumerateFileSystemInfos("*", SearchOption.TopDirectoryOnly))
         {
             try
             {
                 switch (entry)
                 {
                     case FileInfo file when file.Exists:
+                        file.IsReadOnly = false;
                         file.Delete();
-                        BotLog.Info($"MyParser 启动清理残留文件: {file.FullName}");
                         break;
                     case DirectoryInfo dir when dir.Exists:
                         dir.Delete(true);
-                        BotLog.Info($"MyParser 启动清理残留目录: {dir.FullName}");
                         break;
                 }
+
+                deleted++;
             }
             catch (Exception ex)
             {
+                failed++;
                 BotLog.Warning($"MyParser 启动清理残留失败: path={entry.FullName}, error={ex.Message}");
             }
         }
 
-        CleanupEmptyDirectories(rootInfo);
-    }
-
-    private static void CleanupEmptyDirectories(DirectoryInfo root)
-    {
-        foreach (var dir in root.EnumerateDirectories("*", SearchOption.AllDirectories).OrderByDescending(i => i.FullName.Length))
+        if (deleted > 0 || failed > 0)
         {
-            TryDeleteDirectoryIfEmpty(dir.FullName);
+            BotLog.Info($"MyParser 启动临时目录清理完成: root={rootInfo.FullName}, deleted={deleted}, failed={failed}");
         }
     }
 

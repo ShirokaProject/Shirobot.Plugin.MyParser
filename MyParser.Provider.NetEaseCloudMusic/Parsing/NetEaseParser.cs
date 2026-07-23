@@ -203,7 +203,7 @@ public sealed class NetEaseParser : IParserHttpClientAccessor, IDisposable
         return detail with
         {
             AudioUrl = url.AudioUrl,
-            Quality = url.Quality ?? "lossless",
+            Quality = url.Quality ?? "standard",
             FileType = url.FileType,
             FileSize = url.FileSize,
             Bitrate = url.Bitrate,
@@ -344,7 +344,7 @@ public sealed class NetEaseParser : IParserHttpClientAccessor, IDisposable
     private async Task<(string AudioUrl, string? Quality, string? FileType, long? FileSize, int? Bitrate)> GetSongUrlAsync(long songId, string quality, CancellationToken cancellationToken)
     {
         var config = CreateEApiHeader();
-        var payload = new { ids = new[] { songId }, level = quality, encodeType = quality == "dolby" ? "mp4" : "flac", header = JsonSerializer.Serialize(config, NetEaseJson.Options) };
+        var payload = new { ids = new[] { songId }, level = quality, encodeType = "mp3", header = JsonSerializer.Serialize(config, NetEaseJson.Options) };
         var encrypted = NetEaseCrypto.EncryptEApiParams(SongUrlApi, payload);
         var json = await _http.PostFormAsync(SongUrlApi, new Dictionary<string, string> { ["params"] = encrypted }, MyParserRuntime.NetEaseCloudMusicCookie, cancellationToken).ConfigureAwait(false);
         using var doc = JsonDocument.Parse(json);

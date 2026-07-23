@@ -546,7 +546,6 @@ internal sealed partial class NetEaseMessageHandler(ProviderMessageHandlerContex
 
     private static ProviderAudioDownloadRequest BuildNetEaseAudioDownloadRequest(NetEaseParseResult result)
     {
-        var extension = NormalizeExtension(result.FileType).TrimStart('.');
         return new ProviderAudioDownloadRequest(
             "neteasecloudmusic",
             "网易云音乐",
@@ -555,15 +554,9 @@ internal sealed partial class NetEaseMessageHandler(ProviderMessageHandlerContex
             result.AudioUrl,
             string.Empty,
             $"{result.Artists} - {result.Title}_{result.SongId}_{result.Quality}",
-            extension,
+            "mp3",
             (method, url, range) => NetEaseHttp.CreateAudioRequest(method, url),
             "song_id");
-    }
-
-    private static string NormalizeExtension(string? fileType)
-    {
-        var ext = string.IsNullOrWhiteSpace(fileType) ? ".mp3" : "." + fileType.Trim().TrimStart('.').ToLowerInvariant();
-        return ext is ".mp3" or ".flac" or ".m4a" or ".mp4" or ".ogg" or ".opus" ? ext : ".mp3";
     }
 
     private static string FormatResult(NetEaseParseResult result)
