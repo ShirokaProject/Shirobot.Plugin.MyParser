@@ -2,36 +2,37 @@
 using System.Text;
 using Shirobot.Plugin.MyParser.Providers.Common.MessageHandling;
 using Shirobot.Plugin.MyParser.Providers.Bilibili.Models;
-using ShiroBot.Model.Common;
+using ShiroBot.Qq.Model;
+using ShiroBot.SDK.Models;
 
 
 namespace Shirobot.Plugin.MyParser.Providers.Bilibili.Impl.MessageHandling.Impl;
 
 internal sealed partial class BilibiliMessageHandler
 {
-private async Task SendBangumiForwardAsync(IncomingMessage message, BilibiliBangumiParseResult result, bool sendEpHint = true)
+private async Task SendBangumiForwardAsync(MessageEvent message, BilibiliBangumiParseResult result, bool sendEpHint = true)
     {
         var senderId = GetBotOrSenderId(message);
         var senderName = "Bilibili 番剧";
-        var forwarded = new List<OutgoingForwardedMessage>();
-        var headerSegments = new List<OutgoingSegment>();
+        var forwarded = new List<QqForwardedMessage>();
+        var headerSegments = new List<QqOutgoingSegment>();
         var coverTask = string.IsNullOrWhiteSpace(result.CoverUrl)
             ? Task.FromResult<(string Uri, string? LocalPath)>((string.Empty, null))
             : BuildRemoteImageAsync(result.CoverUrl, result.MediaUrl ?? result.SeasonUrl, $"bilibili_bangumi_cover_{result.MediaId ?? result.SeasonId ?? result.RequestedEpId ?? 0}");
         var cover = await coverTask;
         if (!string.IsNullOrWhiteSpace(cover.Uri))
         {
-            headerSegments.Add(new ImageOutgoingSegment(cover.Uri));
+            headerSegments.Add(new QqImageOutgoing(cover.Uri));
         }
 
-        headerSegments.Add(new TextOutgoingSegment(BuildBangumiHeaderText(result)));
-        forwarded.Add(new OutgoingForwardedMessage(senderId, senderName, headerSegments));
+        headerSegments.Add(new QqTextOutgoing(BuildBangumiHeaderText(result)));
+        forwarded.Add(new QqForwardedMessage(senderId, senderName, headerSegments));
 
         foreach (var chunk in result.Episodes.Chunk(10))
         {
-            forwarded.Add(new OutgoingForwardedMessage(senderId, senderName,
+            forwarded.Add(new QqForwardedMessage(senderId, senderName,
             [
-                new TextOutgoingSegment(BuildBangumiEpisodeChunkText(chunk, result.RequestedEpId))
+                new QqTextOutgoing(BuildBangumiEpisodeChunkText(chunk, result.RequestedEpId))
             ]));
         }
 
@@ -43,20 +44,8 @@ private async Task SendBangumiForwardAsync(IncomingMessage message, BilibiliBang
             result.RatingText ?? "剧集列表",
         };
         var summary = $"番剧 · {result.Episodes.Count}话";
-        var forward = new ForwardOutgoingSegment(forwarded, title, preview, summary, "Bilibili 番剧");
-
-        switch (message)
-        {
-            case GroupIncomingMessage group:
-                await context.Message.SendGroupMessageAsync(group.Group.GroupId, forward);
-                break;
-            case FriendIncomingMessage friend:
-                await context.Message.SendPrivateMessageAsync(friend.SenderId, forward);
-                break;
-            default:
-                await context.Message.ReplyAsync(message, forward);
-                break;
-        }
+        var forward = MessageHandlerCommon.BuildForwardSegment(forwarded, title, preview, summary, "Bilibili 番剧");
+        await context.Message.ReplyAsync(message, forward);
 
         if (sendEpHint && result.RequestedEpId is { } epId)
         {
@@ -98,23 +87,23 @@ private async Task SendBangumiForwardAsync(IncomingMessage message, BilibiliBang
         return sb.ToString().TrimEnd();
     }
 
-    private async Task SendMultiPageForwardAsync(IncomingMessage message, BilibiliMultiPageParseResult result)
+    private async Task SendMultiPageForwardAsync(MessageEvent message, BilibiliMultiPageParseResult result)
     {
         var senderId = GetBotOrSenderId(message);
         var senderName = string.IsNullOrWhiteSpace(result.AuthorName) ? "Bilibili 分P视频" : result.AuthorName!;
-        var forwarded = new List<OutgoingForwardedMessage>();
-        var headerSegments = new List<OutgoingSegment>();
+        var forwarded = new List<QqForwardedMessage>();
+        var headerSegments = new List<QqOutgoingSegment>();
         var headerCoverTask = string.IsNullOrWhiteSpace(result.CoverUrl)
             ? Task.FromResult<(string Uri, string? LocalPath)>((string.Empty, null))
             : BuildRemoteImageAsync(result.CoverUrl, result.SourceUrl, $"bilibili_multipage_cover_{result.Bvid}");
         var headerCover = await headerCoverTask;
         if (!string.IsNullOrWhiteSpace(headerCover.Uri))
         {
-            headerSegments.Add(new ImageOutgoingSegment(headerCover.Uri));
+            headerSegments.Add(new QqImageOutgoing(headerCover.Uri));
         }
 
-        headerSegments.Add(new TextOutgoingSegment(BuildMultiPageHeaderText(result)));
-        forwarded.Add(new OutgoingForwardedMessage(senderId, senderName, headerSegments));
+        headerSegments.Add(new QqTextOutgoing(BuildMultiPageHeaderText(result)));
+        forwarded.Add(new QqForwardedMessage(senderId, senderName, headerSegments));
 
         var coverImageLimit = Math.Max(0, config.BilibiliMultiPageCoverImageLimit);
         var pages = result.Pages.ToArray();
@@ -130,14 +119,14 @@ private async Task SendBangumiForwardAsync(IncomingMessage message, BilibiliBang
 
         foreach (var page in pages)
         {
-            var segments = new List<OutgoingSegment>();
+            var segments = new List<QqOutgoingSegment>();
             if (coverByPage.TryGetValue(page.Page, out var pageCover) && !string.IsNullOrWhiteSpace(pageCover.Uri))
             {
-                segments.Add(new ImageOutgoingSegment(pageCover.Uri));
+                segments.Add(new QqImageOutgoing(pageCover.Uri));
             }
 
-            segments.Add(new TextOutgoingSegment(BuildMultiPagePageText(page)));
-            forwarded.Add(new OutgoingForwardedMessage(senderId, senderName, segments));
+            segments.Add(new QqTextOutgoing(BuildMultiPagePageText(page)));
+            forwarded.Add(new QqForwardedMessage(senderId, senderName, segments));
         }
 
         var title = string.IsNullOrWhiteSpace(result.Title) ? $"Bilibili 分P视频 {result.Bvid}" : TrimLine(result.Title!, 48);
@@ -148,23 +137,11 @@ private async Task SendBangumiForwardAsync(IncomingMessage message, BilibiliBang
             "仅展示分P信息，不下载视频",
         };
         var summary = $"分P视频 · {result.PageCount}P";
-        var forward = new ForwardOutgoingSegment(forwarded, title, preview, summary, "Bilibili 分P");
-
-        switch (message)
-        {
-            case GroupIncomingMessage group:
-                await context.Message.SendGroupMessageAsync(group.Group.GroupId, forward);
-                break;
-            case FriendIncomingMessage friend:
-                await context.Message.SendPrivateMessageAsync(friend.SenderId, forward);
-                break;
-            default:
-                await context.Message.ReplyAsync(message, forward);
-                break;
-        }
+        var forward = MessageHandlerCommon.BuildForwardSegment(forwarded, title, preview, summary, "Bilibili 分P");
+        await context.Message.ReplyAsync(message, forward);
 
         var prompt = await SendReplyAsync(message, "已默认解析 P1；如需解析其它分P，请在10min内用数字回复此消息。");
-        SubscribeBilibiliPageReply(result, prompt.MessageSeq);
+        SubscribeBilibiliPageReply(result, prompt.MessageId);
         await ParseAndReplyAsync(message, $"https://www.bilibili.com/video/{result.Bvid}/?p=1");
     }
 

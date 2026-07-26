@@ -1,7 +1,7 @@
 using Shirobot.Plugin.MyParser.Parsing;
 using Shirobot.Plugin.MyParser.Providers.Bilibili.Models;
 using Shirobot.Plugin.MyParser.Providers.Bilibili.Utilities;
-using ShiroBot.Model.Common;
+using ShiroBot.SDK.Models;
 
 namespace Shirobot.Plugin.MyParser.Providers.Bilibili.Facade;
 
@@ -19,7 +19,7 @@ internal sealed class BilibiliParseProvider(BilibiliParser parser) : IIncomingMe
                || BilibiliUrlParser.ExtractB23Url(text) is not null;
     }
 
-    public string? ExtractParseText(IncomingMessage message)
+    public string? ExtractParseText(MessageEvent message)
     {
         var text = BilibiliLightAppUrlExtractor.ExtractParseText(message);
         return BilibiliUrlParser.ExtractStrictBilibiliUrl(text ?? string.Empty);

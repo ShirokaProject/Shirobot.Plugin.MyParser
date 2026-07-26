@@ -11,9 +11,10 @@ using System.Text;
 using ShiroBot.AvaloniaSdk;
 using Shirobot.Plugin.MyParser.Parsing;
 using Shirobot.Plugin.MyParser.Providers.Common.MessageHandling;
-using ShiroBot.Model.Common;
+using ShiroBot.Qq.Model;
 using ShiroBot.SDK.Abstractions;
 using ShiroBot.SDK.Core;
+using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Plugin;
 
 namespace Shirobot.Plugin.MyParser.Providers.Douyin.Impl.MessageHandling;
@@ -40,7 +41,7 @@ internal sealed class DouyinMessageHandler : IDisposable
         _douyinProvider = douyinProvider;
     }
 
-    public async Task ParseAndReplyAsync(IncomingMessage message, string text)
+    public async Task ParseAndReplyAsync(MessageEvent message, string text)
     {
         await TryReactToSourceMessageAsync(message, "351");
         if (_providerRegistry is null)
@@ -189,7 +190,7 @@ internal sealed class DouyinMessageHandler : IDisposable
         }
     }
 
-    private Task TryReactToSourceMessageAsync(IncomingMessage message, string faceId)
+    private Task TryReactToSourceMessageAsync(MessageEvent message, string faceId)
     {
         return MessageHandlerCommon.ReactAsync(_context, message, faceId, "Douyin");
     }
@@ -231,7 +232,7 @@ internal sealed class DouyinMessageHandler : IDisposable
         }
     }
 
-    private async Task<VideoOutgoingSegment?> BuildVideoSegmentAsync(DouyinParseResult result)
+    private async Task<VideoSegment?> BuildVideoSegmentAsync(DouyinParseResult result)
     {
         if (!_config.SendVideoSegment || _douyinProvider is null || result.IsGallery || !result.IsVideo)
         {
@@ -264,10 +265,8 @@ internal sealed class DouyinMessageHandler : IDisposable
         }
 
         BotLog.Info($"MyParser VideoSegment URI 模式：{uriMode}, file_mb={fileSize / 1024d / 1024d:F2}, uri_preview={MediaUriUtilities.PreviewUri(videoUri)}");
-        var thumbUri = !string.IsNullOrWhiteSpace(result.CoverUrl)
-            ? result.CoverUrl
-            : null;
-        return new VideoOutgoingSegment(videoUri, thumbUri);
+        // TODO: 新 SDK 的 VideoSegment 暂无缩略图字段，原 thumbUri(result.CoverUrl) 无法透传。
+        return new VideoSegment(videoUri);
     }
 
     private LocalVideoHttpServer GetLocalVideoHttpServer()
@@ -299,7 +298,7 @@ private void LogFinalVideoFileInfo(DouyinParseResult result)
             + $"path={result.LocalVideoPath}");
     }
 
-    private Task StartSendCoverMessageAsync(IncomingMessage message, DouyinParseResult result)
+    private Task StartSendCoverMessageAsync(MessageEvent message, DouyinParseResult result)
     {
         if (string.IsNullOrWhiteSpace(result.CoverUrl))
         {
@@ -309,50 +308,29 @@ private void LogFinalVideoFileInfo(DouyinParseResult result)
         return MessageHandlerCommon.RunLoggedBackgroundAsync($"抖音封面卡片异步发送: aweme_id={result.AwemeId}", () => SendCoverMessageAsync(message, result));
     }
 
-    private async Task SendVideoMessageAsync(IncomingMessage message, DouyinParseResult result, VideoOutgoingSegment videoSegment)
+    private async Task SendVideoMessageAsync(MessageEvent message, DouyinParseResult result, VideoSegment videoSegment)
     {
-        var segments = new OutgoingSegment[] { videoSegment };
         var stopwatch = Stopwatch.StartNew();
         var uriMode = MediaUriUtilities.GetUriMode(videoSegment.Uri);
-        BotLog.Info($"MyParser VideoSegment 发送开始: aweme_id={result.AwemeId}, scene={GetMessageScene(message)}, uri_mode={uriMode}, segments={segments.Length}, uri_preview={MediaUriUtilities.PreviewUri(videoSegment.Uri)}");
+        var scene = GetMessageScene(message);
+        BotLog.Info($"MyParser VideoSegment 发送开始: aweme_id={result.AwemeId}, scene={scene}, uri_mode={uriMode}, uri_preview={MediaUriUtilities.PreviewUri(videoSegment.Uri)}");
 
-        switch (message)
-        {
-            case GroupIncomingMessage group:
-            {
-                var response = await _context.Message.SendGroupMessageAsync(group.Group.GroupId, segments);
-                BotLog.Info($"MyParser VideoSegment 发送接口完成: aweme_id={result.AwemeId}, scene=group, group_id={group.Group.GroupId}, message_seq={response.MessageSeq}, time={response.Time}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                EnsureVideoSendAccepted(response.MessageSeq, "group");
-                break;
-            }
-            case FriendIncomingMessage friend:
-            {
-                var response = await _context.Message.SendPrivateMessageAsync(friend.SenderId, segments);
-                BotLog.Info($"MyParser VideoSegment 发送接口完成: aweme_id={result.AwemeId}, scene=friend, user_id={friend.SenderId}, message_seq={response.MessageSeq}, time={response.Time}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                EnsureVideoSendAccepted(response.MessageSeq, "friend");
-                break;
-            }
-            default:
-            {
-                var response = await _context.Message.ReplyAsync(message, segments);
-                BotLog.Info($"MyParser VideoSegment 发送接口完成: aweme_id={result.AwemeId}, scene=reply, message_seq={response.MessageSeq}, time={response.Time}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                EnsureVideoSendAccepted(response.MessageSeq, "reply");
-                break;
-            }
-        }
+        var response = await _context.Message.ReplyAsync(message, videoSegment);
+        BotLog.Info($"MyParser VideoSegment 发送接口完成: aweme_id={result.AwemeId}, scene={scene}, channel_id={message.Channel.Id}, message_id={response.MessageId}, time={response.Timestamp}, elapsed={stopwatch.Elapsed:mm\\:ss}");
+        EnsureVideoSendAccepted(response.MessageId, scene);
     }
 
-    private void EnsureVideoSendAccepted(long messageSeq, string scene)
+    private void EnsureVideoSendAccepted(string? messageId, string scene)
     {
-        if (messageSeq <= 0)
+        if (string.IsNullOrWhiteSpace(messageId) || messageId == "0")
         {
-            throw new InvalidOperationException($"VideoSegment 发送返回 message_seq={messageSeq}，可能被适配器或平台拒绝，按发送失败处理以触发文件上传 fallback。scene={scene}");
+            throw new InvalidOperationException($"VideoSegment 发送返回 message_id={messageId}，可能被适配器或平台拒绝，按发送失败处理以触发文件上传 fallback。scene={scene}");
         }
     }
 
-    private static string GetMessageScene(IncomingMessage message) => MessageHandlerCommon.GetMessageScene(message);
+    private static string GetMessageScene(MessageEvent message) => MessageHandlerCommon.GetMessageScene(message);
 
-private async Task SendGalleryMessageAsync(IncomingMessage message, DouyinParseResult result)
+private async Task SendGalleryMessageAsync(MessageEvent message, DouyinParseResult result)
     {
         if (result.Images.Count == 0)
         {
@@ -366,7 +344,7 @@ private async Task SendGalleryMessageAsync(IncomingMessage message, DouyinParseR
             return;
         }
 
-        var forwardedMessages = new List<OutgoingForwardedMessage>();
+        var forwardedMessages = new List<QqForwardedMessage>();
         var senderId = GetBotOrSenderId(message);
         var senderName = string.IsNullOrWhiteSpace(result.AuthorName) ? "抖音图文" : result.AuthorName!;
 
@@ -382,11 +360,7 @@ private async Task SendGalleryMessageAsync(IncomingMessage message, DouyinParseR
                 continue;
             }
 
-            var segments = new List<OutgoingSegment>
-            {
-                new ImageOutgoingSegment(imageFile.Uri),
-            };
-            forwardedMessages.Add(new OutgoingForwardedMessage(senderId, senderName, segments));
+            forwardedMessages.Add(new QqForwardedMessage(senderId, senderName, [new QqImageOutgoing(imageFile.Uri)]));
         }
 
         if (forwardedMessages.Count == 0)
@@ -398,101 +372,42 @@ private async Task SendGalleryMessageAsync(IncomingMessage message, DouyinParseR
         var title = string.IsNullOrWhiteSpace(result.Title) ? "抖音图文" : TrimLine(result.Title, 48);
         var preview = result.Images.Take(4).Select((_, index) => $"图片 {index + 1}").ToArray();
         var summary = $"共 {result.Images.Count} 张";
-        var forward = new ForwardOutgoingSegment(forwardedMessages, title, preview, summary, "抖音图文");
+        var forward = MessageHandlerCommon.BuildForwardSegment(forwardedMessages, title, preview, summary, "抖音图文");
         var stopwatch = Stopwatch.StartNew();
-        BotLog.Info($"MyParser 图文合并转发发送开始: aweme_id={result.AwemeId}, scene={GetMessageScene(message)}, images={forwardedMessages.Count}/{result.Images.Count}");
+        var scene = GetMessageScene(message);
+        BotLog.Info($"MyParser 图文合并转发发送开始: aweme_id={result.AwemeId}, scene={scene}, images={forwardedMessages.Count}/{result.Images.Count}");
 
-        switch (message)
-        {
-            case GroupIncomingMessage group:
-            {
-                var response = await _context.Message.SendGroupMessageAsync(group.Group.GroupId, forward);
-                BotLog.Info($"MyParser 图文合并转发发送完成: aweme_id={result.AwemeId}, scene=group, group_id={group.Group.GroupId}, message_seq={response.MessageSeq}, time={response.Time}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                break;
-            }
-            case FriendIncomingMessage friend:
-            {
-                var response = await _context.Message.SendPrivateMessageAsync(friend.SenderId, forward);
-                BotLog.Info($"MyParser 图文合并转发发送完成: aweme_id={result.AwemeId}, scene=friend, user_id={friend.SenderId}, message_seq={response.MessageSeq}, time={response.Time}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                break;
-            }
-            default:
-            {
-                var response = await _context.Message.ReplyAsync(message, forward);
-                BotLog.Info($"MyParser 图文合并转发发送完成: aweme_id={result.AwemeId}, scene=reply, message_seq={response.MessageSeq}, time={response.Time}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                break;
-            }
-        }
+        var response = await _context.Message.ReplyAsync(message, forward);
+        BotLog.Info($"MyParser 图文合并转发发送完成: aweme_id={result.AwemeId}, scene={scene}, channel_id={message.Channel.Id}, message_id={response.MessageId}, time={response.Timestamp}, elapsed={stopwatch.Elapsed:mm\\:ss}");
     }
 
-    private async Task SendSingleGalleryImageAsync(IncomingMessage message, DouyinParseResult result, DouyinImageInfo image)
+    private async Task SendSingleGalleryImageAsync(MessageEvent message, DouyinParseResult result, DouyinImageInfo image)
     {
         var imageFile = await BuildRemoteImageAsync(image.Url, result.SourceUrl, $"douyin_image_{result.AwemeId}_01");
-        var segmentList = new List<OutgoingSegment>
-        {
-            new ImageOutgoingSegment(imageFile.Uri),
-        };
-        var segments = segmentList.ToArray();
         var stopwatch = Stopwatch.StartNew();
-        BotLog.Info($"MyParser 单图图文 ImageSegment 发送开始: aweme_id={result.AwemeId}, scene={GetMessageScene(message)}, uri_preview={MediaUriUtilities.PreviewUri(imageFile.Uri)}");
+        var scene = GetMessageScene(message);
+        BotLog.Info($"MyParser 单图图文 ImageSegment 发送开始: aweme_id={result.AwemeId}, scene={scene}, uri_preview={MediaUriUtilities.PreviewUri(imageFile.Uri)}");
 
-        switch (message)
-        {
-            case GroupIncomingMessage group:
-            {
-                var response = await _context.Message.SendGroupMessageAsync(group.Group.GroupId, segments);
-                BotLog.Info($"MyParser 单图图文 ImageSegment 发送完成: aweme_id={result.AwemeId}, scene=group, group_id={group.Group.GroupId}, message_seq={response.MessageSeq}, time={response.Time}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                break;
-            }
-            case FriendIncomingMessage friend:
-            {
-                var response = await _context.Message.SendPrivateMessageAsync(friend.SenderId, segments);
-                BotLog.Info($"MyParser 单图图文 ImageSegment 发送完成: aweme_id={result.AwemeId}, scene=friend, user_id={friend.SenderId}, message_seq={response.MessageSeq}, time={response.Time}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                break;
-            }
-            default:
-            {
-                var response = await _context.Message.ReplyAsync(message, segments);
-                BotLog.Info($"MyParser 单图图文 ImageSegment 发送完成: aweme_id={result.AwemeId}, scene=reply, message_seq={response.MessageSeq}, time={response.Time}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                break;
-            }
-        }
+        var response = await _context.Message.ReplyAsync(message, new ImageSegment(imageFile.Uri));
+        BotLog.Info($"MyParser 单图图文 ImageSegment 发送完成: aweme_id={result.AwemeId}, scene={scene}, channel_id={message.Channel.Id}, message_id={response.MessageId}, time={response.Timestamp}, elapsed={stopwatch.Elapsed:mm\\:ss}");
     }
 
-    private async Task SendMusicMessageAsync(IncomingMessage message, DouyinParseResult result)
+    private async Task SendMusicMessageAsync(MessageEvent message, DouyinParseResult result)
     {
         if (string.IsNullOrWhiteSpace(result.MusicUrl))
         {
             return;
         }
 
-        var segment = new RecordOutgoingSegment(result.MusicUrl);
+        var segment = new AudioSegment(result.MusicUrl);
         var stopwatch = Stopwatch.StartNew();
-        BotLog.Info($"MyParser 图文音乐 RecordSegment 发送开始: aweme_id={result.AwemeId}, scene={GetMessageScene(message)}, uri_preview={MediaUriUtilities.PreviewUri(result.MusicUrl)}");
+        var scene = GetMessageScene(message);
+        BotLog.Info($"MyParser 图文音乐 RecordSegment 发送开始: aweme_id={result.AwemeId}, scene={scene}, uri_preview={MediaUriUtilities.PreviewUri(result.MusicUrl)}");
 
         try
         {
-            switch (message)
-            {
-                case GroupIncomingMessage group:
-                {
-                    var response = await _context.Message.SendGroupMessageAsync(group.Group.GroupId, segment);
-                    BotLog.Info($"MyParser 图文音乐 RecordSegment 发送完成: aweme_id={result.AwemeId}, scene=group, group_id={group.Group.GroupId}, message_seq={response.MessageSeq}, time={response.Time}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                    break;
-                }
-                case FriendIncomingMessage friend:
-                {
-                    var response = await _context.Message.SendPrivateMessageAsync(friend.SenderId, segment);
-                    BotLog.Info($"MyParser 图文音乐 RecordSegment 发送完成: aweme_id={result.AwemeId}, scene=friend, user_id={friend.SenderId}, message_seq={response.MessageSeq}, time={response.Time}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                    break;
-                }
-                default:
-                {
-                    var response = await _context.Message.ReplyAsync(message, segment);
-                    BotLog.Info($"MyParser 图文音乐 RecordSegment 发送完成: aweme_id={result.AwemeId}, scene=reply, message_seq={response.MessageSeq}, time={response.Time}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                    break;
-                }
-            }
+            var response = await _context.Message.ReplyAsync(message, segment);
+            BotLog.Info($"MyParser 图文音乐 RecordSegment 发送完成: aweme_id={result.AwemeId}, scene={scene}, channel_id={message.Channel.Id}, message_id={response.MessageId}, time={response.Timestamp}, elapsed={stopwatch.Elapsed:mm\\:ss}");
         }
         catch (Exception ex)
         {
@@ -501,42 +416,18 @@ private async Task SendGalleryMessageAsync(IncomingMessage message, DouyinParseR
         }
     }
 
-    private static long GetBotOrSenderId(IncomingMessage message) => message switch
-    {
-        GroupIncomingMessage group => group.SenderId,
-        FriendIncomingMessage friend => friend.SenderId,
-        TempIncomingMessage temp => temp.SenderId,
-        _ => 0,
-    };
+    private static long GetBotOrSenderId(MessageEvent message) => MessageHandlerCommon.GetBotOrSenderId(message);
 
-    private async Task SendCoverMessageAsync(IncomingMessage message, DouyinParseResult result)
+    private async Task SendCoverMessageAsync(MessageEvent message, DouyinParseResult result)
     {
         var coverUri = await BuildCoverCardUriAsync(result);
-        var segment = new ImageOutgoingSegment(coverUri);
+        var segment = new ImageSegment(coverUri);
         var stopwatch = Stopwatch.StartNew();
-        BotLog.Info($"MyParser 封面卡片 ImageSegment 发送开始: aweme_id={result.AwemeId}, scene={GetMessageScene(message)}, uri_preview={MediaUriUtilities.PreviewUri(coverUri)}");
+        var scene = GetMessageScene(message);
+        BotLog.Info($"MyParser 封面卡片 ImageSegment 发送开始: aweme_id={result.AwemeId}, scene={scene}, uri_preview={MediaUriUtilities.PreviewUri(coverUri)}");
 
-        switch (message)
-        {
-            case GroupIncomingMessage group:
-            {
-                var response = await _context.Message.SendGroupMessageAsync(group.Group.GroupId, segment);
-                BotLog.Info($"MyParser 封面卡片 ImageSegment 发送接口完成: aweme_id={result.AwemeId}, scene=group, group_id={group.Group.GroupId}, message_seq={response.MessageSeq}, time={response.Time}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                break;
-            }
-            case FriendIncomingMessage friend:
-            {
-                var response = await _context.Message.SendPrivateMessageAsync(friend.SenderId, segment);
-                BotLog.Info($"MyParser 封面卡片 ImageSegment 发送接口完成: aweme_id={result.AwemeId}, scene=friend, user_id={friend.SenderId}, message_seq={response.MessageSeq}, time={response.Time}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                break;
-            }
-            default:
-            {
-                var response = await _context.Message.ReplyAsync(message, segment);
-                BotLog.Info($"MyParser 封面卡片 ImageSegment 发送接口完成: aweme_id={result.AwemeId}, scene=reply, message_seq={response.MessageSeq}, time={response.Time}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                break;
-            }
-        }
+        var response = await _context.Message.ReplyAsync(message, segment);
+        BotLog.Info($"MyParser 封面卡片 ImageSegment 发送接口完成: aweme_id={result.AwemeId}, scene={scene}, channel_id={message.Channel.Id}, message_id={response.MessageId}, time={response.Timestamp}, elapsed={stopwatch.Elapsed:mm\\:ss}");
     }
 
     private async Task<string> BuildCoverCardUriAsync(DouyinParseResult result)
@@ -734,7 +625,7 @@ private static void LogCoverImageInfo(DouyinParseResult result, string mode, lon
         BotLog.Info($"MyParser 封面 ImageSegment URI 模式：aweme_id={result.AwemeId}, mode={mode}, size_kb={(bytes > 0 ? bytes / 1024d : 0):F1}, uri_preview={MediaUriUtilities.PreviewUri(uri)}");
     }
 
-    private Task<string> UploadVideoFileAsync(IncomingMessage message, DouyinParseResult result)
+    private Task<string> UploadVideoFileAsync(MessageEvent message, DouyinParseResult result)
     {
         return MessageHandlerCommon.UploadLocalVideoFileAsync(_context, _config, message, result.LocalVideoPath, "抖音", result.AwemeId);
     }
@@ -800,13 +691,7 @@ private static void LogCoverImageInfo(DouyinParseResult result, string mode, lon
         return sb.ToString().TrimEnd();
     }
 
-    private static string GetPlainText(IncomingMessage message) => message switch
-    {
-        FriendIncomingMessage friend => friend.GetPlainText(),
-        GroupIncomingMessage group => group.GetPlainText(),
-        TempIncomingMessage temp => string.Concat(temp.Segments.OfType<TextIncomingSegment>().Select(i => i.Text)),
-        _ => string.Empty,
-    };
+    private static string GetPlainText(MessageEvent message) => message.GetPlainText();
 
     private static string TrimLine(string value, int maxLength)
     {

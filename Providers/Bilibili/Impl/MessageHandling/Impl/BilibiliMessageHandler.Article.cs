@@ -7,21 +7,22 @@ using Shirobot.Plugin.MyParser.Providers.Bilibili.Models;
 using Shirobot.Plugin.MyParser.Providers.Bilibili.ViewModels;
 using Shirobot.Plugin.MyParser.Providers.Bilibili.Views;
 using Shirobot.Plugin.MyParser.Utility;
-using ShiroBot.Model.Common;
+using ShiroBot.Qq.Model;
 using ShiroBot.SDK.Abstractions;
+using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Plugin;
 
 namespace Shirobot.Plugin.MyParser.Providers.Bilibili.Impl.MessageHandling.Impl;
 
 internal sealed partial class BilibiliMessageHandler
 {
-private async Task SendArticleForwardAsync(IncomingMessage message, BilibiliArticleParseResult result)
+private async Task SendArticleForwardAsync(MessageEvent message, BilibiliArticleParseResult result)
     {
         var senderId = GetBotOrSenderId(message);
         var senderName = string.IsNullOrWhiteSpace(result.AuthorName) ? GetArticleKindText(result) : result.AuthorName!;
-        var forwarded = new List<OutgoingForwardedMessage>();
+        var forwarded = new List<QqForwardedMessage>();
 
-        forwarded.Add(new OutgoingForwardedMessage(senderId, senderName, [new TextOutgoingSegment(BuildArticleHeaderText(result))]));
+        forwarded.Add(new QqForwardedMessage(senderId, senderName, [new QqTextOutgoing(BuildArticleHeaderText(result))]));
 
         var forwardBlocks = BuildForwardBlocks(result).ToArray();
         var imageBlocks = forwardBlocks
@@ -42,13 +43,13 @@ private async Task SendArticleForwardAsync(IncomingMessage message, BilibiliArti
             {
                 if (imageBySourceIndex.TryGetValue(sourceIndex, out var image) && !string.IsNullOrWhiteSpace(image.Uri))
                 {
-                    var segments = new List<OutgoingSegment> { new ImageOutgoingSegment(image.Uri) };
+                    var segments = new List<QqOutgoingSegment> { new QqImageOutgoing(image.Uri) };
                     if (!string.IsNullOrWhiteSpace(block.Caption))
                     {
-                        segments.Add(new TextOutgoingSegment(block.Caption));
+                        segments.Add(new QqTextOutgoing(block.Caption));
                     }
 
-                    forwarded.Add(new OutgoingForwardedMessage(senderId, senderName, segments));
+                    forwarded.Add(new QqForwardedMessage(senderId, senderName, segments));
                 }
 
                 continue;
@@ -61,13 +62,13 @@ private async Task SendArticleForwardAsync(IncomingMessage message, BilibiliArti
 
             foreach (var chunk in SplitText(block.Text, 1200))
             {
-                forwarded.Add(new OutgoingForwardedMessage(senderId, senderName, [new TextOutgoingSegment(chunk)]));
+                forwarded.Add(new QqForwardedMessage(senderId, senderName, [new QqTextOutgoing(chunk)]));
             }
         }
 
         if (!string.IsNullOrWhiteSpace(result.SourceUrl))
         {
-            forwarded.Add(new OutgoingForwardedMessage(senderId, senderName, [new TextOutgoingSegment("原文：" + result.SourceUrl)]));
+            forwarded.Add(new QqForwardedMessage(senderId, senderName, [new QqTextOutgoing("原文：" + result.SourceUrl)]));
         }
 
         if (forwarded.Count == 0)
@@ -84,23 +85,11 @@ private async Task SendArticleForwardAsync(IncomingMessage message, BilibiliArti
             result.ImageUrls.Count > 0 ? $"图片 {result.ImageUrls.Count} 张" : "正文摘要",
         };
         var summary = $"完整正文 + {result.ImageUrls.Count} 张图";
-        var forward = new ForwardOutgoingSegment(forwarded, title, preview, summary, GetArticleKindText(result));
-
-        switch (message)
-        {
-            case GroupIncomingMessage group:
-                await context.Message.SendGroupMessageAsync(group.Group.GroupId, forward);
-                break;
-            case FriendIncomingMessage friend:
-                await context.Message.SendPrivateMessageAsync(friend.SenderId, forward);
-                break;
-            default:
-                await context.Message.ReplyAsync(message, forward);
-                break;
-        }
+        var forward = MessageHandlerCommon.BuildForwardSegment(forwarded, title, preview, summary, GetArticleKindText(result));
+        await context.Message.ReplyAsync(message, forward);
     }
 
-    private async Task SendArticleDocumentCardAsync(IncomingMessage message, BilibiliArticleParseResult result)
+    private async Task SendArticleDocumentCardAsync(MessageEvent message, BilibiliArticleParseResult result)
     {
         var cardUri = await BuildArticleDocumentCardUriAsync(result);
         if (string.IsNullOrWhiteSpace(cardUri))
@@ -108,19 +97,7 @@ private async Task SendArticleForwardAsync(IncomingMessage message, BilibiliArti
             return;
         }
 
-        var segment = new ImageOutgoingSegment(cardUri);
-        switch (message)
-        {
-            case GroupIncomingMessage group:
-                await context.Message.SendGroupMessageAsync(group.Group.GroupId, segment);
-                break;
-            case FriendIncomingMessage friend:
-                await context.Message.SendPrivateMessageAsync(friend.SenderId, segment);
-                break;
-            default:
-                await context.Message.ReplyAsync(message, segment);
-                break;
-        }
+        await context.Message.ReplyAsync(message, new ImageSegment(cardUri));
     }
 
     private async Task<string> BuildArticleDocumentCardUriAsync(BilibiliArticleParseResult result)

@@ -10,13 +10,23 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="ShiroBot.AvaloniaSdk" Version="0.6.0" />
         <PackageReference Include="ILRepack.Lib.MSBuild.Task" Version="2.0.45">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
         <PackageReference Include="Net.Codecrete.QrCodeGenerator" Version="3.0.0" />
-        <PackageReference Include="ShiroBot.SDK" Version="0.6.0-rc1" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\ShiroBot.SDK\ShiroBot.SDK.csproj">
+            <Private>false</Private>
+        </ProjectReference>
+        <ProjectReference Include="..\ShiroBot.AvaloniaSdk\ShiroBot.AvaloniaSdk.csproj">
+            <Private>false</Private>
+        </ProjectReference>
+        <ProjectReference Include="..\ShiroBot.Qq.Model\ShiroBot.Qq.Model.csproj">
+            <Private>false</Private>
+        </ProjectReference>
     </ItemGroup>
 
     <ItemGroup>
@@ -37,19 +47,8 @@
 
         <ItemGroup>
             <RepackInput Include="$(PublishedPluginFile)" />
-            <RepackDependency Include="$(PublishDir)*.dll"
-                              Exclude="$(PublishedPluginFile);
-                                        $(MergedPluginFile);
-                                        $(PublishDir)Avalonia*.dll;
-                                        $(PublishDir)HarfBuzzSharp.dll;
-                                        $(PublishDir)MicroCom.Runtime.dll;
-                                        $(PublishDir)SkiaSharp.dll;
-                                        $(PublishDir)ShiroBot.AvaloniaSdk.dll;
-                                        $(PublishDir)ShiroBot.SDK.dll;
-                                        $(PublishDir)ShiroBot.Model.dll;
-                                        $(PublishDir)System*.dll;
-                                       $(PublishDir)mscorlib.dll;
-                                       $(PublishDir)netstandard.dll" />
+            <RepackDependency Include="$(PublishDir)*.dll" />
+            <RepackDependency Remove="$(PublishedPluginFile);$(MergedPluginFile);$(PublishDir)Avalonia*.dll;$(PublishDir)HarfBuzzSharp.dll;$(PublishDir)MicroCom.Runtime.dll;$(PublishDir)SkiaSharp.dll;$(PublishDir)ShiroBot.AvaloniaSdk.dll;$(PublishDir)ShiroBot.SDK.dll;$(PublishDir)ShiroBot.Model.dll;$(PublishDir)System*.dll;$(PublishDir)mscorlib.dll;$(PublishDir)netstandard.dll" />
             <RepackInput Include="@(RepackDependency)" />
         </ItemGroup>
 

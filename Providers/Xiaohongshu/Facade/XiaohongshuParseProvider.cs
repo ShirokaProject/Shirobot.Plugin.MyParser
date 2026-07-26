@@ -1,7 +1,7 @@
 using Shirobot.Plugin.MyParser.Parsing;
 using Shirobot.Plugin.MyParser.Providers.Xiaohongshu.Models;
 using Shirobot.Plugin.MyParser.Providers.Xiaohongshu.Utilities;
-using ShiroBot.Model.Common;
+using ShiroBot.SDK.Models;
 
 namespace Shirobot.Plugin.MyParser.Providers.Xiaohongshu.Facade;
 
@@ -13,7 +13,7 @@ internal sealed class XiaohongshuParseProvider(XiaohongshuParser parser) : IInco
 
     public bool CanHandle(string text) => XiaohongshuParser.ContainsXiaohongshuUrl(text);
 
-    public string? ExtractParseText(IncomingMessage message)
+    public string? ExtractParseText(MessageEvent message)
     {
         return XiaohongshuLightAppUrlExtractor.ExtractParseText(message);
     }

@@ -1,8 +1,8 @@
 using System.Diagnostics;
 using System.Collections.Concurrent;
-using ShiroBot.Model.Common;
+using ShiroBot.Qq.Model;
 using ShiroBot.SDK.Abstractions;
-using ShiroBot.SDK.Core;
+using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Plugin;
 
 namespace Shirobot.Plugin.MyParser.Providers.Common.MessageHandling;
@@ -11,14 +11,14 @@ internal static class MessageHandlerCommon
 {
     private static readonly ConcurrentDictionary<string, byte> SentReactions = new(StringComparer.Ordinal);
 
-    public static async Task ReactAsync(IBotContext context, IncomingMessage message, string faceId, string platformName)
+    public static async Task ReactAsync(IBotContext context, MessageEvent message, string faceId, string platformName)
     {
-        if (message is not GroupIncomingMessage group)
+        if (message.IsDirect || !TryGetQqGroupReactionTarget(context, message, out var groupApi, out var groupId, out var messageSeq))
         {
             return;
         }
 
-        var key = $"{group.Group.GroupId}:{group.MessageSeq}:{faceId}";
+        var key = $"{groupId}:{messageSeq}:{faceId}";
         if (!SentReactions.TryAdd(key, 0))
         {
             return;
@@ -26,35 +26,34 @@ internal static class MessageHandlerCommon
 
         try
         {
-            await context.Group.SendGroupMessageReactionAsync(group.Group.GroupId, group.MessageSeq, faceId);
             if (!string.Equals(faceId, "351", StringComparison.OrdinalIgnoreCase))
             {
-                await RemoveReactionAsync(context, group, "351", platformName);
+                await RemoveReactionAsync(context, message, "351", platformName);
             }
+
+            await groupApi.SendMessageReactionAsync(groupId, messageSeq, faceId);
         }
         catch (Exception ex)
         {
             SentReactions.TryRemove(key, out _);
             if (IsAlreadyReactedError(ex))
             {
-                BotLog.Info($"MyParser {platformName} 消息表情已存在，跳过重复贴表情: group_id={group.Group.GroupId}, message_seq={group.MessageSeq}, face={faceId}");
+                BotLog.Info($"MyParser {platformName} 消息表情已存在，跳过重复贴表情: group_id={groupId}, message_seq={messageSeq}, face={faceId}");
                 return;
             }
 
-            BotLog.Warning($"MyParser {platformName} 消息贴表情失败: group_id={group.Group.GroupId}, message_seq={group.MessageSeq}, face={faceId}, error={ex.Message}");
+            BotLog.Warning($"MyParser {platformName} 消息贴表情失败: group_id={groupId}, message_seq={messageSeq}, face={faceId}, error={ex.Message}");
         }
     }
 
-    public static Task RemoveReactionAsync(IBotContext context, IncomingMessage message, string faceId, string platformName)
+    public static async Task RemoveReactionAsync(IBotContext context, MessageEvent message, string faceId, string platformName)
     {
-        return message is GroupIncomingMessage group
-            ? RemoveReactionAsync(context, group, faceId, platformName)
-            : Task.CompletedTask;
-    }
+        if (message.IsDirect || !TryGetQqGroupReactionTarget(context, message, out var groupApi, out var groupId, out var messageSeq))
+        {
+            return;
+        }
 
-    private static async Task RemoveReactionAsync(IBotContext context, GroupIncomingMessage group, string faceId, string platformName)
-    {
-        var key = $"{group.Group.GroupId}:{group.MessageSeq}:{faceId}";
+        var key = $"{groupId}:{messageSeq}:{faceId}";
         if (!SentReactions.ContainsKey(key))
         {
             return;
@@ -62,13 +61,35 @@ internal static class MessageHandlerCommon
 
         try
         {
-            await context.Group.SendGroupMessageReactionAsync(group.Group.GroupId, group.MessageSeq, faceId, isAdd: false);
+            await groupApi.SendMessageReactionAsync(groupId, messageSeq, faceId, isAdd: false);
             SentReactions.TryRemove(key, out _);
         }
         catch (Exception ex)
         {
-            BotLog.Warning($"MyParser {platformName} 消息取消表情失败: group_id={group.Group.GroupId}, message_seq={group.MessageSeq}, face={faceId}, error={ex.Message}");
+            BotLog.Warning($"MyParser {platformName} 消息取消表情失败: group_id={groupId}, message_seq={messageSeq}, face={faceId}, error={ex.Message}");
         }
+    }
+
+    private static bool TryGetQqGroupReactionTarget(
+        IBotContext context,
+        MessageEvent message,
+        out IQqGroupApi groupApi,
+        out long groupId,
+        out long messageSeq)
+    {
+        groupApi = null!;
+        groupId = 0;
+        messageSeq = 0;
+        var api = context.GetAdapterExtension<IQqGroupApi>();
+        if (api is null
+            || !long.TryParse(message.Channel.Id, out groupId)
+            || !long.TryParse(message.MessageId, out messageSeq))
+        {
+            return false;
+        }
+
+        groupApi = api;
+        return true;
     }
 
     public static void ClearReactionCache()
@@ -90,25 +111,14 @@ internal static class MessageHandlerCommon
         return false;
     }
 
-    public static Task<SendMessageResult> ReplyTextAsync(IBotContext context, PluginConfig config, IncomingMessage message, string text)
+    public static Task<SentMessage> ReplyTextAsync(IBotContext context, PluginConfig config, MessageEvent message, string text)
     {
         return config.QuoteReply ? context.Message.QuoteReplyAsync(message, text) : context.Message.ReplyAsync(message, text);
     }
 
-    public static async Task SendImageAsync(IBotContext context, IncomingMessage message, ImageOutgoingSegment segment)
+    public static async Task SendImageAsync(IBotContext context, MessageEvent message, ImageSegment segment)
     {
-        switch (message)
-        {
-            case GroupIncomingMessage group:
-                await context.Message.SendGroupMessageAsync(group.Group.GroupId, segment);
-                break;
-            case FriendIncomingMessage friend:
-                await context.Message.SendPrivateMessageAsync(friend.SenderId, segment);
-                break;
-            default:
-                await context.Message.ReplyAsync(message, segment);
-                break;
-        }
+        await context.Message.ReplyAsync(message, segment);
     }
 
     public static Task RunLoggedBackgroundAsync(string description, Func<Task> action)
@@ -134,7 +144,7 @@ internal static class MessageHandlerCommon
     public static async Task<string> UploadLocalVideoFileAsync(
         IBotContext context,
         PluginConfig config,
-        IncomingMessage message,
+        MessageEvent message,
         string? localVideoPath,
         string platformName,
         string mediaId)
@@ -153,23 +163,27 @@ internal static class MessageHandlerCommon
 
         BotLog.Info($"MyParser {platformName} 文件上传开始: media_id={mediaId}, mode={uploadMode}, file_mb={fileSize / 1024d / 1024d:F2}, file={localPath}");
 
-        switch (message)
+        var fileApi = context.GetAdapterExtension<IQqFileApi>();
+        if (fileApi is null || !long.TryParse(message.Channel.Id, out var peerId))
         {
-            case GroupIncomingMessage group:
-            {
-                var response = await context.File.UploadGroupFileAsync(group.Group.GroupId, fileUri, fileName);
-                EnsureFileUploadAccepted(response.FileId, "group", uploadMode);
-                return $"群文件 FileId={response.FileId} Mode={uploadMode} elapsed={stopwatch.Elapsed:mm\\:ss}";
-            }
-            case FriendIncomingMessage friend:
-            {
-                var response = await context.File.UploadPrivateFileAsync(friend.SenderId, fileUri, fileName);
-                EnsureFileUploadAccepted(response.FileId, "friend", uploadMode);
-                return $"私聊文件 FileId={response.FileId} Mode={uploadMode} elapsed={stopwatch.Elapsed:mm\\:ss}";
-            }
-            default:
-                throw new NotSupportedException("当前消息类型不支持文件上传。");
+            throw new NotSupportedException("当前平台/消息类型不支持文件上传。");
         }
+
+        if (message.IsDirect)
+        {
+            var fileId = await fileApi.UploadPrivateFileAsync(peerId, fileUri, fileName);
+            EnsureFileUploadAccepted(fileId, "friend", uploadMode);
+            return $"私聊文件 FileId={fileId} Mode={uploadMode} elapsed={stopwatch.Elapsed:mm\\:ss}";
+        }
+
+        if (message.Channel.Type == ChannelType.Group)
+        {
+            var fileId = await fileApi.UploadGroupFileAsync(peerId, fileUri, fileName);
+            EnsureFileUploadAccepted(fileId, "group", uploadMode);
+            return $"群文件 FileId={fileId} Mode={uploadMode} elapsed={stopwatch.Elapsed:mm\\:ss}";
+        }
+
+        throw new NotSupportedException("当前消息类型不支持文件上传。");
     }
 
     private static void EnsureFileUploadAccepted(string? fileId, string scene, string uploadMode)
@@ -180,11 +194,31 @@ internal static class MessageHandlerCommon
         }
     }
 
-    public static string GetMessageScene(IncomingMessage message) => message switch
+    /// <summary>把 QQ 合并转发内容包装为可经通用发送接口透传的 RawSegment。</summary>
+    public static RawSegment BuildForwardSegment(
+        IReadOnlyList<QqForwardedMessage> messages,
+        string? title,
+        IReadOnlyList<string>? preview,
+        string? summary,
+        string? prompt)
     {
-        GroupIncomingMessage => "group",
-        FriendIncomingMessage => "friend",
-        TempIncomingMessage => "temp",
+        return new RawSegment("qq", "forward", new QqForwardOutgoing(messages)
+        {
+            Title = title,
+            Preview = preview,
+            Summary = summary,
+            Prompt = prompt,
+        });
+    }
+
+    public static long GetBotOrSenderId(MessageEvent message) =>
+        long.TryParse(message.Sender.Id, out var senderId) ? senderId : 0;
+
+    public static string GetMessageScene(MessageEvent message) => message.Channel.Type switch
+    {
+        ChannelType.Group => "group",
+        ChannelType.Direct => "friend",
+        ChannelType.Other => "temp",
         _ => "unknown",
     };
 }

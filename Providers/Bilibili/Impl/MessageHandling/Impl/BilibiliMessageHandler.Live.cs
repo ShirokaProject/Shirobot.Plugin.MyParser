@@ -3,15 +3,17 @@ using System.Text;
 using Shirobot.Plugin.MyParser.Providers.Bilibili.Impl.Services;
 using Shirobot.Plugin.MyParser.Providers.Bilibili.Models;
 using Shirobot.Plugin.MyParser.Utility;
-using ShiroBot.Model.Common;
+using ShiroBot.Qq.Model;
 using ShiroBot.SDK.Abstractions;
+using ShiroBot.SDK.Models;
+using Shirobot.Plugin.MyParser.Providers.Common.MessageHandling;
 
 
 namespace Shirobot.Plugin.MyParser.Providers.Bilibili.Impl.MessageHandling.Impl;
 
 internal sealed partial class BilibiliMessageHandler
 {
-private async Task TrySendLiveReplayClipAsync(IncomingMessage message, BilibiliLiveParseResult result)
+private async Task TrySendLiveReplayClipAsync(MessageEvent message, BilibiliLiveParseResult result)
     {
         if (!config.SendBilibiliLiveReplayClip)
         {
@@ -29,7 +31,8 @@ private async Task TrySendLiveReplayClipAsync(IncomingMessage message, BilibiliL
             result.LocalClipFileUri = clip.FileUri;
             shouldCleanup = true;
             var videoUri = BuildLocalVideoSegmentUri(clip.LocalPath, result);
-            var segment = new VideoOutgoingSegment(videoUri, string.IsNullOrWhiteSpace(result.CoverUrl) ? null : result.CoverUrl);
+            // TODO: 新 SDK 的 VideoSegment 暂无缩略图字段，原封面 thumbUri 无法透传。
+            var segment = new VideoSegment(videoUri);
             await SendLiveClipVideoMessageAsync(message, result, segment, clip.Stream);
         }
         catch (Exception ex)
@@ -72,32 +75,14 @@ private async Task TrySendLiveReplayClipAsync(IncomingMessage message, BilibiliL
         return videoUri;
     }
 
-    private async Task SendLiveClipVideoMessageAsync(IncomingMessage message, BilibiliLiveParseResult result, VideoOutgoingSegment videoSegment, BilibiliLiveStream stream)
+    private async Task SendLiveClipVideoMessageAsync(MessageEvent message, BilibiliLiveParseResult result, VideoSegment videoSegment, BilibiliLiveStream stream)
     {
         var stopwatch = Stopwatch.StartNew();
-        BotLog.Info($"MyParser Bilibili 直播片段 VideoSegment 发送开始: room_id={result.RealRoomId}, scene={GetMessageScene(message)}, stream={stream.Protocol}/{stream.Format}/{stream.Codec}, qn={stream.CurrentQn}, uri_mode={MediaUriUtilities.GetUriMode(videoSegment.Uri)}, uri_preview={MediaUriUtilities.PreviewUri(videoSegment.Uri)}");
-        switch (message)
-        {
-            case GroupIncomingMessage group:
-            {
-                var response = await context.Message.SendGroupMessageAsync(group.Group.GroupId, videoSegment);
-                BotLog.Info($"MyParser Bilibili 直播片段 VideoSegment 发送接口完成: room_id={result.RealRoomId}, scene=group, group_id={group.Group.GroupId}, message_seq={response.MessageSeq}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                EnsureVideoSendAccepted(response.MessageSeq, "group");
-                break;
-            }
-            case FriendIncomingMessage friend:
-            {
-                var response = await context.Message.SendPrivateMessageAsync(friend.SenderId, videoSegment);
-                BotLog.Info($"MyParser Bilibili 直播片段 VideoSegment 发送接口完成: room_id={result.RealRoomId}, scene=friend, user_id={friend.SenderId}, message_seq={response.MessageSeq}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                EnsureVideoSendAccepted(response.MessageSeq, "friend");
-                break;
-            }
-            default:
-            {
-                await context.Message.ReplyAsync(message, videoSegment);
-                break;
-            }
-        }
+        var scene = GetMessageScene(message);
+        BotLog.Info($"MyParser Bilibili 直播片段 VideoSegment 发送开始: room_id={result.RealRoomId}, scene={scene}, stream={stream.Protocol}/{stream.Format}/{stream.Codec}, qn={stream.CurrentQn}, uri_mode={MediaUriUtilities.GetUriMode(videoSegment.Uri)}, uri_preview={MediaUriUtilities.PreviewUri(videoSegment.Uri)}");
+        var response = await context.Message.ReplyAsync(message, videoSegment);
+        BotLog.Info($"MyParser Bilibili 直播片段 VideoSegment 发送接口完成: room_id={result.RealRoomId}, scene={scene}, channel_id={message.Channel.Id}, message_id={response.MessageId}, elapsed={stopwatch.Elapsed:mm\\:ss}");
+        EnsureVideoSendAccepted(response.MessageId, scene);
     }
 
     private void CleanupLocalLiveClipAfterSend(BilibiliLiveParseResult result)
@@ -140,40 +125,40 @@ private async Task TrySendLiveReplayClipAsync(IncomingMessage message, BilibiliL
         }
     }
 
-    private async Task SendLiveForwardAsync(IncomingMessage message, BilibiliLiveParseResult result)
+    private async Task SendLiveForwardAsync(MessageEvent message, BilibiliLiveParseResult result)
     {
         var senderId = GetBotOrSenderId(message);
         var senderName = string.IsNullOrWhiteSpace(result.AnchorName) ? "Bilibili 直播" : result.AnchorName!;
-        var forwarded = new List<OutgoingForwardedMessage>();
-        var headerSegments = new List<OutgoingSegment>();
+        var forwarded = new List<QqForwardedMessage>();
+        var headerSegments = new List<QqOutgoingSegment>();
 
         if (!string.IsNullOrWhiteSpace(result.CoverUrl))
         {
             var cover = await BuildRemoteImageAsync(result.CoverUrl, result.SourceUrl, $"bilibili_live_cover_{result.RealRoomId}");
             if (!string.IsNullOrWhiteSpace(cover.Uri))
             {
-                headerSegments.Add(new ImageOutgoingSegment(cover.Uri));
+                headerSegments.Add(new QqImageOutgoing(cover.Uri));
             }
         }
 
-        headerSegments.Add(new TextOutgoingSegment(BuildLiveHeaderText(result)));
-        forwarded.Add(new OutgoingForwardedMessage(senderId, senderName, headerSegments));
+        headerSegments.Add(new QqTextOutgoing(BuildLiveHeaderText(result)));
+        forwarded.Add(new QqForwardedMessage(senderId, senderName, headerSegments));
 
         if (result.Streams.Count > 0)
         {
             foreach (var (stream, index) in result.Streams.Select((stream, index) => (stream, index + 1)))
             {
-                forwarded.Add(new OutgoingForwardedMessage(senderId, senderName,
+                forwarded.Add(new QqForwardedMessage(senderId, senderName,
                 [
-                    new TextOutgoingSegment(BuildLiveStreamText(stream, index))
+                    new QqTextOutgoing(BuildLiveStreamText(stream, index))
                 ]));
             }
         }
         else
         {
-            forwarded.Add(new OutgoingForwardedMessage(senderId, senderName,
+            forwarded.Add(new QqForwardedMessage(senderId, senderName,
             [
-                new TextOutgoingSegment("当前未返回可用直播流。")
+                new QqTextOutgoing("当前未返回可用直播流。")
             ]));
         }
 
@@ -185,20 +170,8 @@ private async Task TrySendLiveReplayClipAsync(IncomingMessage message, BilibiliL
             result.Streams.Count > 0 ? $"播放流 {result.Streams.Count} 条" : "无播放流",
         };
         var summary = $"{FormatLiveStatus(result.LiveStatus)} · {result.Streams.Count} 条播放流";
-        var forward = new ForwardOutgoingSegment(forwarded, title, preview, summary, "Bilibili 直播");
-
-        switch (message)
-        {
-            case GroupIncomingMessage group:
-                await context.Message.SendGroupMessageAsync(group.Group.GroupId, forward);
-                break;
-            case FriendIncomingMessage friend:
-                await context.Message.SendPrivateMessageAsync(friend.SenderId, forward);
-                break;
-            default:
-                await context.Message.ReplyAsync(message, forward);
-                break;
-        }
+        var forward = MessageHandlerCommon.BuildForwardSegment(forwarded, title, preview, summary, "Bilibili 直播");
+        await context.Message.ReplyAsync(message, forward);
     }
 
     private static string BuildLiveHeaderText(BilibiliLiveParseResult result)

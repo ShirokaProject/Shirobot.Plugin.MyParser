@@ -1,15 +1,16 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Shirobot.Plugin.MyParser.Providers.Xiaohongshu.Facade;
-using ShiroBot.Model.Common;
+using ShiroBot.Qq.Model;
 using ShiroBot.SDK.Abstractions;
+using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Plugin;
 
 namespace Shirobot.Plugin.MyParser.Providers.Xiaohongshu.Utilities;
 
 internal static partial class XiaohongshuLightAppUrlExtractor
 {
-    public static string? ExtractParseText(IncomingMessage message)
+    public static string? ExtractParseText(MessageEvent message)
     {
         var parts = new List<string>();
         parts.AddRange(GetTextSegments(message));
@@ -22,7 +23,7 @@ internal static partial class XiaohongshuLightAppUrlExtractor
         return parts.Count == 0 ? null : string.Join(' ', parts.Where(i => !string.IsNullOrWhiteSpace(i)));
     }
 
-    private static IEnumerable<string> ExtractXiaohongshuUrls(LightAppIncomingSegment app)
+    private static IEnumerable<string> ExtractXiaohongshuUrls(QqLightAppIncoming app)
     {
         if (string.IsNullOrWhiteSpace(app.JsonPayload))
         {
@@ -51,7 +52,7 @@ internal static partial class XiaohongshuLightAppUrlExtractor
         }
     }
 
-    private static void LogLightAppSummary(LightAppIncomingSegment app)
+    private static void LogLightAppSummary(QqLightAppIncoming app)
     {
         try
         {
@@ -208,21 +209,14 @@ internal static partial class XiaohongshuLightAppUrlExtractor
         return value.Length <= 180 ? value : value[..180] + "...";
     }
 
-    private static IEnumerable<string> GetTextSegments(IncomingMessage message) => message switch
-    {
-        FriendIncomingMessage friend => friend.Segments.OfType<TextIncomingSegment>().Select(i => i.Text),
-        GroupIncomingMessage group => group.Segments.OfType<TextIncomingSegment>().Select(i => i.Text),
-        TempIncomingMessage temp => temp.Segments.OfType<TextIncomingSegment>().Select(i => i.Text),
-        _ => [],
-    };
+    private static IEnumerable<string> GetTextSegments(MessageEvent message) =>
+        message.Segments.OfType<TextSegment>().Select(i => i.Text);
 
-    private static IEnumerable<LightAppIncomingSegment> GetLightAppSegments(IncomingMessage message) => message switch
-    {
-        FriendIncomingMessage friend => friend.Segments.OfType<LightAppIncomingSegment>(),
-        GroupIncomingMessage group => group.Segments.OfType<LightAppIncomingSegment>(),
-        TempIncomingMessage temp => temp.Segments.OfType<LightAppIncomingSegment>(),
-        _ => [],
-    };
+    private static IEnumerable<QqLightAppIncoming> GetLightAppSegments(MessageEvent message) =>
+        message.Segments
+            .OfType<RawSegment>()
+            .Select(segment => segment.Payload)
+            .OfType<QqLightAppIncoming>();
 
     [GeneratedRegex("https?://[^\\s\\\"'<>，。)）\\]}]+", RegexOptions.IgnoreCase)]
     private static partial Regex UrlRegex();

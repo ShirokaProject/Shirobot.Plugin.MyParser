@@ -1,4 +1,4 @@
-using ShiroBot.Model.Common;
+using ShiroBot.SDK.Models;
 
 namespace Shirobot.Plugin.MyParser.Parsing;
 
@@ -11,7 +11,7 @@ internal sealed class ParseProviderRegistry(IEnumerable<IParseProvider> provider
         return _providers.FirstOrDefault(provider => provider.CanHandle(text));
     }
 
-    public IParseProvider? FindProvider(IncomingMessage message, out string parseText)
+    public IParseProvider? FindProvider(MessageEvent message, out string parseText)
     {
         var plainText = GetPlainText(message);
         foreach (var provider in _providers)
@@ -72,15 +72,8 @@ internal sealed class ParseProviderRegistry(IEnumerable<IParseProvider> provider
                || message.Contains("不是动态", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string GetPlainText(IncomingMessage message)
+    private static string GetPlainText(MessageEvent message)
     {
-        var segments = message switch
-        {
-            FriendIncomingMessage friend => friend.Segments,
-            GroupIncomingMessage group => group.Segments,
-            TempIncomingMessage temp => temp.Segments,
-            _ => [],
-        };
-        return string.Concat(segments.OfType<TextIncomingSegment>().Select(i => i.Text));
+        return message.GetPlainText();
     }
 }

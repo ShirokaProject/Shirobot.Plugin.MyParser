@@ -11,9 +11,10 @@ using Shirobot.Plugin.MyParser.Providers.Xiaohongshu.Models;
 using Shirobot.Plugin.MyParser.Providers.Xiaohongshu.ViewModels;
 using Shirobot.Plugin.MyParser.Providers.Xiaohongshu.Views;
 using Shirobot.Plugin.MyParser.Utility;
-using ShiroBot.Model.Common;
+using ShiroBot.Qq.Model;
 using ShiroBot.SDK.Abstractions;
 using ShiroBot.SDK.Core;
+using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Plugin;
 
 namespace Shirobot.Plugin.MyParser.Providers.Xiaohongshu.Impl.MessageHandling;
@@ -36,7 +37,7 @@ internal sealed class XiaohongshuMessageHandler : IDisposable
         _provider = provider;
     }
 
-    public async Task ParseAndReplyAsync(IncomingMessage message, string text)
+    public async Task ParseAndReplyAsync(MessageEvent message, string text)
     {
         try
         {
@@ -90,7 +91,7 @@ internal sealed class XiaohongshuMessageHandler : IDisposable
         }
     }
 
-    public async Task HandleLoginAsync(IncomingMessage message)
+    public async Task HandleLoginAsync(MessageEvent message)
     {
         try
         {
@@ -136,7 +137,7 @@ internal sealed class XiaohongshuMessageHandler : IDisposable
         }
     }
 
-    private async Task SendVideoFlowAsync(IncomingMessage message, XiaohongshuParseResult result)
+    private async Task SendVideoFlowAsync(MessageEvent message, XiaohongshuParseResult result)
     {
         string? fileUploadInfo = null;
         try
@@ -187,7 +188,7 @@ internal sealed class XiaohongshuMessageHandler : IDisposable
         }
     }
 
-    private Task StartSendCoverOrCardAsync(IncomingMessage message, XiaohongshuParseResult result)
+    private Task StartSendCoverOrCardAsync(MessageEvent message, XiaohongshuParseResult result)
     {
         if (string.IsNullOrWhiteSpace(result.CoverUrl) && result.Images.Count == 0)
         {
@@ -197,7 +198,7 @@ internal sealed class XiaohongshuMessageHandler : IDisposable
         return MessageHandlerCommon.RunLoggedBackgroundAsync($"小红书封面卡片异步发送: note_id={result.NoteId}", () => SendCoverOrCardAsync(message, result));
     }
 
-    private async Task<VideoOutgoingSegment> BuildVideoSegmentAsync(XiaohongshuParseResult result)
+    private async Task<VideoSegment> BuildVideoSegmentAsync(XiaohongshuParseResult result)
     {
         var (fileUri, localPath) = await _provider.Parser.DownloadVideoAsync(result);
         result.LocalVideoFileUri = fileUri;
@@ -223,32 +224,19 @@ internal sealed class XiaohongshuMessageHandler : IDisposable
         }
 
         BotLog.Info($"MyParser 小红书 VideoSegment URI 模式：{uriMode}, file_mb={fileSize / 1024d / 1024d:F2}, uri_preview={MediaUriUtilities.PreviewUri(videoUri)}");
-        var thumbUri = !string.IsNullOrWhiteSpace(result.CoverUrl) ? result.CoverUrl : null;
-        return new VideoOutgoingSegment(videoUri, thumbUri);
+        // TODO: 新 SDK 的 VideoSegment 暂无缩略图字段，原 thumbUri(result.CoverUrl) 无法透传。
+        return new VideoSegment(videoUri);
     }
 
-    private async Task SendVideoMessageAsync(IncomingMessage message, XiaohongshuParseResult result, VideoOutgoingSegment videoSegment)
+    private async Task SendVideoMessageAsync(MessageEvent message, XiaohongshuParseResult result, VideoSegment videoSegment)
     {
-        var segments = new OutgoingSegment[] { videoSegment };
         var stopwatch = Stopwatch.StartNew();
         BotLog.Info($"MyParser 小红书 VideoSegment 发送开始: note_id={result.NoteId}, scene={GetMessageScene(message)}, uri_mode={MediaUriUtilities.GetUriMode(videoSegment.Uri)}");
-        switch (message)
-        {
-            case GroupIncomingMessage group:
-                await _context.Message.SendGroupMessageAsync(group.Group.GroupId, segments);
-                break;
-            case FriendIncomingMessage friend:
-                await _context.Message.SendPrivateMessageAsync(friend.SenderId, segments);
-                break;
-            default:
-                await _context.Message.ReplyAsync(message, segments);
-                break;
-        }
-
+        await _context.Message.ReplyAsync(message, videoSegment);
         BotLog.Info($"MyParser 小红书 VideoSegment 发送完成: note_id={result.NoteId}, elapsed={stopwatch.Elapsed:mm\\:ss}");
     }
 
-    private async Task SendCoverOrCardAsync(IncomingMessage message, XiaohongshuParseResult result)
+    private async Task SendCoverOrCardAsync(MessageEvent message, XiaohongshuParseResult result)
     {
         if (string.IsNullOrWhiteSpace(result.CoverUrl))
         {
@@ -258,16 +246,16 @@ internal sealed class XiaohongshuMessageHandler : IDisposable
         var image = await BuildRemoteImageAsync(result.CoverUrl, result.SourceUrl, $"xhs_cover_{result.NoteId}");
         if (!string.IsNullOrWhiteSpace(image.Uri))
         {
-            await SendImageAsync(message, new ImageOutgoingSegment(image.Uri));
+            await SendImageAsync(message, new ImageSegment(image.Uri));
         }
     }
 
-    private async Task SendGalleryForwardAsync(IncomingMessage message, XiaohongshuParseResult result)
+    private async Task SendGalleryForwardAsync(MessageEvent message, XiaohongshuParseResult result)
     {
-        var forwarded = new List<OutgoingForwardedMessage>();
+        var forwarded = new List<QqForwardedMessage>();
         var senderId = GetBotOrSenderId(message);
         var senderName = string.IsNullOrWhiteSpace(result.AuthorName) ? "小红书图文" : result.AuthorName!;
-        forwarded.Add(new OutgoingForwardedMessage(senderId, senderName, [new TextOutgoingSegment(BuildHeaderText(result))]));
+        forwarded.Add(new QqForwardedMessage(senderId, senderName, [new QqTextOutgoing(BuildHeaderText(result))]));
         var imageInputs = result.Images.Select((image, index) => (image, Index: index + 1)).ToArray();
         var imageFiles = await MessageFetchConcurrency.SelectParallelOrderedAsync(
             imageInputs,
@@ -277,44 +265,33 @@ internal sealed class XiaohongshuMessageHandler : IDisposable
         {
             if (!string.IsNullOrWhiteSpace(local.Uri))
             {
-                forwarded.Add(new OutgoingForwardedMessage(senderId, senderName, [new ImageOutgoingSegment(local.Uri)]));
+                forwarded.Add(new QqForwardedMessage(senderId, senderName, [new QqImageOutgoing(local.Uri)]));
             }
         }
 
         if (result.Comments.Count > 0)
         {
-            forwarded.Add(new OutgoingForwardedMessage(senderId, senderName, [new TextOutgoingSegment(BuildCommentsText(result))]));
+            forwarded.Add(new QqForwardedMessage(senderId, senderName, [new QqTextOutgoing(BuildCommentsText(result))]));
         }
 
         if (!string.IsNullOrWhiteSpace(result.SourceUrl))
         {
-            forwarded.Add(new OutgoingForwardedMessage(senderId, senderName, [new TextOutgoingSegment("原文：" + result.SourceUrl)]));
+            forwarded.Add(new QqForwardedMessage(senderId, senderName, [new QqTextOutgoing("原文：" + result.SourceUrl)]));
         }
 
         var title = string.IsNullOrWhiteSpace(result.Title) ? "小红书图文" : TrimLine(result.Title!, 48);
         var preview = new[] { "小红书图文", senderName, result.Comments.Count > 0 ? $"前 {result.Comments.Count} 条评论" : $"图片 {result.Images.Count} 张" };
         var summary = $"{result.Images.Count} 张图 · {result.Comments.Count} 条评论";
-        var forward = new ForwardOutgoingSegment(forwarded, title, preview, summary, "小红书图文");
-        switch (message)
-        {
-            case GroupIncomingMessage group:
-                await _context.Message.SendGroupMessageAsync(group.Group.GroupId, forward);
-                break;
-            case FriendIncomingMessage friend:
-                await _context.Message.SendPrivateMessageAsync(friend.SenderId, forward);
-                break;
-            default:
-                await _context.Message.ReplyAsync(message, forward);
-                break;
-        }
+        var forward = MessageHandlerCommon.BuildForwardSegment(forwarded, title, preview, summary, "小红书图文");
+        await _context.Message.ReplyAsync(message, forward);
     }
 
-    private async Task SendGalleryCardAsync(IncomingMessage message, XiaohongshuParseResult result)
+    private async Task SendGalleryCardAsync(MessageEvent message, XiaohongshuParseResult result)
     {
         var cardUri = await BuildGalleryCardUriAsync(result);
         if (!string.IsNullOrWhiteSpace(cardUri))
         {
-            await SendImageAsync(message, new ImageOutgoingSegment(cardUri));
+            await SendImageAsync(message, new ImageSegment(cardUri));
         }
     }
 
@@ -390,10 +367,10 @@ internal sealed class XiaohongshuMessageHandler : IDisposable
             });
     }
 
-    private async Task SendQrImageAsync(IncomingMessage message, string text, string fileName)
+    private async Task SendQrImageAsync(MessageEvent message, string text, string fileName)
     {
         var qrFile = await BuildQrImageAsync(text, fileName);
-        await SendImageAsync(message, new ImageOutgoingSegment(qrFile.Uri));
+        await SendImageAsync(message, new ImageSegment(qrFile.Uri));
     }
 
     private static async Task<(string Uri, string Path)> BuildQrImageAsync(string text, string fileName)
@@ -407,17 +384,17 @@ internal sealed class XiaohongshuMessageHandler : IDisposable
         return ("base64://" + Convert.ToBase64String(png), path);
     }
 
-    private Task SendImageAsync(IncomingMessage message, ImageOutgoingSegment segment)
+    private Task SendImageAsync(MessageEvent message, ImageSegment segment)
     {
         return MessageHandlerCommon.SendImageAsync(_context, message, segment);
     }
 
-    private Task<string> UploadVideoFileAsync(IncomingMessage message, XiaohongshuParseResult result)
+    private Task<string> UploadVideoFileAsync(MessageEvent message, XiaohongshuParseResult result)
     {
         return MessageHandlerCommon.UploadLocalVideoFileAsync(_context, _config, message, result.LocalVideoPath, "小红书", result.NoteId);
     }
 
-    private Task TryReactToSourceMessageAsync(IncomingMessage message, string faceId)
+    private Task TryReactToSourceMessageAsync(MessageEvent message, string faceId)
     {
         return MessageHandlerCommon.ReactAsync(_context, message, faceId, "小红书");
     }
@@ -433,7 +410,7 @@ internal sealed class XiaohongshuMessageHandler : IDisposable
         return MessageHandlerCommon.ResolveCookiePath(_context, fileName);
     }
 
-    private Task ReplyAsync(IncomingMessage message, string text)
+    private Task ReplyAsync(MessageEvent message, string text)
     {
         return MessageHandlerCommon.ReplyTextAsync(_context, _config, message, text);
     }
@@ -481,15 +458,9 @@ internal sealed class XiaohongshuMessageHandler : IDisposable
         return sb.ToString().TrimEnd();
     }
 
-    private static long GetBotOrSenderId(IncomingMessage message) => message switch
-    {
-        GroupIncomingMessage group => group.SenderId,
-        FriendIncomingMessage friend => friend.SenderId,
-        TempIncomingMessage temp => temp.SenderId,
-        _ => 0,
-    };
+    private static long GetBotOrSenderId(MessageEvent message) => MessageHandlerCommon.GetBotOrSenderId(message);
 
-    private static string GetMessageScene(IncomingMessage message) => MessageHandlerCommon.GetMessageScene(message);
+    private static string GetMessageScene(MessageEvent message) => MessageHandlerCommon.GetMessageScene(message);
 
     private string ResolveDownloadDirectory()
     {

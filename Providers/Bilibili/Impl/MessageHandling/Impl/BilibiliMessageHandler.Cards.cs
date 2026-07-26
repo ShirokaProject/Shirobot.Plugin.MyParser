@@ -6,41 +6,24 @@ using Shirobot.Plugin.MyParser.Providers.Bilibili.Models;
 using Shirobot.Plugin.MyParser.Providers.Bilibili.ViewModels;
 using Shirobot.Plugin.MyParser.Providers.Bilibili.Views;
 using Shirobot.Plugin.MyParser.Utility;
-using ShiroBot.Model.Common;
 using ShiroBot.SDK.Abstractions;
+using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Plugin;
 
 namespace Shirobot.Plugin.MyParser.Providers.Bilibili.Impl.MessageHandling.Impl;
 
 internal sealed partial class BilibiliMessageHandler
 {
-private async Task SendCoverMessageAsync(IncomingMessage message, BilibiliParseResult result)
+private async Task SendCoverMessageAsync(MessageEvent message, BilibiliParseResult result)
     {
         var coverUri = await BuildCoverCardUriAsync(result);
-        var segment = new ImageOutgoingSegment(coverUri);
+        var segment = new ImageSegment(coverUri);
         var stopwatch = Stopwatch.StartNew();
-        BotLog.Info($"MyParser Bilibili 封面卡片 ImageSegment 发送开始: bvid={result.Bvid}, scene={GetMessageScene(message)}, uri_preview={MediaUriUtilities.PreviewUri(coverUri)}");
+        var scene = GetMessageScene(message);
+        BotLog.Info($"MyParser Bilibili 封面卡片 ImageSegment 发送开始: bvid={result.Bvid}, scene={scene}, uri_preview={MediaUriUtilities.PreviewUri(coverUri)}");
 
-        switch (message)
-        {
-            case GroupIncomingMessage group:
-            {
-                var response = await context.Message.SendGroupMessageAsync(group.Group.GroupId, segment);
-                BotLog.Info($"MyParser Bilibili 封面卡片 ImageSegment 发送接口完成: bvid={result.Bvid}, scene=group, group_id={group.Group.GroupId}, message_seq={response.MessageSeq}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                break;
-            }
-            case FriendIncomingMessage friend:
-            {
-                var response = await context.Message.SendPrivateMessageAsync(friend.SenderId, segment);
-                BotLog.Info($"MyParser Bilibili 封面卡片 ImageSegment 发送接口完成: bvid={result.Bvid}, scene=friend, user_id={friend.SenderId}, message_seq={response.MessageSeq}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                break;
-            }
-            default:
-            {
-                await context.Message.ReplyAsync(message, segment);
-                break;
-            }
-        }
+        var response = await context.Message.ReplyAsync(message, segment);
+        BotLog.Info($"MyParser Bilibili 封面卡片 ImageSegment 发送接口完成: bvid={result.Bvid}, scene={scene}, channel_id={message.Channel.Id}, message_id={response.MessageId}, elapsed={stopwatch.Elapsed:mm\\:ss}");
     }
 
     private async Task<string> BuildCoverCardUriAsync(BilibiliParseResult result)

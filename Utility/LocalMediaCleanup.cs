@@ -4,6 +4,8 @@ namespace Shirobot.Plugin.MyParser.Utility;
 
 internal static class LocalMediaCleanup
 {
+    public const int HttpVideoSendGraceSeconds = 300;
+
     public static void CleanupStartupResidues(PluginConfig config)
     {
         try
@@ -20,14 +22,14 @@ internal static class LocalMediaCleanup
         }
     }
 
-    public static void DeleteLocalVideoIfConfigured(PluginConfig config, string? localPath, string provider)
+    public static void DeleteLocalVideoIfConfigured(PluginConfig config, string? localPath, string provider, int minimumDelaySeconds = 0)
     {
         if (!config.DeleteLocalVideoAfterSend || string.IsNullOrWhiteSpace(localPath))
         {
             return;
         }
 
-        var delaySeconds = Math.Max(0, config.DeleteLocalVideoDelaySeconds);
+        var delaySeconds = Math.Max(Math.Max(0, config.DeleteLocalVideoDelaySeconds), minimumDelaySeconds);
         if (delaySeconds <= 0 && MyParserRuntime.IsCachedVideoPath(localPath))
         {
             // Give concurrent duplicate requests time to reuse/send the same cached file.

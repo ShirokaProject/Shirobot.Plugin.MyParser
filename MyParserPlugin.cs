@@ -10,9 +10,9 @@ using Shirobot.Plugin.MyParser.Parsing;
 using Shirobot.Plugin.MyParser.Providers.Common.MessageHandling;
 using Shirobot.Plugin.MyParser.Providers.Bilibili.Utilities;
 using Shirobot.Plugin.MyParser.Utility;
-using ShiroBot.Model.Common;
 using ShiroBot.SDK.Abstractions;
 using ShiroBot.SDK.Core;
+using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Plugin;
 
 namespace Shirobot.Plugin.MyParser;
@@ -100,23 +100,23 @@ public sealed class MyParserPlugin : PluginBase
         //     await Context.Message.ReplyAsync(message, $"dycard",new ImageOutgoingSegment($"base64://{Convert.ToBase64String(pic)}"));
         // });
         //
-        FriendCommands.MapExact("#parser", HandleHelpAsync);
+        DirectCommands.MapExact("#parser", HandleHelpAsync);
         GroupCommands.MapExact("#parser", HandleHelpAsync);
-        FriendCommands.MapExact(BilibiliLoginCommand, HandleBilibiliLoginAsync);
+        DirectCommands.MapExact(BilibiliLoginCommand, HandleBilibiliLoginAsync);
         GroupCommands.MapExact(BilibiliLoginCommand, HandleBilibiliLoginAsync);
-        FriendCommands.MapExact(XiaohongshuLoginCommand, HandleXiaohongshuLoginAsync);
+        DirectCommands.MapExact(XiaohongshuLoginCommand, HandleXiaohongshuLoginAsync);
         GroupCommands.MapExact(XiaohongshuLoginCommand, HandleXiaohongshuLoginAsync);
-        FriendCommands.MapExact(DouyinCookieCheckCommand, HandleDouyinCookieCheckAsync);
+        DirectCommands.MapExact(DouyinCookieCheckCommand, HandleDouyinCookieCheckAsync);
         GroupCommands.MapExact(DouyinCookieCheckCommand, HandleDouyinCookieCheckAsync);
-        FriendCommands.MapExact(BilibiliCookieCheckCommand, HandleBilibiliCookieCheckAsync);
+        DirectCommands.MapExact(BilibiliCookieCheckCommand, HandleBilibiliCookieCheckAsync);
         GroupCommands.MapExact(BilibiliCookieCheckCommand, HandleBilibiliCookieCheckAsync);
-        FriendCommands.MapExact(XiaohongshuCookieCheckCommand, HandleXiaohongshuCookieCheckAsync);
+        DirectCommands.MapExact(XiaohongshuCookieCheckCommand, HandleXiaohongshuCookieCheckAsync);
         GroupCommands.MapExact(XiaohongshuCookieCheckCommand, HandleXiaohongshuCookieCheckAsync);
 
-        FriendCommands.MapWhen(IsParseCommand, HandleParseCommandAsync);
+        DirectCommands.MapWhen(IsParseCommand, HandleParseCommandAsync);
         GroupCommands.MapWhen(IsParseCommand, HandleParseCommandAsync);
 
-        FriendCommands.MapWhen(ShouldAutoParse, HandleAutoParseAsync);
+        DirectCommands.MapWhen(ShouldAutoParse, HandleAutoParseAsync);
         GroupCommands.MapWhen(ShouldAutoParse, HandleAutoParseAsync);
 
         StartHotReloadWatchers();
@@ -461,7 +461,7 @@ public sealed class MyParserPlugin : PluginBase
         return Task.CompletedTask;
     }
 
-    private Task HandleHelpAsync(IncomingMessage message)
+    private Task HandleHelpAsync(MessageEvent message)
     {
         var help = "MyParser\n"
                    + "当前支持：抖音视频 / 图集 / LivePhoto、Bilibili 视频/专栏/图文、小红书视频/图文/评论卡片\n\n"
@@ -477,14 +477,14 @@ public sealed class MyParserPlugin : PluginBase
         return Context.Message.ReplyAsync(message, help);
     }
 
-    private bool IsParseCommand(IncomingMessage message)
+    private bool IsParseCommand(MessageEvent message)
     {
         var text = GetPlainText(message).TrimStart();
         return !string.IsNullOrWhiteSpace(_config.ParseCommandPrefix)
                && text.StartsWith(_config.ParseCommandPrefix, StringComparison.OrdinalIgnoreCase);
     }
 
-    private bool ShouldAutoParse(IncomingMessage message)
+    private bool ShouldAutoParse(MessageEvent message)
     {
         if (TryBuildBilibiliPageLinkFromReply(message, out _))
         {
@@ -527,7 +527,7 @@ public sealed class MyParserPlugin : PluginBase
         };
     }
 
-    private Task HandleAutoParseAsync(IncomingMessage message)
+    private Task HandleAutoParseAsync(MessageEvent message)
     {
         if (TryBuildBilibiliPageLinkFromReply(message, out var pageLink))
         {
@@ -553,7 +553,7 @@ public sealed class MyParserPlugin : PluginBase
         return providerId.StartsWith("bilibili", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string? GetStrictAutoParseText(IncomingMessage message)
+    private static string? GetStrictAutoParseText(MessageEvent message)
     {
         var text = GetPlainText(message);
         var strict = BilibiliUrlParser.ExtractStrictBilibiliUrl(text);
@@ -573,7 +573,7 @@ public sealed class MyParserPlugin : PluginBase
             : null;
     }
 
-    private Task HandleParseCommandAsync(IncomingMessage message)
+    private Task HandleParseCommandAsync(MessageEvent message)
     {
         var text = GetPlainText(message);
         var content = text.Length <= _config.ParseCommandPrefix.Length
@@ -583,7 +583,7 @@ public sealed class MyParserPlugin : PluginBase
         return DispatchParseAsync(message, string.IsNullOrWhiteSpace(content) ? text : content);
     }
 
-    private async Task HandleBilibiliLoginAsync(IncomingMessage message)
+    private async Task HandleBilibiliLoginAsync(MessageEvent message)
     {
         if (!await EnsurePrivateAdminCommandAsync(message, BilibiliLoginCommand))
         {
@@ -596,7 +596,7 @@ public sealed class MyParserPlugin : PluginBase
         }
     }
 
-    private async Task HandleXiaohongshuLoginAsync(IncomingMessage message)
+    private async Task HandleXiaohongshuLoginAsync(MessageEvent message)
     {
         if (!await EnsurePrivateAdminCommandAsync(message, XiaohongshuLoginCommand))
         {
@@ -609,7 +609,7 @@ public sealed class MyParserPlugin : PluginBase
         }
     }
 
-    private async Task HandleDouyinCookieCheckAsync(IncomingMessage message)
+    private async Task HandleDouyinCookieCheckAsync(MessageEvent message)
     {
         if (!await EnsurePrivateAdminCommandAsync(message, DouyinCookieCheckCommand))
         {
@@ -634,7 +634,7 @@ public sealed class MyParserPlugin : PluginBase
         }
     }
 
-    private async Task HandleBilibiliCookieCheckAsync(IncomingMessage message)
+    private async Task HandleBilibiliCookieCheckAsync(MessageEvent message)
     {
         if (!await EnsurePrivateAdminCommandAsync(message, BilibiliCookieCheckCommand))
         {
@@ -662,7 +662,7 @@ public sealed class MyParserPlugin : PluginBase
         }
     }
 
-    private async Task HandleXiaohongshuCookieCheckAsync(IncomingMessage message)
+    private async Task HandleXiaohongshuCookieCheckAsync(MessageEvent message)
     {
         if (!await EnsurePrivateAdminCommandAsync(message, XiaohongshuCookieCheckCommand))
         {
@@ -690,19 +690,19 @@ public sealed class MyParserPlugin : PluginBase
         }
     }
 
-    private async Task<bool> EnsurePrivateAdminCommandAsync(IncomingMessage message, string command)
+    private async Task<bool> EnsurePrivateAdminCommandAsync(MessageEvent message, string command)
     {
-        switch (message)
+        switch (message.Channel.Type)
         {
-            case FriendIncomingMessage friend when Context.IsAdmin(friend.SenderId):
+            case ChannelType.Direct when Context.IsAdmin(message.Sender.Id):
                 return true;
-            case FriendIncomingMessage:
+            case ChannelType.Direct:
                 await Context.Message.ReplyAsync(message, $"{command} 仅允许机器人 Owner/Admin 私信使用。");
                 return false;
-            case GroupIncomingMessage:
+            case ChannelType.Group:
                 await Context.Message.ReplyAsync(message, $"{command} 涉及账号登录凭据，仅允许机器人 Owner/Admin 私信机器人使用，请不要在群内触发。");
                 return false;
-            case TempIncomingMessage:
+            case ChannelType.Other:
                 await Context.Message.ReplyAsync(message, $"{command} 仅允许机器人 Owner/Admin 私信使用，不支持临时会话。");
                 return false;
             default:
@@ -711,7 +711,7 @@ public sealed class MyParserPlugin : PluginBase
         }
     }
 
-    private static bool TryBuildBilibiliPageLinkFromReply(IncomingMessage message, out string pageLink)
+    private static bool TryBuildBilibiliPageLinkFromReply(MessageEvent message, out string pageLink)
     {
         pageLink = string.Empty;
         var text = GetPlainText(message).Trim();
@@ -720,18 +720,16 @@ public sealed class MyParserPlugin : PluginBase
             return false;
         }
 
-        var reply = message switch
-        {
-            GroupIncomingMessage group => group.GetReply(),
-            FriendIncomingMessage friend => friend.GetReply(),
-            _ => null,
-        };
+        // 新 SDK 的 QuoteSegment 不携带被回复消息内容；QQ 平台从 Raw 原始消息里的
+        // QqReplyIncoming 拿被回复消息的文本段（保持旧 GetReply() 的同步语义）。
+        var reply = (message.Raw as ShiroBot.Qq.Model.QqIncomingMessage)?
+            .Segments.OfType<ShiroBot.Qq.Model.QqReplyIncoming>().FirstOrDefault();
         if (reply is null)
         {
             return false;
         }
 
-        var repliedText = string.Concat(reply.Segments.OfType<TextIncomingSegment>().Select(i => i.Text)).Trim();
+        var repliedText = string.Concat(reply.Segments.OfType<ShiroBot.Qq.Model.QqTextIncoming>().Select(i => i.Text)).Trim();
         if (!IsBilibiliPageTemplateLink(repliedText))
         {
             return false;
@@ -761,7 +759,7 @@ public sealed class MyParserPlugin : PluginBase
                || text.StartsWith("Xiaohongshu", StringComparison.OrdinalIgnoreCase);
     }
 
-    private Task DispatchParseAsync(IncomingMessage message, string text, bool silentProviderMismatch = false)
+    private Task DispatchParseAsync(MessageEvent message, string text, bool silentProviderMismatch = false)
     {
         text = BilibiliUrlParser.NormalizeStandaloneBilibiliId(text) ?? text;
         if (IsBilibiliPageTemplateLink(text))
@@ -782,12 +780,6 @@ public sealed class MyParserPlugin : PluginBase
         };
     }
 
-    private static string GetPlainText(IncomingMessage message) => message switch
-    {
-        FriendIncomingMessage friend => friend.GetPlainText(),
-        GroupIncomingMessage group => group.GetPlainText(),
-        TempIncomingMessage temp => string.Concat(temp.Segments.OfType<TextIncomingSegment>().Select(i => i.Text)),
-        _ => string.Empty,
-    };
+    private static string GetPlainText(MessageEvent message) => message.GetPlainText();
 }
 

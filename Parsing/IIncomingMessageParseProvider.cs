@@ -1,8 +1,8 @@
-using ShiroBot.Model.Common;
+using ShiroBot.SDK.Models;
 
 namespace Shirobot.Plugin.MyParser.Parsing;
 
 internal interface IIncomingMessageParseProvider : IParseProvider
 {
-    string? ExtractParseText(IncomingMessage message);
+    string? ExtractParseText(MessageEvent message);
 }
