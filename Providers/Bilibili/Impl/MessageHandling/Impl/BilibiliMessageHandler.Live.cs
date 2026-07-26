@@ -31,8 +31,7 @@ private async Task TrySendLiveReplayClipAsync(MessageEvent message, BilibiliLive
             result.LocalClipFileUri = clip.FileUri;
             shouldCleanup = true;
             var videoUri = BuildLocalVideoSegmentUri(clip.LocalPath, result);
-            // TODO: 新 SDK 的 VideoSegment 暂无缩略图字段，原封面 thumbUri 无法透传。
-            var segment = new VideoSegment(videoUri);
+            var segment = new VideoSegment(videoUri) { ThumbnailUri = result.CoverUrl };
             await SendLiveClipVideoMessageAsync(message, result, segment, clip.Stream);
         }
         catch (Exception ex)

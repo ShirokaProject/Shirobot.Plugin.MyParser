@@ -224,8 +224,7 @@ internal sealed class XiaohongshuMessageHandler : IDisposable
         }
 
         BotLog.Info($"MyParser 小红书 VideoSegment URI 模式：{uriMode}, file_mb={fileSize / 1024d / 1024d:F2}, uri_preview={MediaUriUtilities.PreviewUri(videoUri)}");
-        // TODO: 新 SDK 的 VideoSegment 暂无缩略图字段，原 thumbUri(result.CoverUrl) 无法透传。
-        return new VideoSegment(videoUri);
+        return new VideoSegment(videoUri) { ThumbnailUri = result.CoverUrl };
     }
 
     private async Task SendVideoMessageAsync(MessageEvent message, XiaohongshuParseResult result, VideoSegment videoSegment)
