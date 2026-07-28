@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using Net.Codecrete.QrCodeGenerator;
-using ShiroBot.Model.Common;
+using ShiroBot.SDK.Models;
 using Shirobot.Plugin.MyParser.Parsing;
 using MyParser.Provider.BiliBili.Infrastructure;
 using MyParser.Provider.BiliBili.Services;
@@ -26,12 +26,13 @@ internal sealed partial class BilibiliMessageHandler(
     private readonly Lock _subscriptionLock = new();
     private readonly List<IReplySubscription> _replySubscriptions = [];
     
-    public override async Task ParseAndReplyAsync(IncomingMessage message, string text, bool silentProviderMismatch = false)
+    public override async Task ParseAndReplyAsync(IncomingMessage message, string text, bool silentProviderMismatch = false, CancellationToken cancellationToken = default)
     {
         try
         {
             await TryReactToSourceMessageAsync(message, "351");
-            var media = await providerRegistry.ParseAsync(text);
+            var media = await providerRegistry.ParseAsync(text, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             if (media.ProviderPayload is BilibiliArticleParseResult article)
             {
                 await SendArticleForwardAsync(message, article);
@@ -75,6 +76,7 @@ internal sealed partial class BilibiliMessageHandler(
             }
 
             LogBilibiliQualityInfo(result);
+            await SendCommentsMessagesAsync(message, result);
             if (!config.SendVideoSegment || !result.IsVideo)
             {
                 await ReplyAsync(message, FormatBilibiliResult(result, videoDownloadAttempted: false));
@@ -89,7 +91,7 @@ internal sealed partial class BilibiliMessageHandler(
 
             try
             {
-                _ = StartSendCoverMessageAsync(message, result);
+                _ = StartSendCoverMessageAsync(message, result, cancellationToken);
                 var videoSegment = await BuildVideoSegmentAsync(result);
                 await SendVideoMessageAsync(message, result, videoSegment);
                 videoSent = true;
@@ -104,6 +106,10 @@ internal sealed partial class BilibiliMessageHandler(
                 CleanupLocalVideoAfterSend(result);
                 await TryReactToSourceMessageAsync(message, "426");
                 return;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception ex)
             {
@@ -120,6 +126,10 @@ internal sealed partial class BilibiliMessageHandler(
                         await TryReactToSourceMessageAsync(message, "426");
                         return;
                     }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        throw;
+                    }
                     catch (Exception uploadEx)
                     {
                         fileUploadInfo = uploadEx.Message;
@@ -130,6 +140,10 @@ internal sealed partial class BilibiliMessageHandler(
 
             await ReplyAsync(message, FormatBilibiliResult(result, true, videoSent, videoSendError, fileUploaded, fileUploadInfo));
             await TryReactToSourceMessageAsync(message, "9");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (BilibiliLoginRequiredException ex)
         {
@@ -305,14 +319,18 @@ internal sealed partial class BilibiliMessageHandler(
         return request;
     }
 
-    private Task StartSendCoverMessageAsync(IncomingMessage message, BilibiliParseResult result)
+    private Task StartSendCoverMessageAsync(IncomingMessage message, BilibiliParseResult result, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(result.CoverUrl))
         {
             return Task.CompletedTask;
         }
 
-        return _hostServices.RunLoggedBackgroundAsync($"Bilibili 封面卡片异步发送: bvid={result.Bvid}", () => SendCoverMessageAsync(message, result));
+        return _hostServices.RunLoggedBackgroundAsync($"Bilibili 封面卡片异步发送: bvid={result.Bvid}", async () =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await SendCoverMessageAsync(message, result);
+        });
     }
 
     private async Task SendVideoMessageAsync(IncomingMessage message, BilibiliParseResult result, VideoOutgoingSegment videoSegment)
@@ -320,35 +338,17 @@ internal sealed partial class BilibiliMessageHandler(
         var segments = new OutgoingSegment[] { videoSegment };
         var stopwatch = Stopwatch.StartNew();
         BotLog.Info($"MyParser Bilibili VideoSegment 发送开始: bvid={result.Bvid}, scene={GetMessageScene(message)}, uri_mode={_hostServices.GetUriMode(videoSegment.Uri)}, uri_preview={_hostServices.PreviewUri(videoSegment.Uri)}");
-        switch (message)
-        {
-            case GroupIncomingMessage group:
-            {
-                var response = await context.Message.SendGroupMessageAsync(group.Group.GroupId, segments);
-                BotLog.Info($"MyParser Bilibili VideoSegment 发送接口完成: bvid={result.Bvid}, scene=group, group_id={group.Group.GroupId}, message_seq={response.MessageSeq}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                EnsureVideoSendAccepted(response.MessageSeq, "group");
-                break;
-            }
-            case FriendIncomingMessage friend:
-            {
-                var response = await context.Message.SendPrivateMessageAsync(friend.SenderId, segments);
-                BotLog.Info($"MyParser Bilibili VideoSegment 发送接口完成: bvid={result.Bvid}, scene=friend, user_id={friend.SenderId}, message_seq={response.MessageSeq}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                EnsureVideoSendAccepted(response.MessageSeq, "friend");
-                break;
-            }
-            default:
-            {
-                await context.Message.ReplyAsync(message, segments);
-                break;
-            }
-        }
+        var response = await context.Message.ReplyAsync(message, segments);
+        var scene = GetMessageScene(message);
+        BotLog.Info($"MyParser Bilibili VideoSegment 发送接口完成: bvid={result.Bvid}, scene={scene}, message_id={response.MessageId}, elapsed={stopwatch.Elapsed:mm\\:ss}");
+        EnsureVideoSendAccepted(response.MessageId, scene);
     }
 
-    private void EnsureVideoSendAccepted(long messageSeq, string scene)
+    private void EnsureVideoSendAccepted(string messageId, string scene)
     {
-        if (messageSeq <= 0)
+        if (string.IsNullOrWhiteSpace(messageId))
         {
-            BotLog.Warning($"MyParser Bilibili VideoSegment 发送返回 message_seq={messageSeq}，当前 ShiroBot/适配器可能不返回有效消息序号；不再按失败处理。scene={scene}");
+            BotLog.Warning($"MyParser Bilibili VideoSegment 发送返回空 message_id，当前 ShiroBot/适配器可能不返回有效消息 ID；不再按失败处理。scene={scene}");
         }
     }
 
@@ -367,18 +367,7 @@ internal sealed partial class BilibiliMessageHandler(
     {
         var qrFile = await BuildQrImageAsync(text, fileName);
         var segment = new ImageOutgoingSegment(qrFile.Uri);
-        switch (message)
-        {
-            case GroupIncomingMessage group:
-                await context.Message.SendGroupMessageAsync(group.Group.GroupId, segment);
-                break;
-            case FriendIncomingMessage friend:
-                await context.Message.SendPrivateMessageAsync(friend.SenderId, segment);
-                break;
-            default:
-                await context.Message.ReplyAsync(message, segment);
-                break;
-        }
+        await context.Message.ReplyAsync(message, segment);
     }
 
     private static async Task<(string Uri, string Path)> BuildQrImageAsync(string text, string fileName)
@@ -413,18 +402,12 @@ internal sealed partial class BilibiliMessageHandler(
         return text.Trim().Trim('"', '\'', '“', '”', '‘', '’', '「', '」', '『', '』').Trim();
     }
 
-    private void SubscribeBilibiliPageReply(BilibiliMultiPageParseResult result, long promptMessageSeq)
+    private void SubscribeBilibiliPageReply(BilibiliMultiPageParseResult result, string promptMessageId)
     {
         IReplySubscription? subscription;
-        subscription = context.Message.SubscribeReply(promptMessageSeq, TimeSpan.FromMinutes(10), async reply =>
+        subscription = context.Message.SubscribeReply(promptMessageId, TimeSpan.FromMinutes(10), async reply =>
         {
-            var text = reply switch
-            {
-                GroupIncomingMessage group => group.GetPlainText(),
-                FriendIncomingMessage friend => friend.GetPlainText(),
-                TempIncomingMessage temp => string.Concat(temp.Segments.OfType<TextIncomingSegment>().Select(i => i.Text)),
-                _ => string.Empty,
-            };
+            var text = reply.GetPlainText();
 
             if (!int.TryParse(NormalizePageReplyText(text), out var page) || page <= 0)
             {

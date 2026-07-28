@@ -4,7 +4,7 @@ using System.Text;
 using ShiroBot.AvaloniaSdk;
 using MyParser.Provider.BiliBili.Models;
 using MyParser.Provider.BiliBili.Views;
-using ShiroBot.Model.Common;
+using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Abstractions;
 using ShiroBot.SDK.Plugin;
 
@@ -83,18 +83,7 @@ private async Task SendArticleForwardAsync(IncomingMessage message, BilibiliArti
         var summary = $"完整正文 + {result.ImageUrls.Count} 张图";
         var forward = new ForwardOutgoingSegment(forwarded, title, preview, summary, GetArticleKindText(result));
 
-        switch (message)
-        {
-            case GroupIncomingMessage group:
-                await context.Message.SendGroupMessageAsync(group.Group.GroupId, forward);
-                break;
-            case FriendIncomingMessage friend:
-                await context.Message.SendPrivateMessageAsync(friend.SenderId, forward);
-                break;
-            default:
-                await context.Message.ReplyAsync(message, forward);
-                break;
-        }
+        await context.Message.ReplyAsync(message, forward);
     }
 
     private async Task SendArticleDocumentCardAsync(IncomingMessage message, BilibiliArticleParseResult result)
@@ -106,18 +95,7 @@ private async Task SendArticleForwardAsync(IncomingMessage message, BilibiliArti
         }
 
         var segment = new ImageOutgoingSegment(cardUri);
-        switch (message)
-        {
-            case GroupIncomingMessage group:
-                await context.Message.SendGroupMessageAsync(group.Group.GroupId, segment);
-                break;
-            case FriendIncomingMessage friend:
-                await context.Message.SendPrivateMessageAsync(friend.SenderId, segment);
-                break;
-            default:
-                await context.Message.ReplyAsync(message, segment);
-                break;
-        }
+        await context.Message.ReplyAsync(message, segment);
     }
 
     private async Task<string> BuildArticleDocumentCardUriAsync(BilibiliArticleParseResult result)
