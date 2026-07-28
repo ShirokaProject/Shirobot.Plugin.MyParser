@@ -5,7 +5,7 @@ using MyParser.Provider.Douyin.Infrastructure;
 using MyParser.Provider.Douyin.Models;
 using MyParser.Provider.Douyin.Views;
 using ShiroBot.AvaloniaSdk;
-using ShiroBot.Model.Common;
+using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Abstractions;
 using ShiroBot.SDK.Core;
 using ShiroBot.SDK.Plugin;
@@ -18,7 +18,36 @@ internal sealed partial class DouyinMessageHandler
 {
 private Task<string> UploadVideoFileAsync(IncomingMessage message, DouyinParseResult result)
     {
+        BotLog.Info($"MyParser 准备上传视频文件: aweme_id={result.AwemeId}, physical_path={DescribePhysicalPath(result.LocalVideoPath)}");
         return _hostServices.UploadLocalVideoFileAsync(_config, message, result.LocalVideoPath, "抖音", result.AwemeId);
+    }
+
+    private static string DescribePhysicalPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return "<none>";
+        }
+
+        try
+        {
+            var fullPath = Path.GetFullPath(path);
+            return $"{fullPath} (exists={File.Exists(fullPath)})";
+        }
+        catch
+        {
+            return path;
+        }
+    }
+
+    private static string? BuildLocalFileUri(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        {
+            return null;
+        }
+
+        return new Uri(Path.GetFullPath(path)).AbsoluteUri;
     }
 
     private string FormatDouyinResult(
@@ -82,13 +111,7 @@ private Task<string> UploadVideoFileAsync(IncomingMessage message, DouyinParseRe
         return sb.ToString().TrimEnd();
     }
 
-    private static string GetPlainText(IncomingMessage message) => message switch
-    {
-        FriendIncomingMessage friend => friend.GetPlainText(),
-        GroupIncomingMessage group => group.GetPlainText(),
-        TempIncomingMessage temp => string.Concat(temp.Segments.OfType<TextIncomingSegment>().Select(i => i.Text)),
-        _ => string.Empty,
-    };
+    private static string GetPlainText(IncomingMessage message) => message.GetPlainText();
 
     private static string TrimLine(string value, int maxLength) => ProviderTextUtilities.TrimLine(value, maxLength);
 }

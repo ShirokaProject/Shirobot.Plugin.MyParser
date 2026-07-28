@@ -14,12 +14,16 @@ using static MyParser.Provider.Douyin.Utilities.DouyinUrlParser;
 
 namespace MyParser.Provider.Douyin.Services;
 
-public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWorkParser> workParsers)
+public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWorkParser> workParsers, PluginConfig config)
 {
+    private readonly DouyinMsTokenProvider _msTokenProvider = new(http);
+    private readonly DouyinGuestSession _guestSession = new(MyParserRuntime.DouyinCookie);
     public async Task<DouyinParseResult> ParseAsync(string text, CancellationToken cancellationToken = default)
     {
+        var entryStopwatch = System.Diagnostics.Stopwatch.StartNew();
         var inputUrl = ExtractDouyinUrl(text) ?? throw new DouyinParseException("未检测到抖音链接。请发送 v.douyin.com 或 douyin.com 链接。");
         var resolvedUrl = await ResolveUrlAsync(inputUrl, cancellationToken);
+        BotLog.Info($"MyParser 抖音入口短链展开完成: endpoint={SafeEndpoint(resolvedUrl)}, elapsed_ms={entryStopwatch.ElapsedMilliseconds}");
         if (IsLiveUrl(resolvedUrl))
         {
             return DouyinParseResult.IgnoredLive(resolvedUrl);
@@ -27,11 +31,97 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
 
         var awemeId = ExtractAwemeId(resolvedUrl) ?? throw new DouyinParseException("未能从链接中提取作品 ID。可能不是公开视频/图集链接。");
 
-        using var detail = await FetchAwemeDetailAsync(awemeId, resolvedUrl, cancellationToken);
-        var result = ParseAwemeDetail(detail, awemeId, resolvedUrl);
-        result = await TryApplyUserProfileAsync(result, cancellationToken);
-        result = await TryApplyPublishCoverAsync(result, cancellationToken);
-        return await TryApplySearchCoverAsync(result, cancellationToken);
+        JsonDocument detail;
+        var phases = new List<string>();
+        try
+        {
+            detail = await FetchSharePageDataAsync(awemeId, resolvedUrl, cancellationToken);
+            phases.Add("share=ok");
+        }
+        catch (DouyinParseException ex)
+        {
+            phases.Add("share=" + ex.Message);
+            await _guestSession.EnsureRegisteredAsync(http, cancellationToken);
+            try
+            {
+                detail = await FetchSharePageDataAsync(awemeId, resolvedUrl, cancellationToken);
+                phases.Add("guest-share=ok");
+            }
+            catch (DouyinParseException guestEx)
+            {
+                phases.Add("guest-share=" + guestEx.Message);
+                detail = await FetchAwemeDetailAsync(awemeId, resolvedUrl, phases, cancellationToken);
+            }
+        }
+        using (detail)
+        {
+            BotLog.Info($"MyParser 抖音入口详情获取完成: aweme_id={awemeId}, phases={string.Join(",", phases)}, elapsed_ms={entryStopwatch.ElapsedMilliseconds}");
+            var result = ParseAwemeDetail(detail, awemeId, resolvedUrl);
+            result = await TryApplyUserProfileAsync(result, cancellationToken);
+            result = await TryApplyPublishCoverAsync(result, cancellationToken);
+            result = await TryApplySearchCoverAsync(result, cancellationToken);
+            return await TryApplyCommentsAsync(result, cancellationToken);
+        }
+    }
+
+    private static DouyinParseResult MergeGalleryMediaDetail(
+        DouyinParseResult original,
+        DouyinParseResult enriched,
+        string source)
+    {
+        var images = enriched.Images.Count > 0 ? enriched.Images : original.Images;
+        var livePhotoCount = images.Count(image => !string.IsNullOrWhiteSpace(image.LivePhotoUrl));
+        BotLog.Info($"MyParser 抖音图文媒体详情补全: aweme_id={original.AwemeId}, source={source}, live_photos={livePhotoCount}, music={!string.IsNullOrWhiteSpace(enriched.MusicUrl)}");
+        return original with
+        {
+            Images = images,
+            MusicUrl = enriched.MusicUrl ?? original.MusicUrl,
+            MusicTitle = enriched.MusicTitle ?? original.MusicTitle,
+            MusicAuthor = enriched.MusicAuthor ?? original.MusicAuthor,
+            DurationMilliseconds = enriched.DurationMilliseconds > 0
+                ? enriched.DurationMilliseconds
+                : original.DurationMilliseconds,
+        };
+    }
+
+    private async Task<DouyinParseResult> TryApplyCommentsAsync(
+        DouyinParseResult result,
+        CancellationToken cancellationToken)
+    {
+        var requestedCount = Math.Clamp(config.DouyinCommentCount, 0, 50);
+        var hasCookie = !string.IsNullOrWhiteSpace(MyParserRuntime.DouyinCookie);
+        BotLog.Info($"MyParser 抖音评论解析检查: aweme_id={result.AwemeId}, enabled={config.DouyinFetchComments}, requested={requestedCount}, cookie_present={hasCookie}");
+        if (!config.DouyinFetchComments)
+        {
+            BotLog.Info($"MyParser 抖音评论解析跳过: aweme_id={result.AwemeId}, reason=disabled");
+            return result;
+        }
+
+        if (requestedCount == 0)
+        {
+            BotLog.Info($"MyParser 抖音评论解析跳过: aweme_id={result.AwemeId}, reason=count_zero");
+            return result;
+        }
+
+        if (!hasCookie)
+        {
+            BotLog.Info($"MyParser 抖音评论解析跳过: aweme_id={result.AwemeId}, reason=missing_cookie");
+            return result;
+        }
+
+        try
+        {
+            var commentService = new DouyinCommentService(http, _guestSession, _msTokenProvider);
+            var comments = await commentService.FetchAsync(result, requestedCount, cancellationToken);
+            BotLog.Info($"MyParser 抖音评论解析完成: aweme_id={result.AwemeId}, requested={requestedCount}, parsed={comments.Count}, with_images={comments.Count(comment => comment.ImageUrls.Count > 0)}, total_images={comments.Sum(comment => comment.ImageUrls.Count)}");
+            return result with { Comments = comments };
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested
+                                   && ex is HttpRequestException or IOException or JsonException or DouyinParseException or TaskCanceledException)
+        {
+            BotLog.Warning($"MyParser 抖音评论获取失败，继续发送作品: aweme_id={result.AwemeId}, error={ex.Message}");
+            return result;
+        }
     }
 
     private static bool IsLiveUrl(string url)
@@ -51,64 +141,71 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
 
     private async Task<string> ResolveUrlAsync(string url, CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        ApplyDefaultHeaders(request, DouyinConstants.HomeUrl);
-
-        using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-        if ((int)response.StatusCode is >= 300 and < 400 && response.Headers.Location is not null)
+        var nextUrl = url;
+        HttpResponseMessage? response = null;
+        for (var hop = 0; hop < 10; hop++)
         {
-            return MakeAbsolute(response.Headers.Location, new Uri(url)).ToString();
+            response?.Dispose();
+            using var request = new HttpRequestMessage(HttpMethod.Get, nextUrl);
+            ApplyDefaultHeaders(request, DouyinConstants.HomeUrl);
+            AddGuestCookies(request);
+            response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            _guestSession.Capture(response);
+            if ((int)response.StatusCode is < 300 or >= 400 || response.Headers.Location is null) break;
+            nextUrl = MakeAbsolute(response.Headers.Location, new Uri(nextUrl)).ToString();
+            if (ExtractAwemeId(nextUrl) is not null)
+            {
+                return nextUrl;
+            }
         }
-
-        var finalUrl = response.RequestMessage?.RequestUri?.ToString() ?? url;
+        using (response)
+        {
+        var finalUrl = response?.RequestMessage?.RequestUri?.ToString() ?? nextUrl;
         if (ExtractAwemeId(finalUrl) is not null)
         {
             return finalUrl;
         }
 
-        var html = await response.Content.ReadAsStringAsync(cancellationToken);
+        var html = await response!.Content.ReadAsStringAsync(cancellationToken);
+        _guestSession.CaptureHtml(html);
         var id = ExtractAwemeId(html);
         return id is null ? finalUrl : $"https://www.douyin.com/video/{id}";
     }
+    }
 
-    private async Task<JsonDocument> FetchAwemeDetailAsync(string awemeId, string originalUrl, CancellationToken cancellationToken)
+    private async Task<JsonDocument> FetchAwemeDetailAsync(string awemeId, string originalUrl, List<string> phases, CancellationToken cancellationToken)
     {
         var referer = originalUrl.Contains("/note/", StringComparison.OrdinalIgnoreCase)
             ? $"https://www.douyin.com/note/{awemeId}"
             : $"https://www.douyin.com/video/{awemeId}";
 
-        var uifid = TryGetCookieValue("UIFID") ?? TryGetCookieValue("UIFID_TEMP");
-        var msToken = TryGetCookieValue("msToken");
+        var ttwid = _guestSession.Get("ttwid") ?? TryGetCookieValue("ttwid");
+        var msToken = TryGetCookieValue("msToken")
+                      ?? await _msTokenProvider.GetAsync(ttwid, cancellationToken);
+        _guestSession.Set("msToken", msToken);
         var verifyFp = TryGetCookieValue("s_v_web_id") ?? TryGetCookieValue("verifyFp") ?? TryGetCookieValue("fp");
-        if (string.IsNullOrWhiteSpace(uifid))
+        if (string.IsNullOrWhiteSpace(msToken))
         {
-            BotLog.Warning("MyParser 抖音 Cookie 缺少 UIFID/UIFID_TEMP，无法生成 x-secsdk-web-signature，详情接口会被判定为 anonymous 强制登录。请从已打开抖音页面的浏览器 Cookie 中复制完整 DouyinCookie。");
-        }
-        else if (string.IsNullOrWhiteSpace(msToken) || string.IsNullOrWhiteSpace(verifyFp))
-        {
-            BotLog.Warning($"MyParser 抖音游客 Cookie 安全态不完整: has_uifid=True, has_msToken={!string.IsNullOrWhiteSpace(msToken)}, has_verifyFp={!string.IsNullOrWhiteSpace(verifyFp)}。可能触发 CUSTOM_强登_模型，请从 Network 请求 Cookie 中复制包含 msToken 和 s_v_web_id/verifyFp 的完整值。");
+            BotLog.Warning($"MyParser 抖音动态 msToken 不可用，使用随机回退: has_ttwid={!string.IsNullOrWhiteSpace(ttwid)}, has_verifyFp={!string.IsNullOrWhiteSpace(verifyFp)}");
         }
 
         var query = BuildHjDetailQuery(
             awemeId,
             msToken,
-            await GetWebIdAsync(referer, cancellationToken),
-            uifid,
-            verifyFp);
+            await GetWebIdAsync(referer, cancellationToken) ?? _guestSession.Get("user_unique_id") ?? _guestSession.Get("webid") ?? GenerateNumericWebId(),
+            verifyFp ?? _guestSession.Get("s_v_web_id") ?? _guestSession.Get("verifyFp"));
         var unsignedUrl = "https://www.douyin.com/aweme/v1/web/aweme/detail/?" + query;
-        var aBogus = ABogusSigner.Generate(query, DouyinConstants.UserAgent);
-        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var signedUrl = unsignedUrl + "&a_bogus=" + Uri.EscapeDataString(aBogus) + "&timestamp=" + timestamp;
-        signedUrl = WebSecSdkSigner.SignUrl(signedUrl, uifid);
+        var aBogus = ABogusSigner.Sign(query, DouyinConstants.UserAgent);
+        var signedUrl = unsignedUrl + "&a_bogus=" + Uri.EscapeDataString(aBogus);
         var hjSignedUrl = signedUrl.Replace("https://www.douyin.com/", "https://www-hj.douyin.com/", StringComparison.OrdinalIgnoreCase);
 
-        var doc = await TryGetAwemeDetailJsonAsync(signedUrl, referer, awemeId, "detail-video", cancellationToken, uifid);
+        var doc = await TryGetAwemeDetailJsonAsync(signedUrl, referer, awemeId, "detail-video", cancellationToken);
         if (doc is not null)
         {
             return doc;
         }
 
-        doc = await TryGetAwemeDetailJsonAsync(hjSignedUrl, referer, awemeId, "detail-video-hj", cancellationToken, uifid);
+        doc = await TryGetAwemeDetailJsonAsync(hjSignedUrl, referer, awemeId, "detail-video-hj", cancellationToken);
         if (doc is not null)
         {
             return doc;
@@ -117,13 +214,13 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
         if (!referer.Contains("/note/", StringComparison.OrdinalIgnoreCase))
         {
             var noteReferer = $"https://www.douyin.com/note/{awemeId}";
-            doc = await TryGetAwemeDetailJsonAsync(signedUrl, noteReferer, awemeId, "detail-note", cancellationToken, uifid);
+            doc = await TryGetAwemeDetailJsonAsync(signedUrl, noteReferer, awemeId, "detail-note", cancellationToken);
             if (doc is not null)
             {
                 return doc;
             }
 
-            doc = await TryGetAwemeDetailJsonAsync(hjSignedUrl, noteReferer, awemeId, "detail-note-hj", cancellationToken, uifid);
+            doc = await TryGetAwemeDetailJsonAsync(hjSignedUrl, noteReferer, awemeId, "detail-note-hj", cancellationToken);
             if (doc is not null)
             {
                 return doc;
@@ -132,7 +229,7 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
 
         try
         {
-            var ssrDoc = await FetchSharePageDataAsync(awemeId, cancellationToken);
+            var ssrDoc = await FetchSharePageDataAsync(awemeId, originalUrl, cancellationToken);
             if (TryGetAwemeDetail(ssrDoc.RootElement, out _))
             {
                 return ssrDoc;
@@ -145,19 +242,14 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
             BotLog.Warning($"MyParser 抖音分享页备用解析失败: aweme_id={awemeId}, error={ex.Message}");
         }
 
-        if (string.IsNullOrWhiteSpace(uifid))
-        {
-            throw new DouyinParseException("DouyinCookie 缺少 UIFID 或 UIFID_TEMP，无法生成 x-secsdk-web-signature，抖音详情接口返回强制登录。请在浏览器打开抖音页面后复制完整 Cookie（至少包含 UIFID/UIFID_TEMP、msToken、s_v_web_id）再重试。");
-        }
-
-        throw new DouyinParseException("抖音详情接口和分享页均未返回作品数据。请检查 Cookie 是否有效，或稍后重试。");
+        throw new DouyinParseException("抖音游客解析失败：" + string.Join("; ", phases) + "; detail=未返回作品数据。请稍后重试或配置有效 DouyinCookie。");
     }
 
-    private async Task<JsonDocument?> TryGetAwemeDetailJsonAsync(string signedUrl, string referer, string awemeId, string source, CancellationToken cancellationToken, string? uifid)
+    private async Task<JsonDocument?> TryGetAwemeDetailJsonAsync(string signedUrl, string referer, string awemeId, string source, CancellationToken cancellationToken)
     {
         try
         {
-            var doc = await GetJsonAsync(signedUrl, referer, cancellationToken, uifid);
+            var doc = await GetJsonAsync(signedUrl, referer, cancellationToken);
             if (TryGetAwemeDetail(doc.RootElement, out _))
             {
                 return doc;
@@ -174,32 +266,86 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
         return null;
     }
 
-    private async Task<JsonDocument> FetchSharePageDataAsync(string awemeId, CancellationToken cancellationToken)
+    private async Task<JsonDocument> FetchSharePageDataAsync(string awemeId, string originalUrl, CancellationToken cancellationToken)
     {
-        var (_, doc) = await FetchSharePageHtmlAndDataAsync(awemeId, cancellationToken);
+        var (_, doc) = await FetchSharePageHtmlAndDataAsync(awemeId, originalUrl, cancellationToken);
         return doc;
     }
 
-    private async Task<(string Html, JsonDocument Doc)> FetchSharePageHtmlAndDataAsync(string awemeId, CancellationToken cancellationToken)
+    private async Task<(string Html, JsonDocument Doc)> FetchSharePageHtmlAndDataAsync(string awemeId, string originalUrl, CancellationToken cancellationToken)
     {
-        var shareUrl = $"https://www.iesdouyin.com/share/video/{awemeId}/";
-        using var request = new HttpRequestMessage(HttpMethod.Get, shareUrl);
-        ApplySharePageHeaders(request);
-
-        using var response = await http.SendAsync(request, cancellationToken);
-        var html = await response.Content.ReadAsStringAsync(cancellationToken);
-        if (!response.IsSuccessStatusCode)
+        var videoShareUrl = $"https://www.iesdouyin.com/share/video/{awemeId}/";
+        var noteShareUrl = $"https://www.iesdouyin.com/share/note/{awemeId}/";
+        var urls = (originalUrl.Contains("/note/", StringComparison.OrdinalIgnoreCase)
+                ? new[] { noteShareUrl, videoShareUrl, originalUrl }
+                : new[] { videoShareUrl, noteShareUrl, originalUrl })
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+        foreach (var shareUrl in urls)
         {
-            throw new DouyinParseException($"抖音分享页请求失败：HTTP {(int)response.StatusCode}");
-        }
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            using var request = new HttpRequestMessage(HttpMethod.Get, shareUrl);
+            ApplySharePageHeaders(request);
+            AddGuestCookies(request);
+            using var response = await http.SendAsync(request, cancellationToken);
+            _guestSession.Capture(response);
+            var html = await response.Content.ReadAsStringAsync(cancellationToken);
+            _guestSession.CaptureHtml(html);
+            if (response.IsSuccessStatusCode && TryExtractShareAweme(html, awemeId, out var doc))
+            {
+                BotLog.Info($"MyParser 抖音分享页命中: aweme_id={awemeId}, endpoint={SafeEndpoint(shareUrl)}, elapsed_ms={stopwatch.ElapsedMilliseconds}");
+                return (html, doc);
+            }
 
-        var match = Regex.Match(html, @"window\._ROUTER_DATA\s*=\s*(.*?)</script>", RegexOptions.Singleline);
-        if (!match.Success)
+            BotLog.Info($"MyParser 抖音分享页未命中: aweme_id={awemeId}, endpoint={SafeEndpoint(shareUrl)}, http={(int)response.StatusCode}, elapsed_ms={stopwatch.ElapsedMilliseconds}");
+        }
+        throw new DouyinParseException("分享页未命中作品数据");
+    }
+
+    private static bool TryFindAwemeDetail(JsonElement value, out JsonElement aweme)
+    {
+        if (value.ValueKind == JsonValueKind.Object)
         {
-            throw new DouyinParseException("抖音分享页未找到 ROUTER_DATA。 ");
+            foreach (var property in value.EnumerateObject())
+            {
+                if ((string.Equals(property.Name, "aweme_detail", StringComparison.OrdinalIgnoreCase) || string.Equals(property.Name, "awemeDetail", StringComparison.OrdinalIgnoreCase)) && property.Value.ValueKind == JsonValueKind.Object)
+                {
+                    aweme = property.Value;
+                    return true;
+                }
+                if (TryFindAwemeDetail(property.Value, out aweme)) return true;
+            }
         }
+        else if (value.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in value.EnumerateArray()) if (TryFindAwemeDetail(item, out aweme)) return true;
+        }
+        else if (value.ValueKind == JsonValueKind.String)
+        {
+            var text = value.GetString();
+            if (!string.IsNullOrWhiteSpace(text) && text.TrimStart().StartsWith('{'))
+            {
+                try { using var nested = JsonDocument.Parse(text); if (TryFindAwemeDetail(nested.RootElement, out var nestedAweme)) { aweme = nestedAweme.Clone(); return true; } } catch (JsonException) { }
+            }
+        }
+        aweme = default;
+        return false;
+    }
 
-        return (html, JsonDocument.Parse(match.Groups[1].Value.Trim()));
+    private static bool TryExtractJsonValue(string source, int start, out string json)
+    {
+        while (start < source.Length && char.IsWhiteSpace(source[start])) start++;
+        if (start >= source.Length || (source[start] != '{' && source[start] != '[')) { json = string.Empty; return false; }
+        var depth = 0; var quoted = false; var escaped = false;
+        for (var i = start; i < source.Length; i++)
+        {
+            var ch = source[i];
+            if (quoted) { if (escaped) escaped = false; else if (ch == '\\') escaped = true; else if (ch == '"') quoted = false; continue; }
+            if (ch == '"') quoted = true;
+            else if (ch is '{' or '[') depth++;
+            else if (ch is '}' or ']') { if (--depth == 0) { json = source[start..(i + 1)]; return true; } }
+        }
+        json = string.Empty;
+        return false;
     }
 
     private async Task<DouyinParseResult> TryApplyUserProfileAsync(DouyinParseResult result, CancellationToken cancellationToken)
@@ -213,7 +359,7 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
         {
             var query = BuildUserProfileQuery(result.AuthorId);
             var unsignedUrl = "https://www.douyin.com/aweme/v1/web/user/profile/other/?" + query;
-            var aBogus = ABogusSigner.Generate(query, DouyinConstants.UserAgent);
+            var aBogus = ABogusSigner.Sign(query, DouyinConstants.UserAgent);
             var signedUrl = unsignedUrl + "&a_bogus=" + Uri.EscapeDataString(aBogus);
             using var doc = await GetJsonAsync(signedUrl, "https://www.douyin.com/user/" + Uri.EscapeDataString(result.AuthorId), cancellationToken);
             var root = doc.RootElement;
@@ -250,27 +396,47 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
 
         try
         {
-            var publishCover = await TryFetchPublishCoverUrlAsync(result.AuthorId, result.AwemeId, cancellationToken);
-            if (string.IsNullOrWhiteSpace(publishCover))
+            var publishAweme = await TryFetchPublishAwemeAsync(result.AuthorId, result.AwemeId, cancellationToken);
+            if (publishAweme is null)
             {
                 BotLog.Info($"MyParser 抖音发布列表封面未命中: aweme_id={result.AwemeId}, sec_uid={result.AuthorId}");
                 return result;
             }
 
-            if (string.Equals(publishCover, result.CoverUrl, StringComparison.Ordinal))
+            var mergedResult = result;
+            var publishParser = workParsers.FirstOrDefault(candidate => candidate.CanParse(publishAweme.Value));
+            if (publishParser is not null)
             {
-                BotLog.Info($"MyParser 抖音发布列表封面已是当前封面: aweme_id={result.AwemeId}, url={publishCover}");
-                return result;
+                var publishResult = publishParser.Parse(
+                    publishAweme.Value,
+                    result.AwemeId,
+                    result.SourceUrl ?? $"https://www.douyin.com/note/{result.AwemeId}");
+                if (result.IsGallery)
+                {
+                    mergedResult = MergeGalleryMediaDetail(result, publishResult, "publish-list");
+                }
             }
 
-            if (!string.IsNullOrWhiteSpace(result.CoverUrl))
+            var publishCover = ExtractPublishCoverUrl(publishAweme.Value);
+            if (string.IsNullOrWhiteSpace(publishCover))
             {
-                BotLog.Info($"MyParser 抖音发布列表封面命中但保留详情封面: aweme_id={result.AwemeId}, keep={result.CoverUrl}, publish={publishCover}");
-                return result with { CoverSource = "detail" };
+                return mergedResult;
+            }
+
+            if (string.Equals(publishCover, mergedResult.CoverUrl, StringComparison.Ordinal))
+            {
+                BotLog.Info($"MyParser 抖音发布列表封面已是当前封面: aweme_id={result.AwemeId}, url={publishCover}");
+                return mergedResult;
+            }
+
+            if (!string.IsNullOrWhiteSpace(mergedResult.CoverUrl))
+            {
+                BotLog.Info($"MyParser 抖音发布列表封面命中但保留详情封面: aweme_id={result.AwemeId}, keep={mergedResult.CoverUrl}, publish={publishCover}");
+                return mergedResult with { CoverSource = "detail" };
             }
 
             BotLog.Info($"MyParser 抖音详情封面为空，使用发布列表封面: aweme_id={result.AwemeId}, new={publishCover}");
-            return result with { CoverUrl = publishCover, CoverSource = "publish" };
+            return mergedResult with { CoverUrl = publishCover, CoverSource = "publish" };
         }
         catch (Exception ex) when (ex is HttpRequestException or IOException or JsonException or DouyinParseException or TaskCanceledException)
         {
@@ -399,7 +565,7 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
 
         var query = BuildSearchItemQuery(keyword);
         var unsignedUrl = "https://www.douyin.com/aweme/v1/web/search/item/?" + query;
-        var aBogus = ABogusSigner.Generate(query, DouyinConstants.UserAgent);
+        var aBogus = ABogusSigner.Sign(query, DouyinConstants.UserAgent);
         var signedUrl = unsignedUrl + "&a_bogus=" + Uri.EscapeDataString(aBogus);
 
         using var doc = await GetJsonAsync(signedUrl, "https://www.douyin.com/search/" + Uri.EscapeDataString(keyword) + "?type=video", cancellationToken);
@@ -436,14 +602,14 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
         return null;
     }
 
-    private async Task<string?> TryFetchPublishCoverUrlAsync(string secUserId, string awemeId, CancellationToken cancellationToken)
+    private async Task<JsonElement?> TryFetchPublishAwemeAsync(string secUserId, string awemeId, CancellationToken cancellationToken)
     {
         long maxCursor = 0;
         for (var page = 1; page <= 3; page++)
         {
             var query = BuildUserPostQuery(secUserId, awemeId, maxCursor);
             var unsignedUrl = "https://www.douyin.com/aweme/v1/web/aweme/post/?" + query;
-            var aBogus = ABogusSigner.Generate(query, DouyinConstants.UserAgent);
+            var aBogus = ABogusSigner.Sign(query, DouyinConstants.UserAgent);
             var signedUrl = unsignedUrl + "&a_bogus=" + Uri.EscapeDataString(aBogus);
             var referer = $"https://www.douyin.com/user/{Uri.EscapeDataString(secUserId)}?vid={Uri.EscapeDataString(awemeId)}";
 
@@ -467,8 +633,8 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
                     }
 
                     var publishCover = ExtractPublishCoverUrl(item);
-                    BotLog.Info($"MyParser 抖音发布列表封面命中: aweme_id={awemeId}, page={page}, cover={publishCover ?? string.Empty}");
-                    return publishCover;
+                    BotLog.Info($"MyParser 抖音发布列表作品命中: aweme_id={awemeId}, page={page}, cover={publishCover ?? string.Empty}");
+                    return item.Clone();
                 }
             }
 
@@ -485,21 +651,18 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
         return null;
     }
 
-    private async Task<JsonDocument> GetJsonAsync(string url, string referer, CancellationToken cancellationToken, string? uifid = null)
+    private async Task<JsonDocument> GetJsonAsync(string url, string referer, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
         ApplyDefaultHeaders(request, referer);
-        if (!string.IsNullOrWhiteSpace(uifid))
+        var requestCookie = _guestSession.BuildCookieHeader();
+        if (!string.IsNullOrWhiteSpace(requestCookie))
         {
-            request.Headers.TryAddWithoutValidation("uifid", uifid);
-        }
-
-        if (!string.IsNullOrWhiteSpace(MyParserRuntime.DouyinCookie))
-        {
-            request.Headers.TryAddWithoutValidation("Cookie", MyParserRuntime.DouyinCookie);
+            request.Headers.TryAddWithoutValidation("Cookie", requestCookie);
         }
 
         using var response = await http.SendAsync(request, cancellationToken);
+        _guestSession.Capture(response);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
@@ -517,7 +680,7 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
                 throw new DouyinParseException(BuildForceLoginMessage());
             }
 
-            throw new DouyinParseException("抖音接口返回空响应，可能被风控拦截。请配置或更新有效 DouyinCookie 后重试。 ");
+            throw new DouyinParseException("抖音接口返回 HTTP 200 空响应，可能被风控拦截。请配置或更新有效 DouyinCookie 后重试。");
         }
 
         try
@@ -539,10 +702,32 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
 
     private static void LogNonJsonResponse(string url, string referer, HttpResponseMessage response, string contentType, string? whaleAbortText, string? whaleAbortData, string body)
     {
-        var safeBody = body.Length <= 2048 ? body.ReplaceLineEndings(" ") : body[..2048].ReplaceLineEndings(" ") + "...(truncated)";
+        var forceLogin = IsForceLoginAbort(whaleAbortText) || IsForceLoginAbort(whaleAbortData);
         BotLog.Warning(
-            "MyParser 抖音接口返回非 JSON rawdata: "
-            + $"url={url}, referer={referer}, http={(int)response.StatusCode}, content_type={contentType}, body_length={body.Length}, whale_abort={whaleAbortText ?? whaleAbortData ?? string.Empty}, rawdata={safeBody}");
+            "MyParser 抖音接口返回非 JSON: "
+            + $"endpoint={SafeEndpoint(url)}, referer={SafeEndpoint(referer)}, http={(int)response.StatusCode}, content_type={contentType}, body_length={body.Length}, whale_abort_present={!string.IsNullOrWhiteSpace(whaleAbortText) || !string.IsNullOrWhiteSpace(whaleAbortData)}, whale_force_login={forceLogin}");
+    }
+
+    private static string BuildRequestCookieWithoutMsToken()
+    {
+        if (string.IsNullOrWhiteSpace(MyParserRuntime.DouyinCookie)) return string.Empty;
+        return string.Join("; ", MyParserRuntime.DouyinCookie.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(part => !part.StartsWith("msToken=", StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private void AddGuestCookies(HttpRequestMessage request)
+    {
+        var cookie = _guestSession.BuildCookieHeader();
+        if (!string.IsNullOrWhiteSpace(cookie)) request.Headers.TryAddWithoutValidation("Cookie", cookie);
+    }
+
+    private static string GenerateNumericWebId()
+        => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString() + Random.Shared.Next(100000, 999999).ToString();
+
+    private static string SafeEndpoint(string value)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)) return "invalid";
+        return uri.Host + uri.AbsolutePath;
     }
 
     private static string? TryGetHeaderValue(HttpResponseMessage response, string name)
@@ -581,12 +766,11 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
 
     private static string BuildForceLoginMessage()
     {
-        var hasUifid = TryGetCookieValue("UIFID") is not null || TryGetCookieValue("UIFID_TEMP") is not null;
-        var hasMsToken = TryGetCookieValue("msToken") is not null;
+        var hasTtwid = TryGetCookieValue("ttwid") is not null;
         var hasVerifyFp = TryGetCookieValue("s_v_web_id") is not null || TryGetCookieValue("verifyFp") is not null || TryGetCookieValue("fp") is not null;
-        if (hasUifid && (!hasMsToken || !hasVerifyFp))
+        if (!hasTtwid || !hasVerifyFp)
         {
-            return $"抖音接口触发强制登录/风控模型。当前 DouyinCookie 是游客 Cookie 但安全态不完整：has_msToken={hasMsToken}, has_s_v_web_id_or_verifyFp={hasVerifyFp}。请从浏览器 Network 请求头复制完整 Cookie（至少包含 UIFID/UIFID_TEMP、msToken、s_v_web_id/verifyFp）后重试。";
+            return $"抖音接口触发强制登录/风控模型。当前游客 Cookie 安全态不完整：has_ttwid={hasTtwid}, has_s_v_web_id_or_verifyFp={hasVerifyFp}。请从浏览器 Network 请求头复制完整 Cookie（至少包含 ttwid、s_v_web_id/verifyFp）后重试。";
         }
 
         return "抖音接口要求登录后才能解析（服务端返回强制登录/风控模型）。请配置或更新有效 DouyinCookie 后重试。";

@@ -82,8 +82,23 @@
             <Border VerticalAlignment="Top" Height="128" IsHitTestVisible="False" Background="{DynamicResource TopScrim}" />
             <Border VerticalAlignment="Bottom" Height="420" IsHitTestVisible="False" Background="{DynamicResource BottomScrim}" />
 
-            <Grid VerticalAlignment="Top" Height="80" Margin="16,0,16,0">
+            <Grid VerticalAlignment="Top" Height="80" Margin="16,0,16,0" ColumnDefinitions="*,Auto">
                 <Border Background="{DynamicResource CardButtonBackground}"
+                        BorderBrush="{DynamicResource CardButtonBorder}"
+                        BorderThickness="1"
+                        CornerRadius="12"
+                        Padding="12,6"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        IsVisible="{Binding HasPublishTime}">
+                    <TextBlock Text="{Binding PublishTimeText}"
+                               Foreground="{DynamicResource CardButtonText}"
+                               FontSize="12"
+                               FontWeight="Medium"
+                               TextTrimming="CharacterEllipsis" />
+                </Border>
+                <Border Grid.Column="1"
+                        Background="{DynamicResource CardButtonBackground}"
                         BorderBrush="{DynamicResource CardButtonBorder}"
                         BorderThickness="1"
                         CornerRadius="12"

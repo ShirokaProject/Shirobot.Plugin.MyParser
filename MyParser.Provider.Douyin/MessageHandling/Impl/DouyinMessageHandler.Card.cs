@@ -5,7 +5,7 @@ using MyParser.Provider.Douyin.Infrastructure;
 using MyParser.Provider.Douyin.Models;
 using MyParser.Provider.Douyin.Views;
 using ShiroBot.AvaloniaSdk;
-using ShiroBot.Model.Common;
+using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Abstractions;
 using ShiroBot.SDK.Core;
 using ShiroBot.SDK.Plugin;
@@ -16,45 +16,60 @@ namespace MyParser.Provider.Douyin.MessageHandling;
 
 internal sealed partial class DouyinMessageHandler
 {
-private async Task SendCoverMessageAsync(IncomingMessage message, DouyinParseResult result)
+private async Task SendCoverMessageAsync(
+        IncomingMessage message,
+        DouyinParseResult result,
+        CancellationToken cancellationToken = default)
     {
-        var coverUri = await BuildCoverCardUriAsync(result);
+        var coverUri = await BuildCoverCardUriAsync(result, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         var segment = new ImageOutgoingSegment(coverUri);
         var stopwatch = Stopwatch.StartNew();
         BotLog.Info($"MyParser 封面卡片 ImageSegment 发送开始: aweme_id={result.AwemeId}, scene={GetMessageScene(message)}, uri_preview={_hostServices.PreviewUri(coverUri)}");
 
-        switch (message)
+        try
         {
-            case GroupIncomingMessage group:
+            var response = await _context.Message.ReplyAsync(message, segment);
+            BotLog.Info($"MyParser 封面卡片 ImageSegment 发送接口完成: aweme_id={result.AwemeId}, scene={GetMessageScene(message)}, message_id={response.MessageId}, time={response.Timestamp}, elapsed={stopwatch.Elapsed:mm\\:ss}");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            BotLog.Warning($"MyParser 封面卡片发送失败，尝试原始封面: aweme_id={result.AwemeId}, error={ex.Message}");
+            if (string.IsNullOrWhiteSpace(result.CoverUrl)
+                || string.Equals(coverUri, result.CoverUrl, StringComparison.Ordinal))
             {
-                var response = await _context.Message.SendGroupMessageAsync(group.Group.GroupId, segment);
-                BotLog.Info($"MyParser 封面卡片 ImageSegment 发送接口完成: aweme_id={result.AwemeId}, scene=group, group_id={group.Group.GroupId}, message_seq={response.MessageSeq}, time={response.Time}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                break;
+                return;
             }
-            case FriendIncomingMessage friend:
+
+            try
             {
-                var response = await _context.Message.SendPrivateMessageAsync(friend.SenderId, segment);
-                BotLog.Info($"MyParser 封面卡片 ImageSegment 发送接口完成: aweme_id={result.AwemeId}, scene=friend, user_id={friend.SenderId}, message_seq={response.MessageSeq}, time={response.Time}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                break;
+                cancellationToken.ThrowIfCancellationRequested();
+                await _context.Message.ReplyAsync(message, new ImageOutgoingSegment(result.CoverUrl));
+                BotLog.Info($"MyParser 原始封面回退发送完成: aweme_id={result.AwemeId}");
             }
-            default:
+            catch (Exception fallbackEx)
             {
-                var response = await _context.Message.ReplyAsync(message, segment);
-                BotLog.Info($"MyParser 封面卡片 ImageSegment 发送接口完成: aweme_id={result.AwemeId}, scene=reply, message_seq={response.MessageSeq}, time={response.Time}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                break;
+                BotLog.Warning($"MyParser 原始封面回退发送失败，继续发送主体内容: aweme_id={result.AwemeId}, error={fallbackEx.Message}");
             }
         }
     }
 
-    private async Task<string> BuildCoverCardUriAsync(DouyinParseResult result)
+    private async Task<string> BuildCoverCardUriAsync(
+        DouyinParseResult result,
+        CancellationToken cancellationToken)
     {
         var coverTask = BuildCoverImageAsync(result);
-        var avatarTask = _context.Render is null
+        var avaloniaRenderer = _context.Render as IAvaloniaRenderContext;
+        var avatarTask = avaloniaRenderer is null
             ? Task.FromResult(new ProviderImageBuildResult(string.Empty, null))
             : BuildRemoteImageAsync(result.AuthorAvatarUrl, result.SourceUrl, $"douyin_avatar_{result.AwemeId}");
         var coverImage = await coverTask;
         var coverUri = coverImage.Uri;
-        if (_context.Render is null)
+        if (avaloniaRenderer is null)
         {
             BotLog.Warning($"MyParser Avalonia 渲染服务不可用，直接发送原始封面: aweme_id={result.AwemeId}");
             return coverUri;
@@ -63,6 +78,13 @@ private async Task SendCoverMessageAsync(IncomingMessage message, DouyinParseRes
         try
         {
             var avatarImage = await avatarTask;
+            cancellationToken.ThrowIfCancellationRequested();
+            BotLog.Info(
+                "MyParser 封面卡片渲染资源物理位置: "
+                + $"aweme_id={result.AwemeId}, "
+                + $"cover_path={DescribePhysicalPath(coverImage.LocalPath)}, "
+                + $"avatar_path={DescribePhysicalPath(avatarImage.LocalPath)}, "
+                + "output=<pending:file>");
             var coverBitmap = !string.IsNullOrWhiteSpace(coverImage.LocalPath)
                 ? _hostServices.DecodeImageFileForRender(coverImage.LocalPath)
                 : _hostServices.DecodeBase64ImageForRender(coverUri);
@@ -82,8 +104,9 @@ private async Task SendCoverMessageAsync(IncomingMessage message, DouyinParseRes
                 AuthorName = string.IsNullOrWhiteSpace(result.AuthorName) ? "@未知作者" : "@" + result.AuthorName,
                 AuthorMeta = BuildAuthorMeta(result),
                 DurationText = FormatDurationText(result.DurationMilliseconds),
+                PublishTimeText = FormatPublishTimeText(result.CreateTimeUnixSeconds, out var hasPublishTime),
+                HasPublishTime = hasPublishTime,
                 PageText = BuildCoverCardSubtitle(result),
-                ViewCount = FormatCount(result.PlayCount),
                 LikeCount = FormatCount(result.LikeCount),
                 CollectCount = FormatCount(result.CollectCount),
                 CommentCount = FormatCount(result.CommentCount),
@@ -91,9 +114,17 @@ private async Task SendCoverMessageAsync(IncomingMessage message, DouyinParseRes
                 MusicText = BuildMusicText(result),
                 TagsText = BuildTagsText(result),
             };
-            var png = await _context.RenderControlPngAsync<DouyinCard>(vm, new ControlRenderOptions(RenderTheme.Auto));
-            var uri = "base64://" + Convert.ToBase64String(png);
-            BotLog.Info($"MyParser 封面卡片渲染完成: aweme_id={result.AwemeId}, cover_url={result.CoverUrl}, png_kb={png.Length / 1024d:F1}, view={typeof(DouyinCard).FullName}, mode=base64");
+            var uri = await avaloniaRenderer.RenderControlPngToFileUriAsync<DouyinCard>(
+                vm,
+                new ControlRenderOptions(RenderTheme.Auto),
+                cancellationToken);
+            var outputPath = Uri.TryCreate(uri, UriKind.Absolute, out var fileUri) && fileUri.IsFile
+                ? fileUri.LocalPath
+                : null;
+            var outputBytes = !string.IsNullOrWhiteSpace(outputPath) && File.Exists(outputPath)
+                ? new FileInfo(outputPath).Length
+                : 0;
+            BotLog.Info($"MyParser 封面卡片渲染完成: aweme_id={result.AwemeId}, cover_url={result.CoverUrl}, png_kb={outputBytes / 1024d:F1}, view={typeof(DouyinCard).FullName}, output_path={DescribePhysicalPath(outputPath)}");
             return uri;
         }
         catch (Exception ex)
@@ -128,8 +159,6 @@ private async Task SendCoverMessageAsync(IncomingMessage message, DouyinParseRes
             parts.Add(result.AuthorRegion);
         }
 
-        parts.Add(result.PlayCount > 0 ? $"{FormatCount(result.PlayCount)}播放" : "播放量--");
-
         return parts.Count > 0 ? string.Join(" · ", parts) : "抖音作者";
     }
 
@@ -149,6 +178,32 @@ private async Task SendCoverMessageAsync(IncomingMessage message, DouyinParseRes
         return duration.TotalHours >= 1
             ? duration.ToString(@"h\:mm\:ss")
             : duration.ToString(@"m\:ss");
+    }
+
+    private static string FormatPublishTimeText(long unixSeconds, out bool hasPublishTime)
+    {
+        hasPublishTime = false;
+        if (unixSeconds <= 0)
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            var publishTime = DateTimeOffset.FromUnixTimeSeconds(unixSeconds);
+            var earliestReasonableTime = DateTimeOffset.FromUnixTimeSeconds(946684800);
+            if (publishTime < earliestReasonableTime || publishTime > DateTimeOffset.UtcNow.AddDays(1))
+            {
+                return string.Empty;
+            }
+
+            hasPublishTime = true;
+            return $"发布于 {publishTime.ToOffset(TimeSpan.FromHours(8)):yyyy-MM-dd HH:mm}";
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return string.Empty;
+        }
     }
 
     private static string BuildMusicText(DouyinParseResult result)
@@ -201,10 +256,14 @@ private async Task SendCoverMessageAsync(IncomingMessage message, DouyinParseRes
     private Task<ProviderImageBuildResult> BuildCoverImageAsync(DouyinParseResult result)
     {
         var coverUrl = result.CoverUrl ?? throw new InvalidOperationException("封面 URL 为空。");
-        return BuildRemoteImageAsync(coverUrl, result.SourceUrl, $"douyin_cover_{result.AwemeId}");
+        return BuildRemoteImageAsync(coverUrl, result.SourceUrl, $"douyin_cover_{result.AwemeId}", persistLocalFile: true);
     }
 
-    private Task<ProviderImageBuildResult> BuildRemoteImageAsync(string? imageUrl, string? referer, string filePrefix)
+    private Task<ProviderImageBuildResult> BuildRemoteImageAsync(
+        string? imageUrl,
+        string? referer,
+        string filePrefix,
+        bool persistLocalFile = false)
     {
         return _hostServices.BuildProviderImageAsync(new ProviderImageBuildRequest(
             "抖音",
@@ -216,7 +275,8 @@ private async Task SendCoverMessageAsync(IncomingMessage message, DouyinParseRes
                 request.Headers.TryAddWithoutValidation("User-Agent", DouyinConstants.UserAgent);
                 request.Headers.TryAddWithoutValidation("Referer", referer ?? "https://www.douyin.com/");
                 request.Headers.TryAddWithoutValidation("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8");
-            }));
+            },
+            PersistLocalFile: persistLocalFile));
     }
 
     private void LogCoverImageInfo(DouyinParseResult result, string mode, long bytes, string uri)

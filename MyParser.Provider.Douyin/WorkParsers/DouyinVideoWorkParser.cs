@@ -45,7 +45,6 @@ public sealed class DouyinVideoWorkParser(PluginConfig config) : IDouyinWorkPars
         var coverUrl = ExtractSimpleCoverUrl(video);
         var musicEl = TryGetProperty(aweme, "music", out var music) ? music : default;
         var musicUrl = musicEl.ValueKind == JsonValueKind.Object ? ExtractFirstUrl(musicEl, "play_url") : null;
-        var statistics = TryGetProperty(aweme, "statistics", out var statisticsEl) ? statisticsEl : default;
 
         return new DouyinParseResult
         {
@@ -58,17 +57,17 @@ public sealed class DouyinVideoWorkParser(PluginConfig config) : IDouyinWorkPars
             AuthorFollowerCount = author.ValueKind == JsonValueKind.Object ? GetLong(author, "follower_count") : 0,
             AuthorRegion = author.ValueKind == JsonValueKind.Object ? GetString(author, "region") ?? GetString(author, "ip_location") : null,
             DurationMilliseconds = video.ValueKind == JsonValueKind.Object ? GetLong(video, "duration") : 0,
+            CreateTimeUnixSeconds = GetFirstLong(aweme, "create_time", "createTime"),
             CoverUrl = coverUrl,
             CoverSource = "detail",
             VideoUrl = qualities.FirstOrDefault()?.Url,
             MusicUrl = musicUrl,
             MusicTitle = musicEl.ValueKind == JsonValueKind.Object ? GetString(musicEl, "title") : null,
             MusicAuthor = musicEl.ValueKind == JsonValueKind.Object ? GetString(musicEl, "author") : null,
-            LikeCount = statistics.ValueKind == JsonValueKind.Object ? GetLong(statistics, "digg_count") : 0,
-            CollectCount = statistics.ValueKind == JsonValueKind.Object ? GetLong(statistics, "collect_count") : 0,
-            CommentCount = statistics.ValueKind == JsonValueKind.Object ? GetLong(statistics, "comment_count") : 0,
-            ShareCount = statistics.ValueKind == JsonValueKind.Object ? GetLong(statistics, "share_count") : 0,
-            PlayCount = statistics.ValueKind == JsonValueKind.Object ? GetFirstLong(statistics, "play_count", "recommend_count") : 0,
+            LikeCount = GetStatisticLong(aweme, "digg_count", "diggCount"),
+            CollectCount = GetStatisticLong(aweme, "collect_count", "collectCount"),
+            CommentCount = GetStatisticLong(aweme, "comment_count", "commentCount"),
+            ShareCount = GetStatisticLong(aweme, "share_count", "shareCount"),
             Tags = ExtractTags(aweme),
             Qualities = qualities,
             Images = [],

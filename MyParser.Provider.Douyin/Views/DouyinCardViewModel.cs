@@ -18,8 +18,9 @@ public sealed class DouyinCardViewModel
         AuthorName = "UP主名字";
         AuthorMeta = "UP主简介UP主简介";
         DurationText = "12:34";
+        PublishTimeText = "发布于 2026-07-28 12:34";
+        HasPublishTime = true;
         PageText = "1/1";
-        ViewCount = "1.2K";
         LikeCount = "345";
         CollectCount = "678";
         CommentCount = "90";
@@ -37,8 +38,9 @@ public sealed class DouyinCardViewModel
     public string AuthorName { get; init; } = string.Empty;
     public string AuthorMeta { get; init; } = string.Empty;
     public string DurationText { get; init; } = string.Empty;
+    public string PublishTimeText { get; init; } = string.Empty;
+    public bool HasPublishTime { get; init; }
     public string PageText { get; init; } = string.Empty;
-    public string ViewCount { get; init; } = string.Empty;
     public string LikeCount { get; init; } = string.Empty;
     public string CollectCount { get; init; } = string.Empty;
     public string CommentCount { get; init; } = string.Empty;

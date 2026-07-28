@@ -18,7 +18,6 @@ public sealed class DouyinLiveWorkParser : IDouyinWorkParser
     {
         var awemeId = GetString(aweme, "aweme_id") ?? fallbackAwemeId;
         var author = TryGetProperty(aweme, "author", out var authorEl) ? authorEl : default;
-        var statistics = TryGetProperty(aweme, "statistics", out var statisticsEl) ? statisticsEl : default;
 
         return new DouyinParseResult
         {
@@ -30,14 +29,14 @@ public sealed class DouyinLiveWorkParser : IDouyinWorkParser
             AuthorAvatarUrl = author.ValueKind == JsonValueKind.Object ? ExtractAuthorAvatarUrl(author) : null,
             AuthorFollowerCount = author.ValueKind == JsonValueKind.Object ? GetLong(author, "follower_count") : 0,
             AuthorRegion = author.ValueKind == JsonValueKind.Object ? GetString(author, "region") ?? GetString(author, "ip_location") : null,
+            CreateTimeUnixSeconds = GetFirstLong(aweme, "create_time", "createTime"),
             CoverUrl = ExtractLiveCoverUrl(aweme),
             CoverSource = "live",
             MusicUrl = null,
-            LikeCount = statistics.ValueKind == JsonValueKind.Object ? GetLong(statistics, "digg_count") : 0,
-            CollectCount = statistics.ValueKind == JsonValueKind.Object ? GetLong(statistics, "collect_count") : 0,
-            CommentCount = statistics.ValueKind == JsonValueKind.Object ? GetLong(statistics, "comment_count") : 0,
-            ShareCount = statistics.ValueKind == JsonValueKind.Object ? GetLong(statistics, "share_count") : 0,
-            PlayCount = statistics.ValueKind == JsonValueKind.Object ? GetFirstLong(statistics, "play_count", "recommend_count") : 0,
+            LikeCount = GetStatisticLong(aweme, "digg_count", "diggCount"),
+            CollectCount = GetStatisticLong(aweme, "collect_count", "collectCount"),
+            CommentCount = GetStatisticLong(aweme, "comment_count", "commentCount"),
+            ShareCount = GetStatisticLong(aweme, "share_count", "shareCount"),
             Tags = ExtractTags(aweme),
             Qualities = [],
             Images = [],

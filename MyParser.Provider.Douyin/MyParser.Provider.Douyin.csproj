@@ -9,11 +9,14 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="ShiroBot.AvaloniaSdk" />
+        <ProjectReference Include="..\..\..\..\RiderProjects\ShiroBot\ShiroBot.AvaloniaSdk\ShiroBot.AvaloniaSdk.csproj" />
+        <ProjectReference Include="..\..\..\..\RiderProjects\ShiroBot\ShiroBot.Qq.Model\ShiroBot.Qq.Model.csproj" />
     </ItemGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\MyParser.Sharing\MyParser.Sharing.csproj" />
+        <Compile Include="..\MyParser\SdkModelAliases.cs" Link="SdkModelAliases.cs" />
+        <Compile Include="..\MyParser\SdkMessageAdapters.cs" Link="SdkMessageAdapters.cs" />
     </ItemGroup>
 
 </Project>

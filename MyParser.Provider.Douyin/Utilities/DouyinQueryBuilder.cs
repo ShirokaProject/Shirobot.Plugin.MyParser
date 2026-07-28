@@ -1,4 +1,5 @@
 using System.Web;
+using MyParser.Provider.Douyin.Infrastructure;
 
 namespace MyParser.Provider.Douyin.Utilities;
 
@@ -54,7 +55,37 @@ public static class DouyinQueryBuilder
         return Build(pairs);
     }
 
-    public static string BuildHjDetailQuery(string awemeId, string? msToken = null, string? webId = null, string? uifid = null, string? verifyFp = null)
+    public static string BuildCommentListQuery(
+        string awemeId,
+        long cursor,
+        int count,
+        string? msToken,
+        string? webId,
+        string? verifyFp)
+    {
+        var pairs = CreateCommonWebPairs();
+        pairs["aweme_id"] = awemeId;
+        pairs["cursor"] = cursor.ToString();
+        pairs["count"] = Math.Clamp(count, 1, 20).ToString();
+        pairs["item_type"] = "0";
+        pairs["insert_ids"] = string.Empty;
+        pairs["whale_cut_token"] = string.Empty;
+        pairs["cut_version"] = "1";
+        pairs["rcFT"] = string.Empty;
+        pairs["update_version_code"] = "170400";
+        pairs["pc_img_format"] = "webp";
+        pairs["webid"] = string.IsNullOrWhiteSpace(webId) ? GenerateNumericId() : webId;
+        pairs["msToken"] = string.IsNullOrWhiteSpace(msToken) ? GenerateMsTokenFallback() : msToken;
+        if (!string.IsNullOrWhiteSpace(verifyFp))
+        {
+            pairs["verifyFp"] = verifyFp;
+            pairs["fp"] = verifyFp;
+        }
+        AddNetworkFields(pairs);
+        return Build(pairs);
+    }
+
+    public static string BuildHjDetailQuery(string awemeId, string? msToken = null, string? webId = null, string? verifyFp = null)
     {
         var fp = string.IsNullOrWhiteSpace(verifyFp) ? GenerateVerifyFp() : verifyFp;
         var pairs = new Dictionary<string, string?>
@@ -74,15 +105,15 @@ public static class DouyinQueryBuilder
             ["version_code"] = "190500",
             ["version_name"] = "19.5.0",
             ["cookie_enabled"] = "true",
-            ["screen_width"] = "1920",
-            ["screen_height"] = "1080",
-            ["browser_language"] = "en-US",
+            ["screen_width"] = DouyinConstants.ScreenWidth,
+            ["screen_height"] = DouyinConstants.ScreenHeight,
+            ["browser_language"] = DouyinConstants.BrowserLanguage,
             ["browser_platform"] = "Win32",
             ["browser_name"] = "Chrome",
-            ["browser_version"] = "146.0.0.0",
+            ["browser_version"] = DouyinConstants.ChromeVersion,
             ["browser_online"] = "true",
             ["engine_name"] = "Blink",
-            ["engine_version"] = "146.0.0.0",
+            ["engine_version"] = DouyinConstants.ChromeVersion,
             ["os_name"] = "Windows",
             ["os_version"] = "10",
             ["device_memory"] = "8",
@@ -91,7 +122,6 @@ public static class DouyinQueryBuilder
             ["effective_type"] = "4g",
             ["round_trip_time"] = "0",
             ["webid"] = string.IsNullOrWhiteSpace(webId) ? GenerateNumericId() : webId,
-            ["uifid"] = string.IsNullOrWhiteSpace(uifid) ? string.Empty : uifid,
             ["verifyFp"] = fp,
             ["fp"] = fp,
             ["msToken"] = string.IsNullOrWhiteSpace(msToken) ? GenerateMsTokenFallback() : msToken,
@@ -110,18 +140,18 @@ public static class DouyinQueryBuilder
             ["version_code"] = "290100",
             ["version_name"] = "29.1.0",
             ["cookie_enabled"] = "true",
-            ["browser_language"] = "zh-CN",
+            ["browser_language"] = DouyinConstants.BrowserLanguage,
             ["browser_platform"] = "Win32",
             ["browser_name"] = "Chrome",
-            ["browser_version"] = "130.0.0.0",
+            ["browser_version"] = DouyinConstants.ChromeVersion,
             ["browser_online"] = "true",
             ["engine_name"] = "Blink",
-            ["engine_version"] = "130.0.0.0",
+            ["engine_version"] = DouyinConstants.ChromeVersion,
             ["os_name"] = "Windows",
             ["os_version"] = "10",
             ["platform"] = "PC",
-            ["screen_width"] = "1920",
-            ["screen_height"] = "1080",
+            ["screen_width"] = DouyinConstants.ScreenWidth,
+            ["screen_height"] = DouyinConstants.ScreenHeight,
             ["device_memory"] = "8",
             ["cpu_core_num"] = "8",
             ["msToken"] = string.Empty,

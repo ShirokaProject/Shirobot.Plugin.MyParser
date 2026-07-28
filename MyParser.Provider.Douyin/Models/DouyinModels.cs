@@ -12,6 +12,7 @@ public sealed record DouyinParseResult
     public long AuthorFollowerCount { get; init; }
     public string? AuthorRegion { get; init; }
     public long DurationMilliseconds { get; init; }
+    public long CreateTimeUnixSeconds { get; init; } = 0;
     public string? CoverUrl { get; init; }
     public string? CoverSource { get; init; }
     public string? VideoUrl { get; init; }
@@ -29,6 +30,7 @@ public sealed record DouyinParseResult
     public List<string> Tags { get; init; } = [];
     public List<DouyinVideoQuality> Qualities { get; init; } = [];
     public List<DouyinImageInfo> Images { get; init; } = [];
+    public List<DouyinCommentInfo> Comments { get; init; } = [];
     public bool IsGallery => Images.Count > 0;
     public bool IsVideo => !string.IsNullOrWhiteSpace(VideoUrl);
 
@@ -60,6 +62,22 @@ public sealed record DouyinImageInfo
 {
     public required string Url { get; init; }
     public string? LivePhotoUrl { get; init; }
+}
+
+public sealed record DouyinCommentInfo
+{
+    public required string CommentId { get; init; }
+    public required string Text { get; init; }
+    public string UserName { get; init; } = "未知用户";
+    public string? UserId { get; init; }
+    public string? DisplayUserId { get; init; }
+    public string? UserAvatarUrl { get; init; }
+    public List<string> ImageUrls { get; init; } = [];
+    public string? IpLabel { get; init; }
+    public long LikeCount { get; init; }
+    public long ReplyCount { get; init; }
+    public long CreateTimeUnixSeconds { get; init; }
+    public bool IsAuthor { get; init; }
 }
 
 public sealed class DouyinParseException(string message) : Exception(message);

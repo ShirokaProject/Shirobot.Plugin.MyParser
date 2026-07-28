@@ -1,7 +1,7 @@
 using Shirobot.Plugin.MyParser.Parsing;
 using MyParser.Provider.Douyin.Parsing;
 using MyParser.Provider.Douyin.MessageHandling;
-using ShiroBot.Model.Common;
+using ShiroBot.SDK.Models;
 
 namespace MyParser.Provider.Douyin;
 
