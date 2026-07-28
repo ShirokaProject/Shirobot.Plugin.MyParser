@@ -15,8 +15,10 @@ internal static partial class XiaohongshuLightAppUrlExtractor
         parts.AddRange(GetTextSegments(message));
         foreach (var app in GetLightAppSegments(message))
         {
+            var urls = ExtractXiaohongshuUrls(app).ToArray();
+            if (urls.Length == 0) continue;
             LogLightAppSummary(app);
-            parts.AddRange(ExtractXiaohongshuUrls(app));
+            parts.AddRange(urls);
         }
 
         return parts.Count == 0 ? null : string.Join(' ', parts.Where(i => !string.IsNullOrWhiteSpace(i)));

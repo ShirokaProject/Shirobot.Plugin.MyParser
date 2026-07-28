@@ -44,9 +44,12 @@ public sealed class NetEaseCloudMusicProviderModule : MyParserProviderModuleBase
     public string? NormalizeParseText(IncomingMessage message)
     {
         var text = GetPlainText(message);
-        return NetEaseUrlParser.ContainsNetEaseSongUrl(text)
-            ? NetEaseUrlParser.NormalizeParseText(text)
-            : null;
+        if (NetEaseUrlParser.ContainsNetEaseSongUrl(text))
+        {
+            return NetEaseUrlParser.NormalizeParseText(text);
+        }
+
+        return NetEaseLightAppUrlExtractor.ExtractParseText(message);
     }
 
     public bool LooksLikeCookie(string cookie) => NetEaseParser.LooksLikeCookie(cookie);

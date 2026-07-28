@@ -14,8 +14,10 @@ internal static partial class HeyboxLightAppUrlExtractor
         parts.AddRange(GetTextSegments(message));
         foreach (var app in GetLightAppSegments(message))
         {
+            var urls = ExtractHeyboxUrls(app).ToArray();
+            if (urls.Length == 0) continue;
             LogLightAppSummary(app);
-            parts.AddRange(ExtractHeyboxUrls(app));
+            parts.AddRange(urls);
         }
 
         return parts.Count == 0 ? null : string.Join(' ', parts.Where(i => !string.IsNullOrWhiteSpace(i)));

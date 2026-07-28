@@ -84,4 +84,7 @@
               Condition="'@(PluginDebugNativeOutput)' != ''" />
     </Target>
 
+    <Import Project="$(MSBuildProjectDirectory)\..\Directory.Build.local.props"
+            Condition="Exists('$(MSBuildProjectDirectory)\..\Directory.Build.local.props')" />
+
 </Project>

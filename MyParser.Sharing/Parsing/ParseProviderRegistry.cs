@@ -1,4 +1,5 @@
 using ShiroBot.SDK.Models;
+using ShiroBot.SDK.Abstractions;
 
 namespace Shirobot.Plugin.MyParser.Parsing;
 
@@ -25,6 +26,7 @@ public sealed class ParseProviderRegistry(IEnumerable<IParseProvider> providers)
                 continue;
             }
 
+            BotLog.Info($"MyParser 入站 provider 选中: provider={provider.Id}, normalized={TrimLogValue(candidate)}");
             parseText = candidate;
             return provider;
         }
@@ -49,12 +51,19 @@ public sealed class ParseProviderRegistry(IEnumerable<IParseProvider> providers)
                 continue;
             }
 
+            BotLog.Info($"MyParser 入站消息 provider 选中: provider={provider.Id}, normalized={TrimLogValue(candidate)}");
             parseText = candidate;
             return provider;
         }
 
         parseText = plainText;
         return null;
+    }
+
+    private static string TrimLogValue(string value)
+    {
+        value = value.ReplaceLineEndings(" ").Trim();
+        return value.Length <= 220 ? value : value[..220] + "...";
     }
 
     public async Task<MediaParseResult> ParseAsync(string text, CancellationToken cancellationToken = default)
