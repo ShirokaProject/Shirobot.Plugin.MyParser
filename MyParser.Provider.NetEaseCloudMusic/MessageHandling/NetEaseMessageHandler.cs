@@ -8,7 +8,7 @@ using MyParser.Provider.NetEaseCloudMusic.Models;
 using MyParser.Provider.NetEaseCloudMusic.Parsing;
 using MyParser.Provider.NetEaseCloudMusic.Views;
 using ShiroBot.AvaloniaSdk;
-using ShiroBot.Model.Common;
+using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Abstractions;
 using ShiroBot.SDK.Core;
 using ShiroBot.SDK.Plugin;
@@ -76,7 +76,7 @@ internal sealed partial class NetEaseMessageHandler(ProviderMessageHandlerContex
         }
     }
 
-    public override async Task ParseAndReplyAsync(IncomingMessage message, string text, bool silentProviderMismatch = false)
+    public override async Task ParseAndReplyAsync(IncomingMessage message, string text, bool silentProviderMismatch = false, CancellationToken cancellationToken = default)
     {
         if (!Config.EnableNetEaseCloudMusic)
         {
@@ -91,7 +91,8 @@ internal sealed partial class NetEaseMessageHandler(ProviderMessageHandlerContex
         await ReactAsync(message, "351", "网易云音乐");
         try
         {
-            var media = await ProviderRegistry.ParseAsync(text).ConfigureAwait(false);
+            var media = await ProviderRegistry.ParseAsync(text, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             if (media.ProviderPayload is not NetEaseParseResult result)
             {
                 await ReplyAsync(message, $"{media.ProviderName} 已识别，但返回类型未接入发送流程。");
@@ -111,6 +112,10 @@ internal sealed partial class NetEaseMessageHandler(ProviderMessageHandlerContex
 
             await SendRecordAsync(message, result).ConfigureAwait(false);
             await ReactAsync(message, "426", "网易云音乐");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (NetEaseParseException ex) when (silentProviderMismatch && ex.Message.Contains("无法从输入中提取", StringComparison.OrdinalIgnoreCase))
         {
@@ -139,18 +144,7 @@ internal sealed partial class NetEaseMessageHandler(ProviderMessageHandlerContex
     {
         var qrFile = await BuildQrImageAsync(text, fileName).ConfigureAwait(false);
         var segment = new ImageOutgoingSegment(qrFile.Uri);
-        switch (message)
-        {
-            case GroupIncomingMessage group:
-                await BotContext.Message.SendGroupMessageAsync(group.Group.GroupId, segment).ConfigureAwait(false);
-                break;
-            case FriendIncomingMessage friend:
-                await BotContext.Message.SendPrivateMessageAsync(friend.SenderId, segment).ConfigureAwait(false);
-                break;
-            default:
-                await BotContext.Message.ReplyAsync(message, segment).ConfigureAwait(false);
-                break;
-        }
+        await BotContext.Message.ReplyAsync(message, segment).ConfigureAwait(false);
     }
 
     private static async Task<(string Uri, string Path)> BuildQrImageAsync(string text, string fileName)
@@ -184,27 +178,8 @@ internal sealed partial class NetEaseMessageHandler(ProviderMessageHandlerContex
             var stopwatch = Stopwatch.StartNew();
             BotLog.Info($"MyParser 网易云音乐封面卡片 ImageSegment 发送开始: song_id={result.SongId}, scene={GetMessageScene(message)}, uri_preview={HostServices.PreviewUri(cardUri)}");
 
-            switch (message)
-            {
-                case GroupIncomingMessage group:
-                {
-                    var response = await BotContext.Message.SendGroupMessageAsync(group.Group.GroupId, segment);
-                    BotLog.Info($"MyParser 网易云音乐封面卡片 ImageSegment 发送接口完成: song_id={result.SongId}, scene=group, group_id={group.Group.GroupId}, message_seq={response.MessageSeq}, time={response.Time}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                    break;
-                }
-                case FriendIncomingMessage friend:
-                {
-                    var response = await BotContext.Message.SendPrivateMessageAsync(friend.SenderId, segment);
-                    BotLog.Info($"MyParser 网易云音乐封面卡片 ImageSegment 发送接口完成: song_id={result.SongId}, scene=friend, user_id={friend.SenderId}, message_seq={response.MessageSeq}, time={response.Time}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                    break;
-                }
-                default:
-                {
-                    var response = await BotContext.Message.ReplyAsync(message, segment);
-                    BotLog.Info($"MyParser 网易云音乐封面卡片 ImageSegment 发送接口完成: song_id={result.SongId}, scene=reply, message_seq={response.MessageSeq}, time={response.Time}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                    break;
-                }
-            }
+            var response = await BotContext.Message.ReplyAsync(message, segment);
+            BotLog.Info($"MyParser 网易云音乐封面卡片 ImageSegment 发送接口完成: song_id={result.SongId}, scene={GetMessageScene(message)}, message_id={response.MessageId}, time={response.Timestamp}, elapsed={stopwatch.Elapsed:mm\\:ss}");
         }
         catch (Exception ex)
         {
@@ -226,27 +201,8 @@ internal sealed partial class NetEaseMessageHandler(ProviderMessageHandlerContex
             var stopwatch = Stopwatch.StartNew();
             BotLog.Info($"MyParser 网易云音乐歌词卡片 ImageSegment 发送开始: song_id={result.SongId}, scene={GetMessageScene(message)}, uri_preview={HostServices.PreviewUri(cardUri)}");
 
-            switch (message)
-            {
-                case GroupIncomingMessage group:
-                {
-                    var response = await BotContext.Message.SendGroupMessageAsync(group.Group.GroupId, segment);
-                    BotLog.Info($"MyParser 网易云音乐歌词卡片 ImageSegment 发送接口完成: song_id={result.SongId}, scene=group, group_id={group.Group.GroupId}, message_seq={response.MessageSeq}, time={response.Time}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                    break;
-                }
-                case FriendIncomingMessage friend:
-                {
-                    var response = await BotContext.Message.SendPrivateMessageAsync(friend.SenderId, segment);
-                    BotLog.Info($"MyParser 网易云音乐歌词卡片 ImageSegment 发送接口完成: song_id={result.SongId}, scene=friend, user_id={friend.SenderId}, message_seq={response.MessageSeq}, time={response.Time}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                    break;
-                }
-                default:
-                {
-                    var response = await BotContext.Message.ReplyAsync(message, segment);
-                    BotLog.Info($"MyParser 网易云音乐歌词卡片 ImageSegment 发送接口完成: song_id={result.SongId}, scene=reply, message_seq={response.MessageSeq}, time={response.Time}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                    break;
-                }
-            }
+            var response = await BotContext.Message.ReplyAsync(message, segment);
+            BotLog.Info($"MyParser 网易云音乐歌词卡片 ImageSegment 发送接口完成: song_id={result.SongId}, scene={GetMessageScene(message)}, message_id={response.MessageId}, time={response.Timestamp}, elapsed={stopwatch.Elapsed:mm\\:ss}");
         }
         catch (Exception ex)
         {
@@ -498,49 +454,22 @@ internal sealed partial class NetEaseMessageHandler(ProviderMessageHandlerContex
 
     private async Task SendRecordSegmentAsync(IncomingMessage message, RecordOutgoingSegment segment, long songId, string variantName, Stopwatch stopwatch)
     {
-        switch (message)
-        {
-            case GroupIncomingMessage group:
-            {
-                var response = await BotContext.Message.SendGroupMessageAsync(group.Group.GroupId, segment);
-                BotLog.Info($"MyParser 网易云音乐 SILK RecordSegment 发送接口完成: song_id={songId}, variant={variantName}, scene=group, group_id={group.Group.GroupId}, message_seq={response.MessageSeq}, time={response.Time}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                EnsureRecordSendAccepted(response.MessageSeq, "group");
-                break;
-            }
-            case FriendIncomingMessage friend:
-            {
-                var response = await BotContext.Message.SendPrivateMessageAsync(friend.SenderId, segment);
-                BotLog.Info($"MyParser 网易云音乐 SILK RecordSegment 发送接口完成: song_id={songId}, variant={variantName}, scene=friend, user_id={friend.SenderId}, message_seq={response.MessageSeq}, time={response.Time}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                EnsureRecordSendAccepted(response.MessageSeq, "friend");
-                break;
-            }
-            default:
-                await BotContext.Message.ReplyAsync(message, segment);
-                break;
-        }
+        var response = await BotContext.Message.ReplyAsync(message, segment);
+        var scene = GetMessageScene(message);
+        BotLog.Info($"MyParser 网易云音乐 SILK AudioSegment 发送接口完成: song_id={songId}, variant={variantName}, scene={scene}, message_id={response.MessageId}, time={response.Timestamp}, elapsed={stopwatch.Elapsed:mm\\:ss}");
+        EnsureRecordSendAccepted(response.MessageId, scene);
     }
 
     private async Task SendTextForRecordAsync(IncomingMessage message, string text)
     {
-        switch (message)
-        {
-            case GroupIncomingMessage group:
-                await BotContext.Message.SendGroupMessageAsync(group.Group.GroupId, new TextOutgoingSegment(text));
-                break;
-            case FriendIncomingMessage friend:
-                await BotContext.Message.SendPrivateMessageAsync(friend.SenderId, new TextOutgoingSegment(text));
-                break;
-            default:
-                await ReplyAsync(message, text);
-                break;
-        }
+        await ReplyAsync(message, text);
     }
 
-    private static void EnsureRecordSendAccepted(long messageSeq, string scene)
+    private static void EnsureRecordSendAccepted(string messageId, string scene)
     {
-        if (messageSeq <= 0)
+        if (string.IsNullOrWhiteSpace(messageId))
         {
-            throw new InvalidOperationException($"RecordSegment 发送未返回有效 message_seq={messageSeq}，scene={scene}。可能是适配器拒绝了语音文件 URI 或音频格式。");
+            throw new InvalidOperationException($"AudioSegment 发送未返回有效 message_id，scene={scene}。可能是适配器拒绝了语音文件 URI 或音频格式。");
         }
     }
 

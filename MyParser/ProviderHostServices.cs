@@ -3,7 +3,7 @@ using Shirobot.Plugin.MyParser.MessageHandling;
 using Shirobot.Plugin.MyParser.Parsing;
 using Shirobot.Plugin.MyParser.Services;
 using Shirobot.Plugin.MyParser.Utility;
-using ShiroBot.Model.Common;
+using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Abstractions;
 using ShiroBot.SDK.Plugin;
 
@@ -82,6 +82,7 @@ internal sealed class ProviderHostServices(IBotContext context) : IProviderHostS
             request.FilePrefix,
             request.ConfigureRequest,
             request.MaxBytes,
+            request.PersistLocalFile,
             cancellationToken).ConfigureAwait(false);
         return new ProviderImageBuildResult(uri, localPath);
     }
@@ -114,7 +115,10 @@ internal sealed class ProviderHostServices(IBotContext context) : IProviderHostS
         }
 
         BotLog.Info($"MyParser {request.PlatformDisplayName} VideoSegment URI 模式：{uriMode}, {request.IdentifierName}={request.MediaId}, file_mb={fileSize / 1024d / 1024d:F2}, uri_preview={PreviewUri(videoUri)}");
-        var segment = new VideoOutgoingSegment(videoUri, string.IsNullOrWhiteSpace(request.ThumbUri) ? null : request.ThumbUri);
+        var segment = new VideoOutgoingSegment(videoUri)
+        {
+            ThumbnailUri = string.IsNullOrWhiteSpace(request.ThumbUri) ? null : request.ThumbUri,
+        };
         return new ProviderLocalVideoSegmentResult(segment, uriMode, videoUri, fileSize, registeredToHttpServer);
     }
 

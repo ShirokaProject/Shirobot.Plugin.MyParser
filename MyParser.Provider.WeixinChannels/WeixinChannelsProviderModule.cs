@@ -2,7 +2,7 @@ using System.Text;
 using MyParser.Provider.WeixinChannels.Infrastructure;
 using MyParser.Provider.WeixinChannels.MessageHandling;
 using MyParser.Provider.WeixinChannels.Parsing;
-using ShiroBot.Model.Common;
+using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Plugin;
 
 namespace MyParser.Provider.WeixinChannels;
@@ -84,11 +84,5 @@ public sealed class WeixinChannelsProviderModule : MyParserProviderModuleBase, I
         return cookie.StartsWith("Cookie:", StringComparison.OrdinalIgnoreCase) ? cookie[7..].Trim() : cookie;
     }
 
-    private static string GetPlainText(IncomingMessage message) => message switch
-    {
-        FriendIncomingMessage friend => friend.GetPlainText(),
-        GroupIncomingMessage group => group.GetPlainText(),
-        TempIncomingMessage temp => string.Concat(temp.Segments.OfType<TextIncomingSegment>().Select(i => i.Text)),
-        _ => string.Empty,
-    };
+    private static string GetPlainText(IncomingMessage message) => message.GetPlainText();
 }

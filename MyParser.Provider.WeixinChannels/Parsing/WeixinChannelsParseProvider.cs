@@ -1,7 +1,7 @@
 using MyParser.Provider.WeixinChannels.Infrastructure;
 using MyParser.Provider.WeixinChannels.Models;
 using MyParser.Provider.WeixinChannels.Utilities;
-using ShiroBot.Model.Common;
+using ShiroBot.SDK.Models;
 
 namespace MyParser.Provider.WeixinChannels.Parsing;
 

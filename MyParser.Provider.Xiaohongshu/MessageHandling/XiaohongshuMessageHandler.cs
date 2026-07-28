@@ -7,7 +7,7 @@ using Shirobot.Plugin.MyParser.Parsing;
 using MyParser.Provider.Xiaohongshu.Infrastructure;
 using MyParser.Provider.Xiaohongshu.Models;
 using MyParser.Provider.Xiaohongshu.Views;
-using ShiroBot.Model.Common;
+using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Abstractions;
 using ShiroBot.SDK.Core;
 using ShiroBot.SDK.Plugin;
@@ -34,12 +34,13 @@ internal sealed partial class XiaohongshuMessageHandler : ProviderMessageHandler
         _hostServices = hostServices;
     }
 
-    public override async Task ParseAndReplyAsync(IncomingMessage message, string text, bool silentProviderMismatch = false)
+    public override async Task ParseAndReplyAsync(IncomingMessage message, string text, bool silentProviderMismatch = false, CancellationToken cancellationToken = default)
     {
         try
         {
             await TryReactToSourceMessageAsync(message, "351");
-            var media = await _providerRegistry.ParseAsync(text);
+            var media = await _providerRegistry.ParseAsync(text, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             if (media.ProviderPayload is not XiaohongshuParseResult result)
             {
                 await TryReactToSourceMessageAsync(message, "9");
@@ -74,6 +75,10 @@ internal sealed partial class XiaohongshuMessageHandler : ProviderMessageHandler
         {
             await TryReactToSourceMessageAsync(message, "9");
             await ReplyAsync(message, "小红书解析失败：" + ex.Message);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (TaskCanceledException)
         {

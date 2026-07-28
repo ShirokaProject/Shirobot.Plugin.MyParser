@@ -1,6 +1,6 @@
 using MyParser.Provider.Heybox.Models;
 using MyParser.Provider.Heybox.Utilities;
-using ShiroBot.Model.Common;
+using ShiroBot.SDK.Models;
 
 namespace MyParser.Provider.Heybox.Parsing;
 

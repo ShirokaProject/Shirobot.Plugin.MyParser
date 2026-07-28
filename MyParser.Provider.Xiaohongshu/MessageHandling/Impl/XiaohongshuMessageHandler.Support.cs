@@ -7,7 +7,7 @@ using Shirobot.Plugin.MyParser.Parsing;
 using MyParser.Provider.Xiaohongshu.Infrastructure;
 using MyParser.Provider.Xiaohongshu.Models;
 using MyParser.Provider.Xiaohongshu.Views;
-using ShiroBot.Model.Common;
+using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Abstractions;
 using ShiroBot.SDK.Core;
 using ShiroBot.SDK.Plugin;

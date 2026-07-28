@@ -1,7 +1,8 @@
 using System.Text.Json;
 using MyParser.Provider.Heybox.Parsing;
-using ShiroBot.Model.Common;
+using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Abstractions;
+using ShiroBot.Qq.Model;
 
 namespace MyParser.Provider.Heybox.Utilities;
 
@@ -20,7 +21,7 @@ internal static partial class HeyboxLightAppUrlExtractor
         return parts.Count == 0 ? null : string.Join(' ', parts.Where(i => !string.IsNullOrWhiteSpace(i)));
     }
 
-    private static IEnumerable<string> ExtractHeyboxUrls(LightAppIncomingSegment app)
+    private static IEnumerable<string> ExtractHeyboxUrls(QqLightAppIncoming app)
     {
         if (string.IsNullOrWhiteSpace(app.JsonPayload))
         {
@@ -49,7 +50,7 @@ internal static partial class HeyboxLightAppUrlExtractor
         }
     }
 
-    private static void LogLightAppSummary(LightAppIncomingSegment app)
+    private static void LogLightAppSummary(QqLightAppIncoming app)
     {
         try
         {
@@ -206,19 +207,11 @@ internal static partial class HeyboxLightAppUrlExtractor
         return value.Length <= 180 ? value : value[..180] + "...";
     }
 
-    private static IEnumerable<string> GetTextSegments(IncomingMessage message) => message switch
-    {
-        FriendIncomingMessage friend => friend.Segments.OfType<TextIncomingSegment>().Select(i => i.Text),
-        GroupIncomingMessage group => group.Segments.OfType<TextIncomingSegment>().Select(i => i.Text),
-        TempIncomingMessage temp => temp.Segments.OfType<TextIncomingSegment>().Select(i => i.Text),
-        _ => [],
-    };
+    private static IEnumerable<string> GetTextSegments(IncomingMessage message) =>
+        message.Segments.OfType<TextSegment>().Select(i => i.Text);
 
-    private static IEnumerable<LightAppIncomingSegment> GetLightAppSegments(IncomingMessage message) => message switch
-    {
-        FriendIncomingMessage friend => friend.Segments.OfType<LightAppIncomingSegment>(),
-        GroupIncomingMessage group => group.Segments.OfType<LightAppIncomingSegment>(),
-        TempIncomingMessage temp => temp.Segments.OfType<LightAppIncomingSegment>(),
-        _ => [],
-    };
+    private static IEnumerable<QqLightAppIncoming> GetLightAppSegments(IncomingMessage message) =>
+        message.Raw is QqIncomingMessage qqMessage
+            ? qqMessage.Segments.OfType<QqLightAppIncoming>()
+            : message.Segments.OfType<RawSegment>().Select(segment => segment.Payload).OfType<QqLightAppIncoming>();
 }

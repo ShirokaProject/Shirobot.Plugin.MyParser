@@ -1,6 +1,6 @@
 using System.Net;
 using Avalonia.Media.Imaging;
-using ShiroBot.Model.Common;
+using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Plugin;
 
 namespace Shirobot.Plugin.MyParser.Parsing;
@@ -38,7 +38,7 @@ public interface IProviderTextNormalizer
 
 public interface IIncomingProviderTextNormalizer
 {
-    string? NormalizeParseText(IncomingMessage message);
+    string? NormalizeParseText(MessageEvent message);
 }
 
 public interface IProviderParseTextMatcher
@@ -108,8 +108,12 @@ public interface IProviderMessageHandlerFactory
 public interface IProviderMessageHandler : IDisposable
 {
     string ProviderId { get; }
-    Task ParseAndReplyAsync(IncomingMessage message, string text, bool silentProviderMismatch = false);
-    Task HandleLoginAsync(IncomingMessage message);
+    Task ParseAndReplyAsync(
+        MessageEvent message,
+        string text,
+        bool silentProviderMismatch = false,
+        CancellationToken cancellationToken = default);
+    Task HandleLoginAsync(MessageEvent message);
 }
 
 public interface IProviderRuntimeModule
@@ -127,21 +131,21 @@ public interface IProviderRuntimeModule
 
 public interface IProviderReplyParseTextBuilder
 {
-    string? TryBuildParseText(IncomingMessage message);
+    string? TryBuildParseText(MessageEvent message);
     bool IsDeferredParseText(string text);
 }
 
 public interface IProviderHostServices
 {
-    Task ReactAsync(IncomingMessage message, string faceId, string platformName);
-    Task RemoveReactionAsync(IncomingMessage message, string faceId, string platformName);
-    Task<SendMessageResult> ReplyTextAsync(PluginConfig config, IncomingMessage message, string text);
-    Task SendImageAsync(IncomingMessage message, ImageOutgoingSegment segment);
+    Task ReactAsync(MessageEvent message, string faceId, string platformName);
+    Task RemoveReactionAsync(MessageEvent message, string faceId, string platformName);
+    Task<SentMessage> ReplyTextAsync(PluginConfig config, MessageEvent message, string text);
+    Task SendImageAsync(MessageEvent message, ImageSegment segment);
     Task RunLoggedBackgroundAsync(string description, Func<Task> action);
     string ResolveCookiePath(string fileName);
-    Task<string> UploadLocalVideoFileAsync(PluginConfig config, IncomingMessage message, string? localVideoPath, string platformName, string mediaId);
-    Task<string> UploadLocalFileAsync(PluginConfig config, IncomingMessage message, string? localPath, string platformName, string mediaId, bool preferBase64 = false);
-    string GetMessageScene(IncomingMessage message);
+    Task<string> UploadLocalVideoFileAsync(PluginConfig config, MessageEvent message, string? localVideoPath, string platformName, string mediaId);
+    Task<string> UploadLocalFileAsync(PluginConfig config, MessageEvent message, string? localPath, string platformName, string mediaId, bool preferBase64 = false);
+    string GetMessageScene(MessageEvent message);
     string GetUriMode(string uri);
     string PreviewUri(string? uri, int maxLength = 180);
     void UnregisterLocalVideoFile(string? path);
@@ -219,7 +223,7 @@ public sealed record ProviderCommandContext(
 
 public sealed record ProviderCommandDescriptor(
     string Command,
-    Func<IncomingMessage, Task> HandleAsync,
+    Func<MessageEvent, Task> HandleAsync,
     bool AdminOnly = false);
 
 public sealed record ProviderLoginStatus(bool IsLogin, string? UserName, string? UserId, string Message, bool NeedVerify = false);
@@ -249,7 +253,8 @@ public sealed record ProviderImageBuildRequest(
     string? Referer,
     string FilePrefix,
     Action<HttpRequestMessage>? ConfigureRequest = null,
-    long MaxBytes = 10 * 1024L * 1024L);
+    long MaxBytes = 10 * 1024L * 1024L,
+    bool PersistLocalFile = false);
 
 public sealed record ProviderImageBuildResult(string Uri, string? LocalPath);
 
@@ -262,7 +267,7 @@ public sealed record ProviderLocalVideoSegmentRequest(
     string IdentifierName = "media_id");
 
 public sealed record ProviderLocalVideoSegmentResult(
-    VideoOutgoingSegment Segment,
+    VideoSegment Segment,
     string UriMode,
     string VideoUri,
     long FileSize,

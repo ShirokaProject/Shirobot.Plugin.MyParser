@@ -1,12 +1,14 @@
+using System.Collections.Concurrent;
 using System.Reflection;
 using System.Text;
 using Shirobot.Plugin.MyParser.MessageHandling;
 using Shirobot.Plugin.MyParser.Parsing;
 using Shirobot.Plugin.MyParser.Utility;
-using ShiroBot.Model.Common;
+using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Abstractions;
 using ShiroBot.SDK.Core;
 using ShiroBot.SDK.Plugin;
+using ShiroBot.Qq.Model;
 
 namespace Shirobot.Plugin.MyParser;
 
@@ -22,6 +24,7 @@ namespace Shirobot.Plugin.MyParser;
 public sealed class MyParserPlugin : PluginBase
 {
     private const string CookieDirectoryName = "cookies";
+    private static readonly TimeSpan ProviderWorkCooldown = TimeSpan.FromSeconds(15);
 
     private readonly Lock _reloadLock = new();
     private PluginConfig _config = new();
@@ -44,8 +47,20 @@ public sealed class MyParserPlugin : PluginBase
     private readonly Dictionary<string, IProviderMessageHandler> _providerMessageHandlers = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<IProviderRuntimeModule> _providerRuntimeModules = [];
     private readonly List<ProviderCommandDescriptor> _providerCommandDescriptors = [];
+    private readonly ConcurrentDictionary<ParseTaskKey, ParseTaskState> _parseTasks = new();
+    private readonly ConcurrentDictionary<ChannelTaskKey, DateTimeOffset> _mutedChannels = new();
+    private readonly ConcurrentDictionary<ChannelTaskKey, byte> _wholeMutedChannels = new();
+    private readonly ConcurrentDictionary<MemberTaskKey, DateTimeOffset> _mutedMembers = new();
+    private readonly ConcurrentDictionary<ProviderCooldownKey, DateTimeOffset> _providerCooldowns = new();
 
     public override string Name => "MyParser";
+
+    protected override void ConfigureRoutes()
+    {
+        Events.Map<MessageDeletedEvent>(HandleMessageDeletedAsync);
+        Events.MapPlatform(QqEventKinds.GroupMute, HandleGroupMuteAsync);
+        Events.MapPlatform(QqEventKinds.GroupWholeMute, HandleGroupWholeMuteAsync);
+    }
 
     protected override async Task LoadAsync()
     {
@@ -106,14 +121,14 @@ public sealed class MyParserPlugin : PluginBase
         //     await Context.Message.ReplyAsync(message, $"dycard",new ImageOutgoingSegment($"base64://{Convert.ToBase64String(pic)}"));
         // });
         //
-        FriendCommands.MapExact("#parser", HandleHelpAsync);
+        DirectCommands.MapExact("#parser", HandleHelpAsync);
         GroupCommands.MapExact("#parser", HandleHelpAsync);
         RegisterProviderCommands(modules, orderedProviders);
 
-        FriendCommands.MapWhen(IsParseCommand, HandleParseCommandAsync);
+        DirectCommands.MapWhen(IsParseCommand, HandleParseCommandAsync);
         GroupCommands.MapWhen(IsParseCommand, HandleParseCommandAsync);
 
-        FriendCommands.MapWhen(ShouldAutoParse, HandleAutoParseAsync);
+        DirectCommands.MapWhen(ShouldAutoParse, HandleAutoParseAsync);
         GroupCommands.MapWhen(ShouldAutoParse, HandleAutoParseAsync);
 
         StartHotReloadWatchers();
@@ -590,6 +605,11 @@ public sealed class MyParserPlugin : PluginBase
     protected override Task OnUnloadAsync()
     {
         MyParserRuntime.BeginUnload();
+        CancelParseTasks(_ => true, "plugin-unload");
+        _mutedChannels.Clear();
+        _wholeMutedChannels.Clear();
+        _mutedMembers.Clear();
+        _providerCooldowns.Clear();
         ProviderMessageUtilities.ClearReactionCache();
         _configReloadDebounce?.Cancel();
         _configReloadDebounce?.Dispose();
@@ -856,7 +876,7 @@ public sealed class MyParserPlugin : PluginBase
             }
 
             _providerCommandDescriptors.Add(descriptor);
-            FriendCommands.MapWhen(message => IsProviderCommand(message, descriptor), message => HandleProviderCommandAsync(message, descriptor));
+            DirectCommands.MapWhen(message => IsProviderCommand(message, descriptor), message => HandleProviderCommandAsync(message, descriptor));
             GroupCommands.MapWhen(message => IsProviderCommand(message, descriptor), message => HandleProviderCommandAsync(message, descriptor));
         }
     }
@@ -888,23 +908,19 @@ public sealed class MyParserPlugin : PluginBase
 
     private async Task<bool> EnsurePrivateAdminCommandAsync(IncomingMessage message, string command)
     {
-        switch (message)
+        if (!message.IsDirect)
         {
-            case FriendIncomingMessage friend when Context.IsAdmin(friend.SenderId):
-                return true;
-            case FriendIncomingMessage:
-                await Context.Message.ReplyAsync(message, $"{command} 仅允许机器人 Owner/Admin 私信使用。");
-                return false;
-            case GroupIncomingMessage:
-                await Context.Message.ReplyAsync(message, $"{command} 涉及账号登录凭据，仅允许机器人 Owner/Admin 私信机器人使用，请不要在群内触发。");
-                return false;
-            case TempIncomingMessage:
-                await Context.Message.ReplyAsync(message, $"{command} 仅允许机器人 Owner/Admin 私信使用，不支持临时会话。");
-                return false;
-            default:
-                await Context.Message.ReplyAsync(message, $"{command} 仅允许机器人 Owner/Admin 私信使用。");
-                return false;
+            await Context.Message.ReplyAsync(message, $"{command} 涉及账号登录凭据，仅允许机器人 Owner/Admin 私信机器人使用，请不要在群内触发。");
+            return false;
         }
+
+        if (Context.IsAdmin(message.Sender.Id))
+        {
+            return true;
+        }
+
+        await Context.Message.ReplyAsync(message, $"{command} 仅允许机器人 Owner/Admin 私信使用。");
+        return false;
     }
 
     private bool IsPluginResultMessage(string text)
@@ -913,24 +929,284 @@ public sealed class MyParserPlugin : PluginBase
                || _providerRuntimeModules.Any(module => module.IsPluginResultMessage(text));
     }
 
-    private Task DispatchParseAsync(IncomingMessage message, string text, bool silentProviderMismatch = false, bool isAutoParse = false)
+    private async Task DispatchParseAsync(IncomingMessage message, string text, bool silentProviderMismatch = false, bool isAutoParse = false)
     {
         text = NormalizeParseText(text);
         if (IsDeferredProviderParseText(text))
         {
-            return Task.CompletedTask;
+            return;
+        }
+
+        if (IsResponseSuppressed(message))
+        {
+            BotLog.Info($"MyParser 忽略禁言状态下的解析请求: channel={message.Channel.Id}, sender={message.Sender.Id}, message_id={message.MessageId}");
+            return;
         }
 
         var parseText = text;
         var provider = _providerRegistry?.FindProvider(text, isAutoParse, out parseText);
         if (provider is null)
         {
-            return Context.Message.ReplyAsync(message, "未找到可处理该链接的解析提供商。");
+            await Context.Message.ReplyAsync(message, "未找到可处理该链接的解析提供商。");
+            return;
         }
 
-        return TryGetProviderMessageHandler(provider.Id)?.ParseAndReplyAsync(message, parseText, silentProviderMismatch)
-               ?? Context.Message.ReplyAsync(message, $"{provider.Name} 已识别，但该 provider 未接入消息发送流程。");
+        var handler = TryGetProviderMessageHandler(provider.Id);
+        if (handler is null)
+        {
+            await Context.Message.ReplyAsync(message, $"{provider.Name} 已识别，但该 provider 未接入消息发送流程。");
+            return;
+        }
+
+        if (TryEnterProviderCooldown(provider.Id, parseText, out var cooldownKey, out var remaining))
+        {
+            BotLog.Info(
+                $"MyParser 冷却期内静默忽略重复作品: provider={provider.Id}, work={cooldownKey.WorkIdentity}, remaining_seconds={Math.Ceiling(remaining.TotalSeconds):F0}");
+            return;
+        }
+
+        var key = ParseTaskKey.From(message);
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(MyParserRuntime.BackgroundCancellationToken);
+        var state = new ParseTaskState(message.Sender.Id, cancellation);
+        if (!_parseTasks.TryAdd(key, state))
+        {
+            return;
+        }
+
+        if (IsResponseSuppressed(message))
+        {
+            _parseTasks.TryRemove(key, out _);
+            cancellation.Cancel();
+            return;
+        }
+
+        try
+        {
+            await handler.ParseAndReplyAsync(message, parseText, silentProviderMismatch, cancellation.Token);
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+            BotLog.Info($"MyParser 解析任务已取消: channel={message.Channel.Id}, message_id={message.MessageId}");
+        }
+        finally
+        {
+            if (_parseTasks.TryGetValue(key, out var current) && ReferenceEquals(current, state))
+            {
+                _parseTasks.TryRemove(key, out _);
+            }
+        }
     }
+
+    private Task HandleMessageDeletedAsync(MessageDeletedEvent evt)
+    {
+        var key = ParseTaskKey.From(evt);
+        CancelParseTasks(pair => pair.Key == key, "message-deleted");
+        return Task.CompletedTask;
+    }
+
+    private Task HandleGroupMuteAsync(PlatformEvent evt)
+    {
+        if (evt.Raw is not QqGroupMute mute || evt.Channel is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        var botMuted = string.Equals(mute.UserId.ToString(), evt.SelfId, StringComparison.Ordinal);
+        var channelKey = ChannelTaskKey.From(evt.Platform, evt.Channel);
+        if (botMuted)
+        {
+            if (mute.IsUnmute)
+            {
+                _mutedChannels.TryRemove(channelKey, out _);
+            }
+            else
+            {
+                _mutedChannels[channelKey] = DateTimeOffset.UtcNow.Add(mute.Duration);
+            }
+        }
+        else
+        {
+            var memberKey = new MemberTaskKey(channelKey, mute.UserId.ToString());
+            if (mute.IsUnmute)
+            {
+                _mutedMembers.TryRemove(memberKey, out _);
+            }
+            else
+            {
+                _mutedMembers[memberKey] = DateTimeOffset.UtcNow.Add(mute.Duration);
+            }
+        }
+
+        if (mute.IsUnmute)
+        {
+            return Task.CompletedTask;
+        }
+
+        CancelParseTasks(
+            pair => ParseTaskKey.IsSameChannel(pair.Key, evt.Platform, evt.Channel)
+                    && (botMuted || string.Equals(pair.Value.SenderId, mute.UserId.ToString(), StringComparison.Ordinal)),
+            botMuted ? "bot-muted" : "sender-muted");
+        return Task.CompletedTask;
+    }
+
+    private Task HandleGroupWholeMuteAsync(PlatformEvent evt)
+    {
+        if (evt.Raw is QqGroupWholeMute wholeMute && evt.Channel is not null)
+        {
+            var channelKey = ChannelTaskKey.From(evt.Platform, evt.Channel);
+            if (wholeMute.IsMute)
+            {
+                _wholeMutedChannels[channelKey] = 0;
+                CancelParseTasks(
+                    pair => ParseTaskKey.IsSameChannel(pair.Key, evt.Platform, evt.Channel),
+                    "group-whole-muted");
+            }
+            else
+            {
+                _wholeMutedChannels.TryRemove(channelKey, out _);
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private void CancelParseTasks(
+        Func<KeyValuePair<ParseTaskKey, ParseTaskState>, bool> predicate,
+        string reason)
+    {
+        foreach (var pair in _parseTasks.Where(predicate).ToArray())
+        {
+            if (_parseTasks.TryRemove(pair.Key, out var state))
+            {
+                state.Cancellation.Cancel();
+                BotLog.Info($"MyParser 清除解析任务: reason={reason}, channel={pair.Key.ChannelId}, message_id={pair.Key.MessageId}");
+            }
+        }
+    }
+
+    private bool IsResponseSuppressed(MessageEvent message)
+    {
+        if (message.IsDirect)
+        {
+            return false;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var channelKey = ChannelTaskKey.From(message.Platform, message.Channel);
+        if (_wholeMutedChannels.ContainsKey(channelKey))
+        {
+            return true;
+        }
+
+        if (_mutedChannels.TryGetValue(channelKey, out var channelUntil))
+        {
+            if (channelUntil > now)
+            {
+                return true;
+            }
+
+            _mutedChannels.TryRemove(channelKey, out _);
+        }
+
+        var memberKey = new MemberTaskKey(channelKey, message.Sender.Id);
+        if (_mutedMembers.TryGetValue(memberKey, out var memberUntil))
+        {
+            if (memberUntil > now)
+            {
+                return true;
+            }
+
+            _mutedMembers.TryRemove(memberKey, out _);
+        }
+
+        return false;
+    }
+
+    private bool TryEnterProviderCooldown(
+        string providerId,
+        string parseText,
+        out ProviderCooldownKey cooldownKey,
+        out TimeSpan remaining)
+    {
+        cooldownKey = new ProviderCooldownKey(providerId, NormalizeWorkIdentity(parseText));
+        while (true)
+        {
+            var now = DateTimeOffset.UtcNow;
+            if (_providerCooldowns.TryGetValue(cooldownKey, out var expiresAt))
+            {
+                if (expiresAt > now)
+                {
+                    remaining = expiresAt - now;
+                    return true;
+                }
+
+                if (_providerCooldowns.TryUpdate(cooldownKey, now.Add(ProviderWorkCooldown), expiresAt))
+                {
+                    remaining = TimeSpan.Zero;
+                    return false;
+                }
+
+                continue;
+            }
+
+            if (_providerCooldowns.TryAdd(cooldownKey, now.Add(ProviderWorkCooldown)))
+            {
+                remaining = TimeSpan.Zero;
+                return false;
+            }
+        }
+    }
+
+    private static string NormalizeWorkIdentity(string parseText)
+    {
+        var value = parseText.Trim();
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri))
+        {
+            return ProviderTextUtilities.TrimLine(value.ReplaceLineEndings(" "), 160);
+        }
+
+        var builder = new UriBuilder(uri)
+        {
+            Host = uri.Host.ToLowerInvariant(),
+            Query = string.Empty,
+            Fragment = string.Empty,
+        };
+        builder.Path = builder.Path.TrimEnd('/');
+        return builder.Uri.AbsoluteUri;
+    }
+
+    private sealed record ParseTaskState(string SenderId, CancellationTokenSource Cancellation);
+
+    private readonly record struct ParseTaskKey(
+        string Platform,
+        ChannelType ChannelType,
+        string ChannelId,
+        string MessageId)
+    {
+        public static ParseTaskKey From(MessageEvent message) =>
+            new(message.Platform, message.Channel.Type, message.Channel.Id, message.MessageId);
+
+        public static ParseTaskKey From(MessageDeletedEvent evt) =>
+            new(evt.Platform, evt.Channel.Type, evt.Channel.Id, evt.MessageId);
+
+        public static bool IsSameChannel(ParseTaskKey key, string platform, Channel channel) =>
+            string.Equals(key.Platform, platform, StringComparison.OrdinalIgnoreCase)
+            && key.ChannelType == channel.Type
+            && string.Equals(key.ChannelId, channel.Id, StringComparison.Ordinal);
+    }
+
+    private readonly record struct ChannelTaskKey(
+        string Platform,
+        ChannelType ChannelType,
+        string ChannelId)
+    {
+        public static ChannelTaskKey From(string platform, Channel channel) =>
+            new(platform, channel.Type, channel.Id);
+    }
+
+    private readonly record struct MemberTaskKey(ChannelTaskKey Channel, string UserId);
+
+    private readonly record struct ProviderCooldownKey(string ProviderId, string WorkIdentity);
 
     private string NormalizeParseText(string text)
     {
@@ -942,11 +1218,5 @@ public sealed class MyParserPlugin : PluginBase
         return text;
     }
 
-    private static string GetPlainText(IncomingMessage message) => message switch
-    {
-        FriendIncomingMessage friend => friend.GetPlainText(),
-        GroupIncomingMessage group => group.GetPlainText(),
-        TempIncomingMessage temp => string.Concat(temp.Segments.OfType<TextIncomingSegment>().Select(i => i.Text)),
-        _ => string.Empty,
-    };
+    private static string GetPlainText(IncomingMessage message) => message.GetPlainText();
 }

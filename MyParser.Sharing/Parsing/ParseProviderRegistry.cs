@@ -1,4 +1,4 @@
-using ShiroBot.Model.Common;
+using ShiroBot.SDK.Models;
 
 namespace Shirobot.Plugin.MyParser.Parsing;
 
@@ -32,7 +32,7 @@ public sealed class ParseProviderRegistry(IEnumerable<IParseProvider> providers)
         return null;
     }
 
-    public IParseProvider? FindProvider(IncomingMessage message, out string parseText)
+    public IParseProvider? FindProvider(MessageEvent message, out string parseText)
     {
         var plainText = GetPlainText(message);
         var context = new ProviderParseTextContext(IsAutoParse: true, IsUrlLike: IsUrlLike(plainText));
@@ -107,17 +107,7 @@ public sealed class ParseProviderRegistry(IEnumerable<IParseProvider> providers)
                || message.Contains("不是动态", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string GetPlainText(IncomingMessage message)
-    {
-        var segments = message switch
-        {
-            FriendIncomingMessage friend => friend.Segments,
-            GroupIncomingMessage group => group.Segments,
-            TempIncomingMessage temp => temp.Segments,
-            _ => [],
-        };
-        return string.Concat(segments.OfType<TextIncomingSegment>().Select(i => i.Text));
-    }
+    private static string GetPlainText(MessageEvent message) => message.GetPlainText();
 
     private static bool IsUrlLike(string text)
     {

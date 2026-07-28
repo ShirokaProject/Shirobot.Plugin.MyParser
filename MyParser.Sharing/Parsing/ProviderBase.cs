@@ -1,4 +1,4 @@
-using ShiroBot.Model.Common;
+using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Plugin;
 
 namespace Shirobot.Plugin.MyParser.Parsing;
@@ -23,29 +23,33 @@ public abstract class ProviderMessageHandlerBase(ProviderMessageHandlerContext c
 
     public abstract string ProviderId { get; }
 
-    public abstract Task ParseAndReplyAsync(IncomingMessage message, string text, bool silentProviderMismatch = false);
+    public abstract Task ParseAndReplyAsync(
+        MessageEvent message,
+        string text,
+        bool silentProviderMismatch = false,
+        CancellationToken cancellationToken = default);
 
-    public virtual Task HandleLoginAsync(IncomingMessage message)
+    public virtual Task HandleLoginAsync(MessageEvent message)
     {
         return ReplyAsync(message, $"{ProviderId} provider 不支持扫码登录。");
     }
 
-    protected Task ReactAsync(IncomingMessage message, string faceId, string platformName)
+    protected Task ReactAsync(MessageEvent message, string faceId, string platformName)
     {
         return HostServices.ReactAsync(message, faceId, platformName);
     }
 
-    protected Task RemoveReactionAsync(IncomingMessage message, string faceId, string platformName)
+    protected Task RemoveReactionAsync(MessageEvent message, string faceId, string platformName)
     {
         return HostServices.RemoveReactionAsync(message, faceId, platformName);
     }
 
-    protected Task<SendMessageResult> ReplyAsync(IncomingMessage message, string text)
+    protected Task<SentMessage> ReplyAsync(MessageEvent message, string text)
     {
         return HostServices.ReplyTextAsync(Config, message, text);
     }
 
-    protected Task SendImageAsync(IncomingMessage message, ImageOutgoingSegment segment)
+    protected Task SendImageAsync(MessageEvent message, ImageSegment segment)
     {
         return HostServices.SendImageAsync(message, segment);
     }
@@ -55,12 +59,12 @@ public abstract class ProviderMessageHandlerBase(ProviderMessageHandlerContext c
         return HostServices.ResolveCookiePath(fileName);
     }
 
-    protected string GetMessageScene(IncomingMessage message)
+    protected string GetMessageScene(MessageEvent message)
     {
         return HostServices.GetMessageScene(message);
     }
 
-    protected static long GetBotOrSenderId(IncomingMessage message)
+    protected static long GetBotOrSenderId(MessageEvent message)
     {
         return ProviderTextUtilities.GetBotOrSenderId(message);
     }
@@ -72,15 +76,9 @@ public abstract class ProviderMessageHandlerBase(ProviderMessageHandlerContext c
 
 public static class ProviderTextUtilities
 {
-    public static long GetBotOrSenderId(IncomingMessage message)
+    public static long GetBotOrSenderId(MessageEvent message)
     {
-        return message switch
-        {
-            GroupIncomingMessage group => group.SenderId,
-            FriendIncomingMessage friend => friend.SenderId,
-            TempIncomingMessage temp => temp.SenderId,
-            _ => 0,
-        };
+        return long.TryParse(message.Sender.Id, out var senderId) ? senderId : 0;
     }
 
     public static string TrimLine(string value, int maxLength)
