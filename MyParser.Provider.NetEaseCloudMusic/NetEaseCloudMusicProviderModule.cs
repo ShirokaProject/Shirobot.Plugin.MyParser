@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 using MyParser.Provider.NetEaseCloudMusic.MessageHandling;
 using MyParser.Provider.NetEaseCloudMusic.Parsing;
 using MyParser.Provider.NetEaseCloudMusic.Utilities;
-using ShiroBot.Model.Common;
+using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Plugin;
 
 namespace MyParser.Provider.NetEaseCloudMusic;
@@ -44,9 +44,12 @@ public sealed class NetEaseCloudMusicProviderModule : MyParserProviderModuleBase
     public string? NormalizeParseText(IncomingMessage message)
     {
         var text = GetPlainText(message);
-        return NetEaseUrlParser.ContainsNetEaseSongUrl(text)
-            ? NetEaseUrlParser.NormalizeParseText(text)
-            : null;
+        if (NetEaseUrlParser.ContainsNetEaseSongUrl(text))
+        {
+            return NetEaseUrlParser.NormalizeParseText(text);
+        }
+
+        return NetEaseLightAppUrlExtractor.ExtractParseText(message);
     }
 
     public bool LooksLikeCookie(string cookie) => NetEaseParser.LooksLikeCookie(cookie);
@@ -74,16 +77,11 @@ public sealed class NetEaseCloudMusicProviderModule : MyParserProviderModuleBase
     {
         var text = GetPlainText(message).Trim();
         if (!int.TryParse(text, out var index) || index <= 0) return null;
-        var reply = message switch
-        {
-            GroupIncomingMessage group => group.GetReply(),
-            FriendIncomingMessage friend => friend.GetReply(),
-            _ => null,
-        };
+        var reply = message.GetQqReply();
         if (reply is null) return null;
-        var repliedText = string.Concat(reply.Segments.OfType<TextIncomingSegment>().Select(i => i.Text)).Trim();
+        var repliedText = reply.GetPlainText().Trim();
         var ids = TryPickDeferredSongIds(repliedText, index)
-                  ?? TryGetCachedSearchReplySongIds(message, reply.MessageSeq, index);
+                  ?? TryGetCachedSearchReplySongIds(message, reply.MessageSeq.ToString(), index);
         return ids is null ? null : NetEaseUrlParser.BuildInternalPickUri(ids, index - 1);
     }
 
@@ -129,9 +127,9 @@ public sealed class NetEaseCloudMusicProviderModule : MyParserProviderModuleBase
         }
         lines.Add("回复本消息序号即可解析并发送 QQ 语音。 ");
         var response = await context.BotContext.Message.ReplyAsync(message, string.Join(Environment.NewLine, lines));
-        if (response.MessageSeq > 0)
+        if (!string.IsNullOrWhiteSpace(response.MessageId))
         {
-            SearchReplySongIds[BuildSearchReplyCacheKey(message, response.MessageSeq)] = songIds;
+            SearchReplySongIds[BuildSearchReplyCacheKey(message, response.MessageId)] = songIds;
         }
     }
 
@@ -163,25 +161,18 @@ public sealed class NetEaseCloudMusicProviderModule : MyParserProviderModuleBase
         await context.BotContext.Message.ReplyAsync(message, "网易云音乐 Cookie 状态：" + (status.IsLogin ? "可用：" : "不可用：") + status.Message);
     }
 
-    private static IReadOnlyList<long>? TryGetCachedSearchReplySongIds(IncomingMessage message, long replyMessageSeq, int index)
+    private static IReadOnlyList<long>? TryGetCachedSearchReplySongIds(IncomingMessage message, string replyMessageId, int index)
     {
-        if (replyMessageSeq <= 0) return null;
-        return SearchReplySongIds.TryGetValue(BuildSearchReplyCacheKey(message, replyMessageSeq), out var ids)
+        if (string.IsNullOrWhiteSpace(replyMessageId)) return null;
+        return SearchReplySongIds.TryGetValue(BuildSearchReplyCacheKey(message, replyMessageId), out var ids)
                && index > 0
                && index <= ids.Count
             ? ids
             : null;
     }
 
-    private static string BuildSearchReplyCacheKey(IncomingMessage message, long messageSeq)
-    {
-        return message switch
-        {
-            GroupIncomingMessage group => $"group:{group.Group.GroupId}:{messageSeq}",
-            FriendIncomingMessage friend => $"friend:{friend.SenderId}:{messageSeq}",
-            _ => $"unknown:{messageSeq}",
-        };
-    }
+    private static string BuildSearchReplyCacheKey(IncomingMessage message, string messageId) =>
+        $"{message.Channel.Type}:{message.Channel.Id}:{messageId}";
 
     private static IReadOnlyList<long>? TryPickDeferredSongIds(string text, int index)
     {
@@ -204,11 +195,5 @@ public sealed class NetEaseCloudMusicProviderModule : MyParserProviderModuleBase
         return index > 0 && index <= ids.Count ? ids : null;
     }
 
-    private static string GetPlainText(IncomingMessage message) => message switch
-    {
-        FriendIncomingMessage friend => friend.GetPlainText(),
-        GroupIncomingMessage group => group.GetPlainText(),
-        TempIncomingMessage temp => string.Concat(temp.Segments.OfType<TextIncomingSegment>().Select(i => i.Text)),
-        _ => string.Empty,
-    };
+    private static string GetPlainText(IncomingMessage message) => message.GetPlainText();
 }

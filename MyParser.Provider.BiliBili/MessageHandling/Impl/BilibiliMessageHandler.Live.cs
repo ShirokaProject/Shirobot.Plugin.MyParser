@@ -6,7 +6,7 @@ using MyParser.Provider.BiliBili.Services;
 using MyParser.Provider.BiliBili.Models;
 using MyParser.Provider.BiliBili.Views;
 using Shirobot.Plugin.MyParser.Parsing;
-using ShiroBot.Model.Common;
+using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Abstractions;
 using ShiroBot.SDK.Plugin;
 
@@ -65,28 +65,10 @@ private async Task TrySendLiveReplayClipAsync(IncomingMessage message, BilibiliL
     {
         var stopwatch = Stopwatch.StartNew();
         BotLog.Info($"MyParser Bilibili 直播片段 VideoSegment 发送开始: room_id={result.RealRoomId}, scene={GetMessageScene(message)}, stream={stream.Protocol}/{stream.Format}/{stream.Codec}, qn={stream.CurrentQn}, uri_mode={_hostServices.GetUriMode(videoSegment.Uri)}, uri_preview={_hostServices.PreviewUri(videoSegment.Uri)}");
-        switch (message)
-        {
-            case GroupIncomingMessage group:
-            {
-                var response = await context.Message.SendGroupMessageAsync(group.Group.GroupId, videoSegment);
-                BotLog.Info($"MyParser Bilibili 直播片段 VideoSegment 发送接口完成: room_id={result.RealRoomId}, scene=group, group_id={group.Group.GroupId}, message_seq={response.MessageSeq}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                EnsureVideoSendAccepted(response.MessageSeq, "group");
-                break;
-            }
-            case FriendIncomingMessage friend:
-            {
-                var response = await context.Message.SendPrivateMessageAsync(friend.SenderId, videoSegment);
-                BotLog.Info($"MyParser Bilibili 直播片段 VideoSegment 发送接口完成: room_id={result.RealRoomId}, scene=friend, user_id={friend.SenderId}, message_seq={response.MessageSeq}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                EnsureVideoSendAccepted(response.MessageSeq, "friend");
-                break;
-            }
-            default:
-            {
-                await context.Message.ReplyAsync(message, videoSegment);
-                break;
-            }
-        }
+        var response = await context.Message.ReplyAsync(message, videoSegment);
+        var scene = GetMessageScene(message);
+        BotLog.Info($"MyParser Bilibili 直播片段 VideoSegment 发送接口完成: room_id={result.RealRoomId}, scene={scene}, message_id={response.MessageId}, elapsed={stopwatch.Elapsed:mm\\:ss}");
+        EnsureVideoSendAccepted(response.MessageId, scene);
     }
 
     private static ProviderLiveReplayClipDownloadRequest BuildBilibiliLiveReplayClipDownloadRequest(BilibiliLiveParseResult result)
@@ -187,24 +169,8 @@ private async Task TrySendLiveReplayClipAsync(IncomingMessage message, BilibiliL
         var stopwatch = Stopwatch.StartNew();
         BotLog.Info($"MyParser Bilibili 直播卡片 ImageSegment 发送开始: room_id={result.RealRoomId}, scene={GetMessageScene(message)}, uri_preview={_hostServices.PreviewUri(cardUri)}");
 
-        switch (message)
-        {
-            case GroupIncomingMessage group:
-            {
-                var response = await context.Message.SendGroupMessageAsync(group.Group.GroupId, segment);
-                BotLog.Info($"MyParser Bilibili 直播卡片 ImageSegment 发送接口完成: room_id={result.RealRoomId}, scene=group, group_id={group.Group.GroupId}, message_seq={response.MessageSeq}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                break;
-            }
-            case FriendIncomingMessage friend:
-            {
-                var response = await context.Message.SendPrivateMessageAsync(friend.SenderId, segment);
-                BotLog.Info($"MyParser Bilibili 直播卡片 ImageSegment 发送接口完成: room_id={result.RealRoomId}, scene=friend, user_id={friend.SenderId}, message_seq={response.MessageSeq}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                break;
-            }
-            default:
-                await context.Message.ReplyAsync(message, segment);
-                break;
-        }
+        var response = await context.Message.ReplyAsync(message, segment);
+        BotLog.Info($"MyParser Bilibili 直播卡片 ImageSegment 发送接口完成: room_id={result.RealRoomId}, scene={GetMessageScene(message)}, message_id={response.MessageId}, elapsed={stopwatch.Elapsed:mm\\:ss}");
     }
 
     private async Task<string> BuildLiveCardUriAsync(BilibiliLiveParseResult result)

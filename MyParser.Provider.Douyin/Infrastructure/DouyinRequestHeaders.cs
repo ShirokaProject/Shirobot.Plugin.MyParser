@@ -6,9 +6,9 @@ public static class DouyinRequestHeaders
     {
         request.Headers.TryAddWithoutValidation("User-Agent", DouyinConstants.UserAgent);
         request.Headers.TryAddWithoutValidation("Accept", "application/json, text/plain, */*");
-        request.Headers.TryAddWithoutValidation("Accept-Language", "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7");
+        request.Headers.TryAddWithoutValidation("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8");
         request.Headers.TryAddWithoutValidation("Referer", referer);
-        request.Headers.TryAddWithoutValidation("sec-ch-ua", "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Google Chrome\";v=\"146\"");
+        request.Headers.TryAddWithoutValidation("sec-ch-ua", "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\"");
         request.Headers.TryAddWithoutValidation("sec-ch-ua-mobile", "?0");
         request.Headers.TryAddWithoutValidation("sec-ch-ua-platform", "\"Windows\"");
         request.Headers.TryAddWithoutValidation("sec-fetch-dest", "empty");
@@ -19,7 +19,7 @@ public static class DouyinRequestHeaders
 
     public static void ApplySharePageHeaders(HttpRequestMessage request)
     {
-        request.Headers.TryAddWithoutValidation("User-Agent", DouyinConstants.UserAgent);
+        request.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
         request.Headers.TryAddWithoutValidation("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
         request.Headers.TryAddWithoutValidation("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8");
     }

@@ -5,7 +5,7 @@ using MyParser.Provider.WeixinChannels.Models;
 using MyParser.Provider.WeixinChannels.Parsing;
 using MyParser.Provider.WeixinChannels.Views;
 using ShiroBot.AvaloniaSdk;
-using ShiroBot.Model.Common;
+using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Core;
 using ShiroBot.SDK.Plugin;
 
@@ -15,12 +15,13 @@ internal sealed class WeixinChannelsMessageHandler(ProviderMessageHandlerContext
 {
     public override string ProviderId => WeixinChannelsConstants.ProviderId;
 
-    public override async Task ParseAndReplyAsync(IncomingMessage message, string text, bool silentProviderMismatch = false)
+    public override async Task ParseAndReplyAsync(IncomingMessage message, string text, bool silentProviderMismatch = false, CancellationToken cancellationToken = default)
     {
         await ReactAsync(message, "351", WeixinChannelsConstants.DisplayName);
         try
         {
-            var media = await ProviderRegistry.ParseAsync(text).ConfigureAwait(false);
+            var media = await ProviderRegistry.ParseAsync(text, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             if (media.ProviderPayload is not WeixinChannelsParseResult result)
             {
                 await ReplyAsync(message, "微信视频号链接已识别，但解析结果类型异常。").ConfigureAwait(false);
@@ -28,7 +29,11 @@ internal sealed class WeixinChannelsMessageHandler(ProviderMessageHandlerContext
                 return;
             }
 
-            _ = HostServices.RunLoggedBackgroundAsync($"微信视频号卡片异步发送: sph_id={result.SphId}", () => SendCardAsync(message, result));
+            _ = HostServices.RunLoggedBackgroundAsync($"微信视频号卡片异步发送: sph_id={result.SphId}", async () =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await SendCardAsync(message, result);
+            });
 
             var videoSent = false;
             var fileUploaded = false;
@@ -54,6 +59,10 @@ internal sealed class WeixinChannelsMessageHandler(ProviderMessageHandlerContext
                 await ReactAsync(message, "426", WeixinChannelsConstants.DisplayName).ConfigureAwait(false);
                 return;
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 videoSendError = ex.Message;
@@ -68,6 +77,10 @@ internal sealed class WeixinChannelsMessageHandler(ProviderMessageHandlerContext
                         await ReactAsync(message, "426", WeixinChannelsConstants.DisplayName).ConfigureAwait(false);
                         return;
                     }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        throw;
+                    }
                     catch (Exception uploadEx)
                     {
                         fileUploadInfo = uploadEx.Message;
@@ -78,6 +91,10 @@ internal sealed class WeixinChannelsMessageHandler(ProviderMessageHandlerContext
 
             await ReplyAsync(message, FormatResult(result, videoSent, videoSendError, fileUploaded, fileUploadInfo)).ConfigureAwait(false);
             await ReactAsync(message, "9", WeixinChannelsConstants.DisplayName).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (WeixinChannelsParseException ex)
         {
@@ -104,27 +121,8 @@ internal sealed class WeixinChannelsMessageHandler(ProviderMessageHandlerContext
         var segment = new ImageOutgoingSegment(uri);
         var stopwatch = Stopwatch.StartNew();
         BotLog.Info($"MyParser 微信视频号卡片 ImageSegment 发送开始: sph_id={result.SphId}, scene={GetMessageScene(message)}, uri_preview={HostServices.PreviewUri(uri)}");
-        switch (message)
-        {
-            case GroupIncomingMessage group:
-            {
-                var response = await BotContext.Message.SendGroupMessageAsync(group.Group.GroupId, segment).ConfigureAwait(false);
-                BotLog.Info($"MyParser 微信视频号卡片 ImageSegment 发送接口完成: sph_id={result.SphId}, scene=group, group_id={group.Group.GroupId}, message_seq={response.MessageSeq}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                break;
-            }
-            case FriendIncomingMessage friend:
-            {
-                var response = await BotContext.Message.SendPrivateMessageAsync(friend.SenderId, segment).ConfigureAwait(false);
-                BotLog.Info($"MyParser 微信视频号卡片 ImageSegment 发送接口完成: sph_id={result.SphId}, scene=friend, user_id={friend.SenderId}, message_seq={response.MessageSeq}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                break;
-            }
-            default:
-            {
-                var response = await BotContext.Message.ReplyAsync(message, segment).ConfigureAwait(false);
-                BotLog.Info($"MyParser 微信视频号卡片 ImageSegment 发送接口完成: sph_id={result.SphId}, scene=reply, message_seq={response.MessageSeq}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                break;
-            }
-        }
+        var response = await BotContext.Message.ReplyAsync(message, segment).ConfigureAwait(false);
+        BotLog.Info($"MyParser 微信视频号卡片 ImageSegment 发送接口完成: sph_id={result.SphId}, scene={GetMessageScene(message)}, message_id={response.MessageId}, elapsed={stopwatch.Elapsed:mm\\:ss}");
     }
 
     private async Task<string> BuildCardUriAsync(WeixinChannelsParseResult result)
@@ -228,27 +226,8 @@ internal sealed class WeixinChannelsMessageHandler(ProviderMessageHandlerContext
         var segments = new OutgoingSegment[] { videoSegment };
         var stopwatch = Stopwatch.StartNew();
         BotLog.Info($"MyParser 微信视频号 VideoSegment 发送开始: sph_id={result.SphId}, scene={GetMessageScene(message)}, uri_mode={HostServices.GetUriMode(videoSegment.Uri)}, uri_preview={HostServices.PreviewUri(videoSegment.Uri)}");
-        switch (message)
-        {
-            case GroupIncomingMessage group:
-            {
-                var response = await BotContext.Message.SendGroupMessageAsync(group.Group.GroupId, segments).ConfigureAwait(false);
-                BotLog.Info($"MyParser 微信视频号 VideoSegment 发送接口完成: sph_id={result.SphId}, scene=group, group_id={group.Group.GroupId}, message_seq={response.MessageSeq}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                break;
-            }
-            case FriendIncomingMessage friend:
-            {
-                var response = await BotContext.Message.SendPrivateMessageAsync(friend.SenderId, segments).ConfigureAwait(false);
-                BotLog.Info($"MyParser 微信视频号 VideoSegment 发送接口完成: sph_id={result.SphId}, scene=friend, user_id={friend.SenderId}, message_seq={response.MessageSeq}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                break;
-            }
-            default:
-            {
-                var response = await BotContext.Message.ReplyAsync(message, segments).ConfigureAwait(false);
-                BotLog.Info($"MyParser 微信视频号 VideoSegment 发送接口完成: sph_id={result.SphId}, scene=reply, message_seq={response.MessageSeq}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                break;
-            }
-        }
+        var response = await BotContext.Message.ReplyAsync(message, segments).ConfigureAwait(false);
+        BotLog.Info($"MyParser 微信视频号 VideoSegment 发送接口完成: sph_id={result.SphId}, scene={GetMessageScene(message)}, message_id={response.MessageId}, elapsed={stopwatch.Elapsed:mm\\:ss}");
     }
 
     private Task<string> UploadVideoFileAsync(IncomingMessage message, WeixinChannelsParseResult result)

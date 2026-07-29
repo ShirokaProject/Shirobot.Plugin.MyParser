@@ -6,6 +6,7 @@ using MyParser.Provider.BiliBili.Infrastructure;
 using MyParser.Provider.BiliBili.Services;
 using MyParser.Provider.BiliBili.Models;
 using MyParser.Provider.BiliBili.Utilities;
+using ShiroBot.SDK.Abstractions;
 
 namespace MyParser.Provider.BiliBili.Parsing;
 
@@ -41,6 +42,7 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
     private readonly bool _ownsHttpClient;
     private readonly PluginConfig _config;
     private readonly BilibiliArticleParser _articleParser;
+    private readonly BilibiliCommentService _commentService;
 
     public HttpClient HttpClient => _http;
     private string? _mixinKey;
@@ -61,6 +63,7 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
         }
 
         _articleParser = new BilibiliArticleParser(_http, config);
+        _commentService = new BilibiliCommentService(_http, GetMixinKeyAsync);
     }
 
     public Task<object> ParseMediaAsync(string text, CancellationToken cancellationToken = default)
@@ -132,7 +135,7 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
             : mainTitle;
         var mainCover = view.GetStringOrDefault("pic");
         var pageCover = FirstNonEmpty(pageJson.GetStringOrDefault("first_frame"), mainCover);
-        return new BilibiliParseResult
+        var result = new BilibiliParseResult
         {
             Bvid = bvid,
             Aid = view.GetInt64OrDefault("aid"),
@@ -156,6 +159,31 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
             VideoStreams = videos,
             AudioStreams = audios,
         };
+        return await TryApplyCommentsAsync(result, cancellationToken);
+    }
+
+    private async Task<BilibiliParseResult> TryApplyCommentsAsync(
+        BilibiliParseResult result,
+        CancellationToken cancellationToken)
+    {
+        var requestedCount = Math.Clamp(_config.BilibiliCommentCount, 0, 50);
+        if (!_config.BilibiliFetchComments || requestedCount == 0)
+        {
+            return result;
+        }
+
+        try
+        {
+            var comments = await _commentService.FetchAsync(result, requestedCount, cancellationToken);
+            BotLog.Info($"MyParser Bilibili 评论解析完成: bvid={result.Bvid}, aid={result.Aid}, requested={requestedCount}, parsed={comments.Count}");
+            return result with { Comments = comments };
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested
+                                   && ex is HttpRequestException or IOException or JsonException or BilibiliParseException or TaskCanceledException)
+        {
+            BotLog.Warning($"MyParser Bilibili 评论获取失败，继续发送视频: bvid={result.Bvid}, aid={result.Aid}, error={ex.Message}");
+            return result;
+        }
     }
 
     private static BilibiliMultiPageParseResult BuildMultiPageResult(string bvid, JsonElement view, JsonElement[] pages, int requestedPage)
@@ -369,7 +397,7 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
         return json.RootElement.GetPropertyOrDefault("data")?.Clone() ?? throw new BilibiliParseException("B站 playurl 接口未返回 data。");
     }
 
-    private async Task<string> GetMixinKeyAsync(CancellationToken cancellationToken)
+    internal async Task<string> GetMixinKeyAsync(CancellationToken cancellationToken)
     {
         if (!string.IsNullOrWhiteSpace(_mixinKey) && _mixinKeyExpiresAt > DateTimeOffset.UtcNow)
         {

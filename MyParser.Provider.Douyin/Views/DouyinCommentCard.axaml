@@ -1,0 +1,141 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="using:MyParser.Provider.Douyin.Views"
+             x:Class="MyParser.Provider.Douyin.Views.DouyinCommentCard"
+             x:DataType="views:DouyinCommentCardViewModel"
+             Width="720"
+             Height="{Binding CanvasHeight}">
+    <UserControl.Styles>
+        <Style Selector="Border.DocumentCard">
+            <Setter Property="BoxShadow" Value="0 8 24 0 #26000000" />
+        </Style>
+    </UserControl.Styles>
+
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="PageBackground">#111827</SolidColorBrush>
+        <SolidColorBrush x:Key="PanelBackground">#D91F2937</SolidColorBrush>
+        <SolidColorBrush x:Key="PanelBorder">#26FFFFFF</SolidColorBrush>
+        <SolidColorBrush x:Key="TextPrimary">#F8FAFC</SolidColorBrush>
+        <SolidColorBrush x:Key="TextSecondary">#A8B3C7</SolidColorBrush>
+        <SolidColorBrush x:Key="DouyinRed">#FE2C55</SolidColorBrush>
+        <SolidColorBrush x:Key="DouyinCyan">#25F4EE</SolidColorBrush>
+    </UserControl.Resources>
+
+    <Border Classes="DocumentCard"
+            Width="720"
+            Height="{Binding CanvasHeight}"
+            CornerRadius="12"
+            ClipToBounds="True"
+            Background="{StaticResource PageBackground}">
+        <Grid>
+            <Border Margin="-50">
+                <Border.Effect>
+                    <BlurEffect Radius="34" />
+                </Border.Effect>
+                <Border.Background>
+                    <ImageBrush Source="{Binding Cover}" Stretch="UniformToFill" />
+                </Border.Background>
+            </Border>
+            <Border Background="#D9111827" />
+            <Border VerticalAlignment="Top" Height="220">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                        <GradientStop Color="#3325F4EE" Offset="0" />
+                        <GradientStop Color="#111827" Offset="0.48" />
+                        <GradientStop Color="#3DFE2C55" Offset="1" />
+                    </LinearGradientBrush>
+                </Border.Background>
+            </Border>
+
+            <StackPanel Margin="46,42,46,44" Spacing="22">
+                <Border Background="{StaticResource PanelBackground}"
+                        BorderBrush="{StaticResource PanelBorder}"
+                        BorderThickness="1"
+                        CornerRadius="18"
+                        Padding="24,20">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Spacing="8">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Border Background="{StaticResource DouyinRed}" CornerRadius="8" Padding="10,5">
+                                    <TextBlock Text="抖音 / DOUYIN" Foreground="White" FontSize="11" FontWeight="Black" />
+                                </Border>
+                                <Border Background="#2625F4EE" BorderBrush="#5525F4EE" BorderThickness="1"
+                                        CornerRadius="8" Padding="10,5">
+                                    <TextBlock Text="评论区" Foreground="{StaticResource DouyinCyan}" FontSize="11" FontWeight="Bold" />
+                                </Border>
+                            </StackPanel>
+                            <TextBlock Text="{Binding Title}" Foreground="{StaticResource TextPrimary}"
+                                       FontSize="30" FontWeight="Heavy" />
+                            <TextBlock Text="{Binding MetaText}" Foreground="{StaticResource TextSecondary}"
+                                       FontSize="13" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <Border Grid.Column="1" VerticalAlignment="Center"
+                                Background="#2BFFFFFF" CornerRadius="12" Padding="14,10">
+                            <TextBlock Text="{Binding StatsText}" Foreground="{StaticResource TextPrimary}"
+                                       FontSize="13" FontWeight="SemiBold" />
+                        </Border>
+                    </Grid>
+                </Border>
+
+                <ItemsControl ItemsSource="{Binding Comments}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="views:DouyinCommentItemViewModel">
+                            <Border Margin="0,0,0,16"
+                                    Background="{StaticResource PanelBackground}"
+                                    BorderBrush="{StaticResource PanelBorder}"
+                                    BorderThickness="1"
+                                    CornerRadius="16"
+                                    Padding="20,18">
+                                <StackPanel Spacing="15">
+                                    <Grid ColumnDefinitions="54,*,Auto">
+                                        <Border Width="46" Height="46" CornerRadius="23"
+                                                Background="#0F172A" BorderBrush="{StaticResource DouyinCyan}"
+                                                BorderThickness="1.5" ClipToBounds="True">
+                                            <Image Source="{Binding Avatar}" Stretch="UniformToFill" />
+                                        </Border>
+                                        <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <TextBlock Text="{Binding UserName}" Foreground="{StaticResource TextPrimary}"
+                                                           FontSize="17" FontWeight="Bold" MaxWidth="360"
+                                                           TextTrimming="CharacterEllipsis" />
+                                                <Border IsVisible="{Binding IsAuthor}" Background="{StaticResource DouyinRed}"
+                                                        CornerRadius="7" Padding="7,2" VerticalAlignment="Center">
+                                                    <TextBlock Text="作者" Foreground="White" FontSize="9" FontWeight="Bold" />
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Text="{Binding UserIdText}" Foreground="{StaticResource TextSecondary}" FontSize="11" />
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="2" Text="{Binding IndexText}"
+                                                   Foreground="{StaticResource TextSecondary}" FontSize="12" FontWeight="Bold" />
+                                    </Grid>
+
+                                    <TextBlock Text="{Binding Message}" Foreground="{StaticResource TextPrimary}"
+                                               FontSize="16" LineHeight="25" TextWrapping="Wrap" />
+
+                                    <Border IsVisible="{Binding HasImage}" CornerRadius="12" ClipToBounds="True"
+                                            Background="#0B1220" BorderBrush="{StaticResource PanelBorder}"
+                                            BorderThickness="1" Height="230">
+                                        <Image Source="{Binding CommentImage}" Stretch="Uniform"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+
+                                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="18">
+                                        <StackPanel Orientation="Horizontal" Spacing="10">
+                                            <TextBlock Text="{Binding IpText}" Foreground="{StaticResource TextSecondary}" FontSize="11" />
+                                            <TextBlock Text="·" Foreground="{StaticResource TextSecondary}" FontSize="11" />
+                                            <TextBlock Text="{Binding TimeText}" Foreground="{StaticResource TextSecondary}" FontSize="11" />
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="1" Text="{Binding LikeText, StringFormat='❤ {0}'}"
+                                                   Foreground="#FF7891" FontSize="12" FontWeight="SemiBold" />
+                                        <TextBlock Grid.Column="2" Text="{Binding ReplyText, StringFormat='回复 {0}'}"
+                                                   Foreground="{StaticResource DouyinCyan}" FontSize="12" FontWeight="SemiBold" />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>

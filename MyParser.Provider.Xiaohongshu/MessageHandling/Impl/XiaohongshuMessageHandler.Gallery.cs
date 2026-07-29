@@ -7,7 +7,7 @@ using Shirobot.Plugin.MyParser.Parsing;
 using MyParser.Provider.Xiaohongshu.Infrastructure;
 using MyParser.Provider.Xiaohongshu.Models;
 using MyParser.Provider.Xiaohongshu.Views;
-using ShiroBot.Model.Common;
+using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Abstractions;
 using ShiroBot.SDK.Core;
 using ShiroBot.SDK.Plugin;
@@ -63,18 +63,7 @@ private async Task SendCoverOrCardAsync(IncomingMessage message, XiaohongshuPars
         var preview = new[] { "小红书图文", senderName, result.Comments.Count > 0 ? $"前 {result.Comments.Count} 条评论" : $"图片 {result.Images.Count} 张" };
         var summary = $"{result.Images.Count} 张图 · {result.Comments.Count} 条评论";
         var forward = new ForwardOutgoingSegment(forwarded, title, preview, summary, "小红书图文");
-        switch (message)
-        {
-            case GroupIncomingMessage group:
-                await _context.Message.SendGroupMessageAsync(group.Group.GroupId, forward);
-                break;
-            case FriendIncomingMessage friend:
-                await _context.Message.SendPrivateMessageAsync(friend.SenderId, forward);
-                break;
-            default:
-                await _context.Message.ReplyAsync(message, forward);
-                break;
-        }
+        await _context.Message.ReplyAsync(message, forward);
     }
 
     private async Task SendGalleryCardAsync(IncomingMessage message, XiaohongshuParseResult result)

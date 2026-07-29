@@ -5,7 +5,7 @@ using MyParser.Provider.Heybox.Models;
 using MyParser.Provider.Heybox.Parsing;
 using MyParser.Provider.Heybox.Views;
 using ShiroBot.AvaloniaSdk;
-using ShiroBot.Model.Common;
+using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Core;
 using ShiroBot.SDK.Plugin;
 
@@ -15,7 +15,7 @@ internal sealed class HeyboxMessageHandler(ProviderMessageHandlerContext context
 {
     public override string ProviderId => "heybox";
 
-    public override async Task ParseAndReplyAsync(IncomingMessage message, string text, bool silentProviderMismatch = false)
+    public override async Task ParseAndReplyAsync(IncomingMessage message, string text, bool silentProviderMismatch = false, CancellationToken cancellationToken = default)
     {
         if (!Config.EnableHeybox)
         {
@@ -30,7 +30,8 @@ internal sealed class HeyboxMessageHandler(ProviderMessageHandlerContext context
         await ReactAsync(message, "351", "小黑盒");
         try
         {
-            var media = await ProviderRegistry.ParseAsync(text);
+            var media = await ProviderRegistry.ParseAsync(text, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             if (media.ProviderPayload is not HeyboxParseResult result)
             {
                 await ReplyAsync(message, "小黑盒链接已识别，但解析结果类型异常。");
@@ -42,6 +43,10 @@ internal sealed class HeyboxMessageHandler(ProviderMessageHandlerContext context
             await SendHeyboxArticleAsync(message, result);
             await SendArticleDocumentCardAsync(message, result);
             await ReactAsync(message, "426", "小黑盒");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (HeyboxParseException ex)
         {
@@ -68,27 +73,8 @@ internal sealed class HeyboxMessageHandler(ProviderMessageHandlerContext context
         var segment = new ImageOutgoingSegment(uri);
         var stopwatch = Stopwatch.StartNew();
         BotLog.Info($"MyParser 小黑盒信息卡片 ImageSegment 发送开始: link_id={result.LinkId}, scene={GetMessageScene(message)}, uri_preview={HostServices.PreviewUri(uri)}");
-        switch (message)
-        {
-            case GroupIncomingMessage group:
-            {
-                var response = await BotContext.Message.SendGroupMessageAsync(group.Group.GroupId, segment);
-                BotLog.Info($"MyParser 小黑盒信息卡片 ImageSegment 发送接口完成: link_id={result.LinkId}, scene=group, group_id={group.Group.GroupId}, message_seq={response.MessageSeq}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                break;
-            }
-            case FriendIncomingMessage friend:
-            {
-                var response = await BotContext.Message.SendPrivateMessageAsync(friend.SenderId, segment);
-                BotLog.Info($"MyParser 小黑盒信息卡片 ImageSegment 发送接口完成: link_id={result.LinkId}, scene=friend, user_id={friend.SenderId}, message_seq={response.MessageSeq}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                break;
-            }
-            default:
-            {
-                var response = await BotContext.Message.ReplyAsync(message, segment);
-                BotLog.Info($"MyParser 小黑盒信息卡片 ImageSegment 发送接口完成: link_id={result.LinkId}, scene=reply, message_seq={response.MessageSeq}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                break;
-            }
-        }
+        var response = await BotContext.Message.ReplyAsync(message, segment);
+        BotLog.Info($"MyParser 小黑盒信息卡片 ImageSegment 发送接口完成: link_id={result.LinkId}, scene={GetMessageScene(message)}, message_id={response.MessageId}, elapsed={stopwatch.Elapsed:mm\\:ss}");
     }
 
     private async Task<string> BuildInfoCardUriAsync(HeyboxParseResult result)
@@ -208,15 +194,8 @@ internal sealed class HeyboxMessageHandler(ProviderMessageHandlerContext context
                 ? $"完整正文 + {result.ImageUrls.Count} 张图"
                 : BuildStatsText(result);
             var forward = new ForwardOutgoingSegment(forwarded, title, preview, summary, result.IsArticle ? "小黑盒文章" : "小黑盒帖子");
-            switch (message)
-            {
-                case GroupIncomingMessage group:
-                    await BotContext.Message.SendGroupMessageAsync(group.Group.GroupId, forward);
-                    return;
-                case FriendIncomingMessage friend:
-                    await BotContext.Message.SendPrivateMessageAsync(friend.SenderId, forward);
-                    return;
-            }
+            await BotContext.Message.ReplyAsync(message, forward);
+            return;
         }
 
         await ReplyAsync(message, FormatHeyboxResult(result));
@@ -238,27 +217,8 @@ internal sealed class HeyboxMessageHandler(ProviderMessageHandlerContext context
         var segment = new ImageOutgoingSegment(cardUri);
         var stopwatch = Stopwatch.StartNew();
         BotLog.Info($"MyParser 小黑盒完整文档卡片 ImageSegment 发送开始: link_id={result.LinkId}, scene={GetMessageScene(message)}, uri_preview={HostServices.PreviewUri(cardUri)}");
-        switch (message)
-        {
-            case GroupIncomingMessage group:
-            {
-                var response = await BotContext.Message.SendGroupMessageAsync(group.Group.GroupId, segment);
-                BotLog.Info($"MyParser 小黑盒完整文档卡片 ImageSegment 发送接口完成: link_id={result.LinkId}, scene=group, group_id={group.Group.GroupId}, message_seq={response.MessageSeq}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                break;
-            }
-            case FriendIncomingMessage friend:
-            {
-                var response = await BotContext.Message.SendPrivateMessageAsync(friend.SenderId, segment);
-                BotLog.Info($"MyParser 小黑盒完整文档卡片 ImageSegment 发送接口完成: link_id={result.LinkId}, scene=friend, user_id={friend.SenderId}, message_seq={response.MessageSeq}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                break;
-            }
-            default:
-            {
-                var response = await BotContext.Message.ReplyAsync(message, segment);
-                BotLog.Info($"MyParser 小黑盒完整文档卡片 ImageSegment 发送接口完成: link_id={result.LinkId}, scene=reply, message_seq={response.MessageSeq}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                break;
-            }
-        }
+        var response = await BotContext.Message.ReplyAsync(message, segment);
+        BotLog.Info($"MyParser 小黑盒完整文档卡片 ImageSegment 发送接口完成: link_id={result.LinkId}, scene={GetMessageScene(message)}, message_id={response.MessageId}, elapsed={stopwatch.Elapsed:mm\\:ss}");
     }
 
     private async Task<string> BuildArticleDocumentCardUriAsync(HeyboxParseResult result)

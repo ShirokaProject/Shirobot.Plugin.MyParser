@@ -14,8 +14,20 @@ public sealed class PluginConfig
     [ConfigField("是否自动解析聊天中的抖音链接。", Label = "自动解析抖音链接")]
     public bool AutoParseDouyinLinks { get; set; } = true;
 
+    [ConfigField("解析抖音作品时是否获取并发送热门评论。需要有效的抖音 Cookie，接口失败不会影响作品发送。", Label = "获取抖音评论")]
+    public bool DouyinFetchComments { get; set; } = true;
+
+    [ConfigField("抖音作品最多获取的热门评论数量。", Label = "抖音评论数量", Min = 0, Max = 50)]
+    public int DouyinCommentCount { get; set; } = 10;
+
     [ConfigField("是否自动解析聊天中的 Bilibili 链接。", Label = "自动解析 Bilibili 链接")]
     public bool AutoParseBilibiliLinks { get; set; } = true;
+
+    [ConfigField("解析 Bilibili 视频时是否获取并发送热门评论。评论接口失败不会影响视频发送。", Label = "获取 Bilibili 评论")]
+    public bool BilibiliFetchComments { get; set; } = true;
+
+    [ConfigField("Bilibili 视频最多获取的热门评论数量。", Label = "Bilibili 评论数量", Min = 0, Max = 50)]
+    public int BilibiliCommentCount { get; set; } = 10;
 
     [ConfigField("是否自动解析聊天中的小红书链接。", Label = "自动解析小红书链接")]
     public bool AutoParseXiaohongshuLinks { get; set; } = false;

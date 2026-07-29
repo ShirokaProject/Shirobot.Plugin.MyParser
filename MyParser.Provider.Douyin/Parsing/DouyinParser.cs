@@ -29,7 +29,7 @@ public sealed class DouyinParser : IParserHttpClientAccessor, IDisposable
             new DouyinVideoWorkParser(config),
         ];
 
-        _parseService = new DouyinParseService(_http, workParsers);
+        _parseService = new DouyinParseService(_http, workParsers, config);
         _loginStatusChecker = new DouyinLoginStatusChecker(_http);
     }
 

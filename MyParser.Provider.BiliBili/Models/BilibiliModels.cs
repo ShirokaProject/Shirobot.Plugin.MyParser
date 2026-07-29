@@ -21,6 +21,7 @@ public sealed record BilibiliParseResult
     public long FavoriteCount { get; init; }
     public long ShareCount { get; init; }
     public long ReplyCount { get; init; }
+    public List<BilibiliCommentInfo> Comments { get; init; } = [];
     public List<BilibiliMediaStream> VideoStreams { get; init; } = [];
     public List<BilibiliMediaStream> AudioStreams { get; init; } = [];
     public BilibiliMediaStream? SelectedVideo => VideoStreams.FirstOrDefault();
@@ -29,6 +30,22 @@ public sealed record BilibiliParseResult
     public string? LocalVideoFileUri { get; set; }
     public bool LocalVideoRegisteredToHttpServer { get; set; }
     public bool IsVideo => SelectedVideo is not null && SelectedAudio is not null;
+}
+
+public sealed record BilibiliCommentInfo
+{
+    public required string CommentId { get; init; }
+    public required string Message { get; init; }
+    public string UserName { get; init; } = "未知用户";
+    public string? UserId { get; init; }
+    public string? UserAvatarUrl { get; init; }
+    public string? ImageUrl { get; init; }
+    public string? IpLocation { get; init; }
+    public string? TimeDescription { get; init; }
+    public long LikeCount { get; init; }
+    public long ReplyCount { get; init; }
+    public long CreateTimeUnixSeconds { get; init; }
+    public bool IsAuthor { get; init; }
 }
 
 public sealed record BilibiliMultiPageParseResult

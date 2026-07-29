@@ -7,6 +7,7 @@ public static class BilibiliConstants
     public const string NavApi = "https://api.bilibili.com/x/web-interface/nav";
     public const string ViewApi = "https://api.bilibili.com/x/web-interface/view";
     public const string PlayUrlApi = "https://api.bilibili.com/x/player/wbi/playurl";
+    public const string CommentMainApi = "https://api.bilibili.com/x/v2/reply/wbi/main";
     public const string ArticleViewApi = "https://api.bilibili.com/x/article/view";
     public const string OpusDetailApi = "https://api.bilibili.com/x/polymer/web-dynamic/v1/opus/detail";
     public const string OpusDetailFeatures = "onlyfansVote,onlyfansAssetsV2,decorationCard,htmlNewStyle,ugcDelete,editable,opusPrivateVisible,tribeeEdit,avatarAutoTheme,avatarTypeOpus";

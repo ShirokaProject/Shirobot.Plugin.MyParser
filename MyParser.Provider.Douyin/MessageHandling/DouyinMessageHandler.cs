@@ -7,7 +7,7 @@ using System.Net;
 using System.Text;
 using ShiroBot.AvaloniaSdk;
 using Shirobot.Plugin.MyParser.Parsing;
-using ShiroBot.Model.Common;
+using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Abstractions;
 using ShiroBot.SDK.Core;
 using ShiroBot.SDK.Plugin;
@@ -39,7 +39,7 @@ internal sealed partial class DouyinMessageHandler : ProviderMessageHandlerBase
         _hostServices = hostServices;
     }
 
-    public override async Task ParseAndReplyAsync(IncomingMessage message, string text, bool silentProviderMismatch = false)
+    public override async Task ParseAndReplyAsync(IncomingMessage message, string text, bool silentProviderMismatch = false, CancellationToken cancellationToken = default)
     {
         await TryReactToSourceMessageAsync(message, "351");
         if (_providerRegistry is null)
@@ -51,7 +51,8 @@ internal sealed partial class DouyinMessageHandler : ProviderMessageHandlerBase
 
         try
         {
-            var media = await _providerRegistry.ParseAsync(text);
+            var media = await _providerRegistry.ParseAsync(text, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             if (media.ProviderPayload is not DouyinParseResult result)
             {
                 await TryReactToSourceMessageAsync(message, "9");
@@ -66,6 +67,7 @@ internal sealed partial class DouyinMessageHandler : ProviderMessageHandlerBase
             }
 
             LogDouyinQualityInfo(result);
+            _ = StartSendCommentsMessageAsync(message, result, cancellationToken);
             var shouldDownloadVideo = _config.SendVideoSegment && result.IsVideo && !result.IsGallery;
             var videoSent = false;
             var fileUploaded = false;
@@ -76,8 +78,9 @@ internal sealed partial class DouyinMessageHandler : ProviderMessageHandlerBase
             {
                 try
                 {
-                    _ = StartSendCoverMessageAsync(message, result);
+                    _ = StartSendCoverMessageAsync(message, result, cancellationToken);
                     var videoSegment = await BuildVideoSegmentAsync(result);
+                    cancellationToken.ThrowIfCancellationRequested();
                     if (videoSegment is null)
                     {
                         await TryReactToSourceMessageAsync(message, "9");
@@ -96,6 +99,10 @@ internal sealed partial class DouyinMessageHandler : ProviderMessageHandlerBase
                             fileUploaded = true;
                             BotLog.Info($"MyParser 文件上传完成: aweme_id={result.AwemeId}, {fileUploadInfo}");
                         }
+                        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                        {
+                            throw;
+                        }
                         catch (Exception uploadEx)
                         {
                             fileUploadInfo = uploadEx.Message;
@@ -112,6 +119,10 @@ internal sealed partial class DouyinMessageHandler : ProviderMessageHandlerBase
                     _hostServices.DeleteLocalVideoIfConfigured(_config, result.LocalVideoPath, "douyin");
                     await TryReactToSourceMessageAsync(message, "426");
                     return;
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
                 }
                 catch (Exception ex)
                 {
@@ -133,6 +144,10 @@ internal sealed partial class DouyinMessageHandler : ProviderMessageHandlerBase
                             await TryReactToSourceMessageAsync(message, "426");
                             return;
                         }
+                        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                        {
+                            throw;
+                        }
                         catch (Exception uploadEx)
                         {
                             BotLog.Warning($"MyParser VideoSegment 失败后文件上传也失败: aweme_id={result.AwemeId}, error={uploadEx.Message}");
@@ -152,10 +167,12 @@ internal sealed partial class DouyinMessageHandler : ProviderMessageHandlerBase
             {
                 if (!string.IsNullOrWhiteSpace(result.CoverUrl))
                 {
-                    await SendCoverMessageAsync(message, result);
+                    await SendCoverMessageAsync(message, result, cancellationToken);
                 }
 
-                await SendGalleryMessageAsync(message, result);
+                cancellationToken.ThrowIfCancellationRequested();
+                await SendGalleryMessageAsync(message, result, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
                 if (!string.IsNullOrWhiteSpace(result.MusicUrl))
                 {
                     await SendMusicMessageAsync(message, result);
@@ -175,6 +192,10 @@ internal sealed partial class DouyinMessageHandler : ProviderMessageHandlerBase
                 await _context.Message.ReplyAsync(message, reply);
             }
             await TryReactToSourceMessageAsync(message, "426");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (DouyinParseException ex)
         {

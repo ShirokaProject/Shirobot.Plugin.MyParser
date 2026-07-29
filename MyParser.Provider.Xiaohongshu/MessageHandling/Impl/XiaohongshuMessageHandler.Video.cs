@@ -7,7 +7,7 @@ using Shirobot.Plugin.MyParser.Parsing;
 using MyParser.Provider.Xiaohongshu.Infrastructure;
 using MyParser.Provider.Xiaohongshu.Models;
 using MyParser.Provider.Xiaohongshu.Views;
-using ShiroBot.Model.Common;
+using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Abstractions;
 using ShiroBot.SDK.Core;
 using ShiroBot.SDK.Plugin;
@@ -140,18 +140,7 @@ private async Task SendVideoFlowAsync(IncomingMessage message, XiaohongshuParseR
         var segments = new OutgoingSegment[] { videoSegment };
         var stopwatch = Stopwatch.StartNew();
         BotLog.Info($"MyParser 小红书 VideoSegment 发送开始: note_id={result.NoteId}, scene={GetMessageScene(message)}, uri_mode={_hostServices.GetUriMode(videoSegment.Uri)}");
-        switch (message)
-        {
-            case GroupIncomingMessage group:
-                await _context.Message.SendGroupMessageAsync(group.Group.GroupId, segments);
-                break;
-            case FriendIncomingMessage friend:
-                await _context.Message.SendPrivateMessageAsync(friend.SenderId, segments);
-                break;
-            default:
-                await _context.Message.ReplyAsync(message, segments);
-                break;
-        }
+        await _context.Message.ReplyAsync(message, segments);
 
         BotLog.Info($"MyParser 小红书 VideoSegment 发送完成: note_id={result.NoteId}, elapsed={stopwatch.Elapsed:mm\\:ss}");
     }

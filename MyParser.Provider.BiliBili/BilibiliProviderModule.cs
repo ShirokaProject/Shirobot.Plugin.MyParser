@@ -1,4 +1,4 @@
-using ShiroBot.Model.Common;
+using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Core;
 using ShiroBot.SDK.Plugin;
 using Shirobot.Plugin.MyParser.Parsing;
@@ -53,7 +53,7 @@ public sealed class BilibiliProviderModule : MyParserProviderModuleBase, IProvid
 
     public string? NormalizeParseText(IncomingMessage message)
     {
-        var text = string.Concat(GetSegments(message).OfType<TextIncomingSegment>().Select(i => i.Text));
+        var text = message.GetPlainText();
         return BilibiliUrlParser.ExtractStrictBilibiliUrl(text)
                ?? BilibiliUrlParser.NormalizeStandaloneBvid(text)
                ?? (BilibiliLightAppUrlExtractor.ExtractParseText(message) is { } extracted
@@ -84,24 +84,19 @@ public sealed class BilibiliProviderModule : MyParserProviderModuleBase, IProvid
 
     public string? TryBuildParseText(IncomingMessage message)
     {
-        var text = string.Concat(GetSegments(message).OfType<TextIncomingSegment>().Select(i => i.Text)).Trim();
+        var text = message.GetPlainText().Trim();
         if (!int.TryParse(text, out var page) || page <= 0)
         {
             return null;
         }
 
-        var reply = message switch
-        {
-            GroupIncomingMessage group => group.GetReply(),
-            FriendIncomingMessage friend => friend.GetReply(),
-            _ => null,
-        };
+        var reply = message.GetQqReply();
         if (reply is null)
         {
             return null;
         }
 
-        var repliedText = string.Concat(reply.Segments.OfType<TextIncomingSegment>().Select(i => i.Text)).Trim();
+        var repliedText = reply.GetPlainText().Trim();
         return IsDeferredParseText(repliedText) ? repliedText + page : null;
     }
 
@@ -134,14 +129,4 @@ public sealed class BilibiliProviderModule : MyParserProviderModuleBase, IProvid
         await context.BotContext.Message.ReplyAsync(message, "BilibiliCookie 状态：" + detail);
     }
 
-    private static IReadOnlyList<IncomingSegment> GetSegments(IncomingMessage message)
-    {
-        return message switch
-        {
-            FriendIncomingMessage friend => friend.Segments,
-            GroupIncomingMessage group => group.Segments,
-            TempIncomingMessage temp => temp.Segments,
-            _ => [],
-        };
-    }
 }

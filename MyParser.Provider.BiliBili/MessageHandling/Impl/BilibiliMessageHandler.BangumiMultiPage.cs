@@ -1,7 +1,8 @@
 
 using System.Text;
 using MyParser.Provider.BiliBili.Models;
-using ShiroBot.Model.Common;
+using ShiroBot.SDK.Models;
+using ShiroBot.SDK.Plugin;
 
 
 namespace MyParser.Provider.BiliBili.MessageHandling;
@@ -44,18 +45,7 @@ private async Task SendBangumiForwardAsync(IncomingMessage message, BilibiliBang
         var summary = $"番剧 · {result.Episodes.Count}话";
         var forward = new ForwardOutgoingSegment(forwarded, title, preview, summary, "Bilibili 番剧");
 
-        switch (message)
-        {
-            case GroupIncomingMessage group:
-                await context.Message.SendGroupMessageAsync(group.Group.GroupId, forward);
-                break;
-            case FriendIncomingMessage friend:
-                await context.Message.SendPrivateMessageAsync(friend.SenderId, forward);
-                break;
-            default:
-                await context.Message.ReplyAsync(message, forward);
-                break;
-        }
+        await context.Message.ReplyAsync(message, forward);
 
         if (sendEpHint && result.RequestedEpId is { } epId)
         {
@@ -149,21 +139,10 @@ private async Task SendBangumiForwardAsync(IncomingMessage message, BilibiliBang
         var summary = $"分P视频 · {result.PageCount}P";
         var forward = new ForwardOutgoingSegment(forwarded, title, preview, summary, "Bilibili 分P");
 
-        switch (message)
-        {
-            case GroupIncomingMessage group:
-                await context.Message.SendGroupMessageAsync(group.Group.GroupId, forward);
-                break;
-            case FriendIncomingMessage friend:
-                await context.Message.SendPrivateMessageAsync(friend.SenderId, forward);
-                break;
-            default:
-                await context.Message.ReplyAsync(message, forward);
-                break;
-        }
+        await context.Message.ReplyAsync(message, forward);
 
         var prompt = await SendReplyAsync(message, "已默认解析 P1；如需解析其它分P，请在10min内用数字回复此消息。");
-        SubscribeBilibiliPageReply(result, prompt.MessageSeq);
+        SubscribeBilibiliPageReply(result, prompt.MessageId);
         await ParseAndReplyAsync(message, $"https://www.bilibili.com/video/{result.Bvid}/?p=1");
     }
 

@@ -1,0 +1,13 @@
+global using ShiroBot.SDK.Models;
+global using IncomingMessage = ShiroBot.SDK.Models.MessageEvent;
+global using IncomingSegment = ShiroBot.SDK.Models.MessageSegment;
+global using OutgoingSegment = ShiroBot.SDK.Models.MessageSegment;
+global using TextIncomingSegment = ShiroBot.SDK.Models.TextSegment;
+global using TextOutgoingSegment = ShiroBot.SDK.Models.TextSegment;
+global using ImageOutgoingSegment = ShiroBot.SDK.Models.ImageSegment;
+global using VideoOutgoingSegment = ShiroBot.SDK.Models.VideoSegment;
+global using RecordOutgoingSegment = ShiroBot.SDK.Models.AudioSegment;
+global using SendMessageResult = ShiroBot.SDK.Models.SentMessage;
+global using OutgoingForwardedMessage = Shirobot.Plugin.MyParser.Sdk.OutgoingForwardedMessage;
+global using ForwardOutgoingSegment = Shirobot.Plugin.MyParser.Sdk.ForwardOutgoingSegment;
+global using Shirobot.Plugin.MyParser.Sdk;

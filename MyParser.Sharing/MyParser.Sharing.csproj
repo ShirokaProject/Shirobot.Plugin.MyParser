@@ -9,8 +9,8 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="ShiroBot.SDK" />
-        <PackageReference Include="ShiroBot.AvaloniaSdk" />
+        <ProjectReference Include="..\..\..\..\RiderProjects\ShiroBot\ShiroBot.SDK\ShiroBot.SDK.csproj" />
+        <ProjectReference Include="..\..\..\..\RiderProjects\ShiroBot\ShiroBot.AvaloniaSdk\ShiroBot.AvaloniaSdk.csproj" />
     </ItemGroup>
 
 </Project>

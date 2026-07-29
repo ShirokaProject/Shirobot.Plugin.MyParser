@@ -52,6 +52,31 @@ public static class DouyinParseHelpers
         return 0;
     }
 
+    public static long GetStatisticLong(JsonElement aweme, params string[] names)
+    {
+        foreach (var statistics in EnumerateStatistics(aweme))
+        {
+            var value = GetFirstLong(statistics, names);
+            if (value > 0)
+            {
+                return value;
+            }
+        }
+
+        return 0;
+    }
+
+    private static IEnumerable<JsonElement> EnumerateStatistics(JsonElement aweme)
+    {
+        foreach (var property in new[] { "statistics", "statistics_data", "statisticsData", "stats" })
+        {
+            if (TryGetProperty(aweme, property, out var statistics) && statistics.ValueKind == JsonValueKind.Object)
+            {
+                yield return statistics;
+            }
+        }
+    }
+
     public static int GetInt(JsonElement element, string name)
     {
         if (!TryGetProperty(element, name, out var value))

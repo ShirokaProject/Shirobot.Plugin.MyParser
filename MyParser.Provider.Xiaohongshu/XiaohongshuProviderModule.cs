@@ -1,7 +1,7 @@
 using Shirobot.Plugin.MyParser.Parsing;
 using MyParser.Provider.Xiaohongshu.Parsing;
 using MyParser.Provider.Xiaohongshu.MessageHandling;
-using ShiroBot.Model.Common;
+using ShiroBot.SDK.Models;
 
 namespace MyParser.Provider.Xiaohongshu;
 

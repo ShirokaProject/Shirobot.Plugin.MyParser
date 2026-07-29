@@ -5,7 +5,7 @@ using MyParser.Provider.Douyin.Infrastructure;
 using MyParser.Provider.Douyin.Models;
 using MyParser.Provider.Douyin.Views;
 using ShiroBot.AvaloniaSdk;
-using ShiroBot.Model.Common;
+using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Abstractions;
 using ShiroBot.SDK.Core;
 using ShiroBot.SDK.Plugin;
@@ -28,12 +28,25 @@ private async Task<VideoOutgoingSegment?> BuildVideoSegmentAsync(DouyinParseResu
         result.LocalVideoPath = localPath;
         LogFinalVideoFileInfo(result);
 
+        string? thumbUri = null;
+        if (!string.IsNullOrWhiteSpace(result.CoverUrl))
+        {
+            var localCover = await BuildRemoteImageAsync(
+                result.CoverUrl,
+                result.SourceUrl,
+                $"douyin_video_thumb_{result.AwemeId}",
+                persistLocalFile: true);
+            thumbUri = BuildLocalFileUri(localCover.LocalPath);
+            BotLog.Info($"MyParser 视频缩略图本地化: aweme_id={result.AwemeId}, physical_path={DescribePhysicalPath(localCover.LocalPath)}, thumb_uri={thumbUri ?? "<none>"}");
+        }
+
+        BotLog.Info($"MyParser 准备发送视频资源: aweme_id={result.AwemeId}, physical_path={DescribePhysicalPath(localPath)}");
         var segmentResult = await _hostServices.BuildLocalVideoSegmentAsync(_config, new ProviderLocalVideoSegmentRequest(
             "抖音",
             result.AwemeId,
             localPath,
             fileUri,
-            result.CoverUrl,
+            thumbUri,
             "aweme_id"));
         result.LocalVideoRegisteredToHttpServer = segmentResult.RegisteredToHttpServer;
         return segmentResult.Segment;
@@ -127,14 +140,19 @@ private async Task<VideoOutgoingSegment?> BuildVideoSegmentAsync(DouyinParseResu
             + $"path={result.LocalVideoPath}");
     }
 
-    private Task StartSendCoverMessageAsync(IncomingMessage message, DouyinParseResult result)
+    private Task StartSendCoverMessageAsync(
+        IncomingMessage message,
+        DouyinParseResult result,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(result.CoverUrl))
         {
             return Task.CompletedTask;
         }
 
-        return _hostServices.RunLoggedBackgroundAsync($"抖音封面卡片异步发送: aweme_id={result.AwemeId}", () => SendCoverMessageAsync(message, result));
+        return _hostServices.RunLoggedBackgroundAsync(
+            $"抖音封面卡片异步发送: aweme_id={result.AwemeId}",
+            () => SendCoverMessageAsync(message, result, cancellationToken));
     }
 
     private async Task SendVideoMessageAsync(IncomingMessage message, DouyinParseResult result, VideoOutgoingSegment videoSegment)
@@ -144,37 +162,17 @@ private async Task<VideoOutgoingSegment?> BuildVideoSegmentAsync(DouyinParseResu
         var uriMode = _hostServices.GetUriMode(videoSegment.Uri);
         BotLog.Info($"MyParser VideoSegment 发送开始: aweme_id={result.AwemeId}, scene={GetMessageScene(message)}, uri_mode={uriMode}, segments={segments.Length}, uri_preview={_hostServices.PreviewUri(videoSegment.Uri)}");
 
-        switch (message)
-        {
-            case GroupIncomingMessage group:
-            {
-                var response = await _context.Message.SendGroupMessageAsync(group.Group.GroupId, segments);
-                BotLog.Info($"MyParser VideoSegment 发送接口完成: aweme_id={result.AwemeId}, scene=group, group_id={group.Group.GroupId}, message_seq={response.MessageSeq}, time={response.Time}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                EnsureVideoSendAccepted(response.MessageSeq, "group");
-                break;
-            }
-            case FriendIncomingMessage friend:
-            {
-                var response = await _context.Message.SendPrivateMessageAsync(friend.SenderId, segments);
-                BotLog.Info($"MyParser VideoSegment 发送接口完成: aweme_id={result.AwemeId}, scene=friend, user_id={friend.SenderId}, message_seq={response.MessageSeq}, time={response.Time}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                EnsureVideoSendAccepted(response.MessageSeq, "friend");
-                break;
-            }
-            default:
-            {
-                var response = await _context.Message.ReplyAsync(message, segments);
-                BotLog.Info($"MyParser VideoSegment 发送接口完成: aweme_id={result.AwemeId}, scene=reply, message_seq={response.MessageSeq}, time={response.Time}, elapsed={stopwatch.Elapsed:mm\\:ss}");
-                EnsureVideoSendAccepted(response.MessageSeq, "reply");
-                break;
-            }
-        }
+        var response = await _context.Message.ReplyAsync(message, segments);
+        var scene = GetMessageScene(message);
+        BotLog.Info($"MyParser VideoSegment 发送接口完成: aweme_id={result.AwemeId}, scene={scene}, message_id={response.MessageId}, time={response.Timestamp}, elapsed={stopwatch.Elapsed:mm\\:ss}");
+        EnsureVideoSendAccepted(response.MessageId, scene);
     }
 
-    private void EnsureVideoSendAccepted(long messageSeq, string scene)
+    private void EnsureVideoSendAccepted(string messageId, string scene)
     {
-        if (messageSeq <= 0)
+        if (string.IsNullOrWhiteSpace(messageId))
         {
-            BotLog.Warning($"MyParser VideoSegment 发送返回 message_seq={messageSeq}，当前 ShiroBot/适配器可能不返回有效消息序号；不再按失败处理。scene={scene}");
+            BotLog.Warning($"MyParser VideoSegment 发送返回空 message_id，当前 ShiroBot/适配器可能不返回有效消息 ID；不再按失败处理。scene={scene}");
         }
     }
 }
