@@ -8,6 +8,7 @@
         <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
         <LocalSharpMp4Root>$(MSBuildProjectDirectory)\..\SharpMP4\src</LocalSharpMp4Root>
         <HostPluginDir>..\..\ShiroBot\ShiroBot\bin\Debug\$(TargetFramework)\plugins\$(AssemblyName)\</HostPluginDir>
+        <ShiroBotPluginSharedAssemblies>ShiroBot.Model.QQ</ShiroBotPluginSharedAssemblies>
     </PropertyGroup>
 
     <ItemGroup>
@@ -18,6 +19,10 @@
         <PackageReference Include="NLayer" />
         <PackageReference Include="SilkCodec.NET" />
     </ItemGroup>
+
+    <!-- ProjectReference does not import NuGet buildTransitive assets. -->
+    <Import Project="..\..\ShiroBot\ShiroBot.SDK\buildTransitive\ShiroBot.SDK.props" />
+    <Import Project="..\..\ShiroBot\ShiroBot.SDK\buildTransitive\ShiroBot.SDK.targets" />
 
     <ItemGroup>
         <ProjectReference Include="..\MyParser.Sharing\MyParser.Sharing.csproj" />
