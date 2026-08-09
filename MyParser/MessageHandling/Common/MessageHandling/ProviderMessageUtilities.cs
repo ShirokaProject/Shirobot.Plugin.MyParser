@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using ShiroBot.Qq.Model;
+using ShiroBot.Model.QQ;
 using ShiroBot.SDK.Abstractions;
 using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Plugin;
@@ -124,7 +124,7 @@ internal static class ProviderMessageUtilities
             throw new InvalidOperationException("本地文件不存在。");
         }
 
-        var fileApi = context.GetAdapterExtension<IQqFileApi>()
+        var fileApi = context.GetAdapterExtension<IQFileApi>()
                       ?? throw new NotSupportedException("当前适配器不支持 QQ 文件上传扩展。");
         if (!long.TryParse(message.Channel.Id, out var peerId))
         {
@@ -173,7 +173,7 @@ internal static class ProviderMessageUtilities
     private static bool TryGetQqGroupMessage(
         IBotContext context,
         IncomingMessage message,
-        out IQqGroupApi groupApi,
+        out IQGroupApi groupApi,
         out long groupId,
         out long messageSeq)
     {
@@ -187,7 +187,7 @@ internal static class ProviderMessageUtilities
             return false;
         }
 
-        groupApi = context.GetAdapterExtension<IQqGroupApi>()!;
+        groupApi = context.GetAdapterExtension<IQGroupApi>()!;
         return groupApi is not null;
     }
 

@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using MyParser.Provider.NetEaseCloudMusic.Parsing;
-using ShiroBot.Qq.Model;
+using ShiroBot.Model.QQ;
 using ShiroBot.SDK.Abstractions;
 using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Plugin;
@@ -28,7 +28,7 @@ internal static partial class NetEaseLightAppUrlExtractor
         return null;
     }
 
-    private static string? ExtractParseText(QqLightAppIncoming app)
+    private static string? ExtractParseText(QIncomingLightApp app)
     {
         if (string.IsNullOrWhiteSpace(app.JsonPayload)) return null;
 
@@ -145,10 +145,10 @@ internal static partial class NetEaseLightAppUrlExtractor
         }
     }
 
-    private static IEnumerable<QqLightAppIncoming> GetLightAppSegments(IncomingMessage message) =>
-        message.Raw is QqIncomingMessage qqMessage
-            ? qqMessage.Segments.OfType<QqLightAppIncoming>()
-            : message.Segments.OfType<RawSegment>().Select(segment => segment.Payload).OfType<QqLightAppIncoming>();
+    private static IEnumerable<QIncomingLightApp> GetLightAppSegments(IncomingMessage message) =>
+        message.Raw is QIncomingMessage qqMessage
+            ? qqMessage.Segments.OfType<QIncomingLightApp>()
+            : message.Segments.OfType<RawSegment>().Select(segment => segment.Payload).OfType<QIncomingLightApp>();
 
     [GeneratedRegex(@"https?://[^\s<>""']+", RegexOptions.IgnoreCase)]
     private static partial Regex HttpUrlRegex();

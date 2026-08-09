@@ -7,14 +7,12 @@
         <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
         <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
         <LocalSharpMp4Root>$(MSBuildProjectDirectory)\..\SharpMP4\src</LocalSharpMp4Root>
-        <!--        在此处配置你的宿主插件目录-->
-        <HostPluginDir>..\ShiroBot\plugins\$(AssemblyName)\</HostPluginDir>
+        <HostPluginDir>..\..\ShiroBot\ShiroBot\bin\Debug\$(TargetFramework)\plugins\$(AssemblyName)\</HostPluginDir>
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\..\..\RiderProjects\ShiroBot\ShiroBot.AvaloniaSdk\ShiroBot.AvaloniaSdk.csproj" />
-        <ProjectReference Include="..\..\..\..\RiderProjects\ShiroBot\ShiroBot.SDK\ShiroBot.SDK.csproj" />
-        <ProjectReference Include="..\..\..\..\RiderProjects\ShiroBot\ShiroBot.Qq.Model\ShiroBot.Qq.Model.csproj" />
+        <ProjectReference Include="..\..\ShiroBot\ShiroBot.SDK\ShiroBot.SDK.csproj" />
+        <ProjectReference Include="..\..\ShiroBot\ShiroBot.Model.QQ\ShiroBot.Model.QQ.csproj" />
         <PackageReference Include="Net.Codecrete.QrCodeGenerator" />
         <PackageReference Include="LightDl" />
         <PackageReference Include="NLayer" />
@@ -44,14 +42,6 @@
                       Link="Providers\%(RecursiveDir)%(Filename)%(Extension)" />
     </ItemGroup>
 
-    <!-- ShiroBot.SDK 0.7.1 overwrites the compiler output with its bundle. Recreate a clean
-         compiler output before publishing so incremental publishes do not merge recursively. -->
-    <Target Name="ResetShiroBotPluginBundleBeforePublish"
-            BeforeTargets="CoreCompile"
-            Condition="'$(_IsPublishing)' == 'true'">
-        <Delete Files="$(IntermediateOutputPath)$(TargetFileName);$(IntermediateOutputPath)shirobot-bundle\$(TargetFileName)" />
-    </Target>
-
     <Target Name="BuildLocalSharpMp4" BeforeTargets="ResolveAssemblyReferences">
         <MSBuild Projects="$(LocalSharpMp4Root)\SharpMP4\SharpMP4.csproj"
                  Targets="Restore;Build"
@@ -65,9 +55,9 @@
 
         <ItemGroup>
             <PluginDebugOutput Include="$(TargetDir)**\*"
-                               Exclude="$(TargetDir)myparser-provider-*.dll;$(TargetDir)myparser-provider-*.pdb;$(TargetDir)Avalonia*.dll;$(TargetDir)Avalonia*.pdb;$(TargetDir)HarfBuzzSharp.dll;$(TargetDir)HarfBuzzSharp.pdb;$(TargetDir)MicroCom.Runtime.dll;$(TargetDir)MicroCom.Runtime.pdb;$(TargetDir)SkiaSharp.dll;$(TargetDir)SkiaSharp.pdb;$(TargetDir)runtimes\**\*;$(TargetDir)$(AssemblyName).exe;$(TargetDir)$(AssemblyName).runtimeconfig.json;$(TargetDir)ShiroBot.AvaloniaSdk.dll;$(TargetDir)ShiroBot.AvaloniaSdk.pdb;$(TargetDir)ShiroBot.SDK.dll;$(TargetDir)ShiroBot.SDK.pdb" />
+                               Exclude="$(TargetDir)myparser-provider-*.dll;$(TargetDir)myparser-provider-*.pdb;$(TargetDir)Avalonia*.dll;$(TargetDir)Avalonia*.pdb;$(TargetDir)HarfBuzzSharp.dll;$(TargetDir)HarfBuzzSharp.pdb;$(TargetDir)MicroCom.Runtime.dll;$(TargetDir)MicroCom.Runtime.pdb;$(TargetDir)SkiaSharp.dll;$(TargetDir)SkiaSharp.pdb;$(TargetDir)runtimes\**\*;$(TargetDir)$(AssemblyName).exe;$(TargetDir)$(AssemblyName).runtimeconfig.json;$(TargetDir)ShiroBot.SDK.dll;$(TargetDir)ShiroBot.SDK.pdb;$(TargetDir)ShiroBot.Model.QQ.dll;$(TargetDir)ShiroBot.Model.QQ.pdb" />
             <PluginDebugNativeOutput Include="$(TargetDir)runtimes\win-x64\native\silkcodec.dll" Condition="Exists('$(TargetDir)runtimes\win-x64\native\silkcodec.dll')" />
-            <PluginPreviewOnlyOutput Include="$(HostPluginDir)Avalonia*.dll;$(HostPluginDir)Avalonia*.pdb;$(HostPluginDir)HarfBuzzSharp.dll;$(HostPluginDir)HarfBuzzSharp.pdb;$(HostPluginDir)MicroCom.Runtime.dll;$(HostPluginDir)MicroCom.Runtime.pdb;$(HostPluginDir)SkiaSharp.dll;$(HostPluginDir)SkiaSharp.pdb;$(HostPluginDir)ShiroBot.AvaloniaSdk.dll;$(HostPluginDir)ShiroBot.AvaloniaSdk.pdb;$(HostPluginDir)ShiroBot.SDK.dll;$(HostPluginDir)ShiroBot.SDK.pdb;$(HostPluginDir)$(AssemblyName).exe;$(HostPluginDir)$(AssemblyName).runtimeconfig.json;$(HostPluginDir)runtimes\**\*" />
+            <PluginPreviewOnlyOutput Include="$(HostPluginDir)Avalonia*.dll;$(HostPluginDir)Avalonia*.pdb;$(HostPluginDir)HarfBuzzSharp.dll;$(HostPluginDir)HarfBuzzSharp.pdb;$(HostPluginDir)MicroCom.Runtime.dll;$(HostPluginDir)MicroCom.Runtime.pdb;$(HostPluginDir)SkiaSharp.dll;$(HostPluginDir)SkiaSharp.pdb;$(HostPluginDir)ShiroBot.SDK.dll;$(HostPluginDir)ShiroBot.SDK.pdb;$(HostPluginDir)ShiroBot.Model.QQ.dll;$(HostPluginDir)ShiroBot.Model.QQ.pdb;$(HostPluginDir)$(AssemblyName).exe;$(HostPluginDir)$(AssemblyName).runtimeconfig.json;$(HostPluginDir)runtimes\**\*" />
             <PluginLegacyProviderOutput Include="$(HostPluginDir)provider\myparser-provider-*.dll;$(HostPluginDir)provider\myparser-provider-*.pdb" />
         </ItemGroup>
 

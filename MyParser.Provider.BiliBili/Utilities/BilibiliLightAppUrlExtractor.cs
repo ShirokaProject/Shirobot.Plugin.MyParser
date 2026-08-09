@@ -1,6 +1,6 @@
 using System.Text.Json;
 using ShiroBot.SDK.Models;
-using ShiroBot.Qq.Model;
+using ShiroBot.Model.QQ;
 
 namespace MyParser.Provider.BiliBili.Utilities;
 
@@ -18,7 +18,7 @@ internal static partial class BilibiliLightAppUrlExtractor
         return parts.Count == 0 ? null : string.Join(' ', parts.Where(i => !string.IsNullOrWhiteSpace(i)));
     }
 
-    private static IEnumerable<string> ExtractBilibiliUrls(QqLightAppIncoming app)
+    private static IEnumerable<string> ExtractBilibiliUrls(QIncomingLightApp app)
     {
         if (string.IsNullOrWhiteSpace(app.JsonPayload))
         {
@@ -112,8 +112,8 @@ internal static partial class BilibiliLightAppUrlExtractor
     private static IEnumerable<string> GetTextSegments(IncomingMessage message) =>
         message.Segments.OfType<TextSegment>().Select(i => i.Text);
 
-    private static IEnumerable<QqLightAppIncoming> GetLightAppSegments(IncomingMessage message) =>
-        message.Raw is QqIncomingMessage qqMessage
-            ? qqMessage.Segments.OfType<QqLightAppIncoming>()
-            : message.Segments.OfType<RawSegment>().Select(segment => segment.Payload).OfType<QqLightAppIncoming>();
+    private static IEnumerable<QIncomingLightApp> GetLightAppSegments(IncomingMessage message) =>
+        message.Raw is QIncomingMessage qqMessage
+            ? qqMessage.Segments.OfType<QIncomingLightApp>()
+            : message.Segments.OfType<RawSegment>().Select(segment => segment.Payload).OfType<QIncomingLightApp>();
 }

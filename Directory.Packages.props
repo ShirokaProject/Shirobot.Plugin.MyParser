@@ -3,8 +3,6 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <ItemGroup>
-    <PackageVersion Include="ShiroBot.SDK" Version="0.7.1" />
-    <PackageVersion Include="ShiroBot.AvaloniaSdk" Version="0.7.1" />
     <PackageVersion Include="Net.Codecrete.QrCodeGenerator" Version="3.0.0" />
     <PackageVersion Include="LightDl" Version="0.3.0" />
     <PackageVersion Include="NLayer" Version="2.0.1" />

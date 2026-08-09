@@ -2,7 +2,7 @@ using System.Text.Json;
 using MyParser.Provider.Heybox.Parsing;
 using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Abstractions;
-using ShiroBot.Qq.Model;
+using ShiroBot.Model.QQ;
 
 namespace MyParser.Provider.Heybox.Utilities;
 
@@ -23,7 +23,7 @@ internal static partial class HeyboxLightAppUrlExtractor
         return parts.Count == 0 ? null : string.Join(' ', parts.Where(i => !string.IsNullOrWhiteSpace(i)));
     }
 
-    private static IEnumerable<string> ExtractHeyboxUrls(QqLightAppIncoming app)
+    private static IEnumerable<string> ExtractHeyboxUrls(QIncomingLightApp app)
     {
         if (string.IsNullOrWhiteSpace(app.JsonPayload))
         {
@@ -52,7 +52,7 @@ internal static partial class HeyboxLightAppUrlExtractor
         }
     }
 
-    private static void LogLightAppSummary(QqLightAppIncoming app)
+    private static void LogLightAppSummary(QIncomingLightApp app)
     {
         try
         {
@@ -212,8 +212,8 @@ internal static partial class HeyboxLightAppUrlExtractor
     private static IEnumerable<string> GetTextSegments(IncomingMessage message) =>
         message.Segments.OfType<TextSegment>().Select(i => i.Text);
 
-    private static IEnumerable<QqLightAppIncoming> GetLightAppSegments(IncomingMessage message) =>
-        message.Raw is QqIncomingMessage qqMessage
-            ? qqMessage.Segments.OfType<QqLightAppIncoming>()
-            : message.Segments.OfType<RawSegment>().Select(segment => segment.Payload).OfType<QqLightAppIncoming>();
+    private static IEnumerable<QIncomingLightApp> GetLightAppSegments(IncomingMessage message) =>
+        message.Raw is QIncomingMessage qqMessage
+            ? qqMessage.Segments.OfType<QIncomingLightApp>()
+            : message.Segments.OfType<RawSegment>().Select(segment => segment.Payload).OfType<QIncomingLightApp>();
 }

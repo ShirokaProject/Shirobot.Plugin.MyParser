@@ -1,5 +1,5 @@
 using ShiroBot.SDK.Models;
-using ShiroBot.Qq.Model;
+using ShiroBot.Model.QQ;
 
 namespace Shirobot.Plugin.MyParser.Sdk
 {
@@ -20,11 +20,11 @@ internal static class ForwardMessageMapper
 {
     public static RawSegment ToRawSegment(ForwardOutgoingSegment forward)
     {
-        var messages = forward.Messages.Select(message => new QqForwardedMessage(
+        var messages = forward.Messages.Select(message => new QForwardedMessage(
             message.SenderId,
             message.SenderName,
             message.Segments.Select(ToQqOutgoing).ToArray())).ToArray();
-        var qqForward = new QqForwardOutgoing(messages)
+        var qqForward = new QOutgoingForward(messages)
         {
             Title = forward.Title,
             Preview = forward.Preview,
@@ -34,33 +34,33 @@ internal static class ForwardMessageMapper
         return new RawSegment("qq", "forward", qqForward);
     }
 
-    private static QqOutgoingSegment ToQqOutgoing(MessageSegment segment) => segment switch
+    private static QOutgoingSegment ToQqOutgoing(MessageSegment segment) => segment switch
     {
-        TextSegment text => new QqTextOutgoing(text.Text),
-        MentionSegment mention when long.TryParse(mention.UserId, out var userId) => new QqMentionOutgoing(userId),
-        MentionAllSegment => new QqMentionAllOutgoing(),
-        QuoteSegment quote when long.TryParse(quote.MessageId, out var messageId) => new QqReplyOutgoing(messageId),
-        EmojiSegment emoji => new QqFaceOutgoing(emoji.Id),
-        ImageSegment image => new QqImageOutgoing(image.Uri) { Summary = image.Summary },
-        AudioSegment audio => new QqRecordOutgoing(audio.Uri),
-        VideoSegment video => new QqVideoOutgoing(video.Uri) { ThumbUri = video.ThumbnailUri },
-        RawSegment { Payload: QqOutgoingSegment outgoing } => outgoing,
+        TextSegment text => new QOutgoingText(text.Text),
+        MentionSegment mention when long.TryParse(mention.UserId, out var userId) => new QOutgoingMention(userId),
+        MentionAllSegment => new QOutgoingMentionAll(),
+        QuoteSegment quote when long.TryParse(quote.MessageId, out var messageId) => new QOutgoingReply(messageId),
+        EmojiSegment emoji => new QOutgoingFace(emoji.Id),
+        ImageSegment image => new QOutgoingImage(image.Uri) { Summary = image.Summary },
+        AudioSegment audio => new QOutgoingRecord(audio.Uri),
+        VideoSegment video => new QOutgoingVideo(video.Uri) { ThumbUri = video.ThumbnailUri },
+        RawSegment { Payload: QOutgoingSegment outgoing } => outgoing,
         _ => throw new NotSupportedException($"合并转发节点不支持 {segment.GetType().Name}。"),
     };
 }
 
 public static class MessageEventQqExtensions
 {
-    public static QqReplyIncoming? GetQqReply(this MessageEvent message) =>
-        message.Raw is QqIncomingMessage qqMessage
-            ? qqMessage.Segments.OfType<QqReplyIncoming>().FirstOrDefault()
+    public static QIncomingReply? GetQqReply(this MessageEvent message) =>
+        message.Raw is QIncomingMessage qqMessage
+            ? qqMessage.Segments.OfType<QIncomingReply>().FirstOrDefault()
             : message.Segments.OfType<RawSegment>()
                 .Select(segment => segment.Payload)
-                .OfType<QqReplyIncoming>()
+                .OfType<QIncomingReply>()
                 .FirstOrDefault();
 
-    public static string GetPlainText(this QqReplyIncoming reply) =>
-        string.Concat(reply.Segments.OfType<QqTextIncoming>().Select(segment => segment.Text));
+    public static string GetPlainText(this QIncomingReply reply) =>
+        string.Concat(reply.Segments.OfType<QIncomingText>().Select(segment => segment.Text));
 }
 }
 

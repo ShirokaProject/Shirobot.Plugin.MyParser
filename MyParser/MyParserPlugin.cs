@@ -8,7 +8,7 @@ using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Abstractions;
 using ShiroBot.SDK.Core;
 using ShiroBot.SDK.Plugin;
-using ShiroBot.Qq.Model;
+using ShiroBot.Model.QQ;
 
 namespace Shirobot.Plugin.MyParser;
 
@@ -58,8 +58,8 @@ public sealed class MyParserPlugin : PluginBase
     protected override void ConfigureRoutes()
     {
         Events.Map<MessageDeletedEvent>(HandleMessageDeletedAsync);
-        Events.MapPlatform(QqEventKinds.GroupMute, HandleGroupMuteAsync);
-        Events.MapPlatform(QqEventKinds.GroupWholeMute, HandleGroupWholeMuteAsync);
+        Events.MapPlatform(QEventKinds.GroupMute, HandleGroupMuteAsync);
+        Events.MapPlatform(QEventKinds.GroupWholeMute, HandleGroupWholeMuteAsync);
     }
 
     protected override async Task LoadAsync()
@@ -1006,7 +1006,7 @@ public sealed class MyParserPlugin : PluginBase
 
     private Task HandleGroupMuteAsync(PlatformEvent evt)
     {
-        if (evt.Raw is not QqGroupMute mute || evt.Channel is null)
+        if (evt.Raw is not QGroupMute mute || evt.Channel is null)
         {
             return Task.CompletedTask;
         }
@@ -1051,7 +1051,7 @@ public sealed class MyParserPlugin : PluginBase
 
     private Task HandleGroupWholeMuteAsync(PlatformEvent evt)
     {
-        if (evt.Raw is QqGroupWholeMute wholeMute && evt.Channel is not null)
+        if (evt.Raw is QGroupWholeMute wholeMute && evt.Channel is not null)
         {
             var channelKey = ChannelTaskKey.From(evt.Platform, evt.Channel);
             if (wholeMute.IsMute)
