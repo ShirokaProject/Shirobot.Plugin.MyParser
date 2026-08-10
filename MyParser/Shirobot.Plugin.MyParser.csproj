@@ -59,14 +59,12 @@
         <MakeDir Directories="$(HostPluginDir)" />
 
         <ItemGroup>
-            <PluginDebugOutput Include="$(TargetDir)**\*"
-                               Exclude="$(TargetDir)myparser-provider-*.dll;$(TargetDir)myparser-provider-*.pdb;$(TargetDir)Avalonia*.dll;$(TargetDir)Avalonia*.pdb;$(TargetDir)HarfBuzzSharp.dll;$(TargetDir)HarfBuzzSharp.pdb;$(TargetDir)MicroCom.Runtime.dll;$(TargetDir)MicroCom.Runtime.pdb;$(TargetDir)SkiaSharp.dll;$(TargetDir)SkiaSharp.pdb;$(TargetDir)runtimes\**\*;$(TargetDir)$(AssemblyName).exe;$(TargetDir)$(AssemblyName).runtimeconfig.json;$(TargetDir)ShiroBot.SDK.dll;$(TargetDir)ShiroBot.SDK.pdb;$(TargetDir)ShiroBot.Model.QQ.dll;$(TargetDir)ShiroBot.Model.QQ.pdb" />
-            <PluginDebugNativeOutput Include="$(TargetDir)runtimes\win-x64\native\silkcodec.dll" Condition="Exists('$(TargetDir)runtimes\win-x64\native\silkcodec.dll')" />
-            <PluginPreviewOnlyOutput Include="$(HostPluginDir)Avalonia*.dll;$(HostPluginDir)Avalonia*.pdb;$(HostPluginDir)HarfBuzzSharp.dll;$(HostPluginDir)HarfBuzzSharp.pdb;$(HostPluginDir)MicroCom.Runtime.dll;$(HostPluginDir)MicroCom.Runtime.pdb;$(HostPluginDir)SkiaSharp.dll;$(HostPluginDir)SkiaSharp.pdb;$(HostPluginDir)ShiroBot.SDK.dll;$(HostPluginDir)ShiroBot.SDK.pdb;$(HostPluginDir)ShiroBot.Model.QQ.dll;$(HostPluginDir)ShiroBot.Model.QQ.pdb;$(HostPluginDir)$(AssemblyName).exe;$(HostPluginDir)$(AssemblyName).runtimeconfig.json;$(HostPluginDir)runtimes\**\*" />
+            <PluginDebugOutput Include="$(TargetPath)" />
+            <PluginManagedOutput Include="$(HostPluginDir)**\*.dll;$(HostPluginDir)**\*.pdb;$(HostPluginDir)**\*.deps.json" />
             <PluginLegacyProviderOutput Include="$(HostPluginDir)provider\myparser-provider-*.dll;$(HostPluginDir)provider\myparser-provider-*.pdb" />
         </ItemGroup>
 
-        <Delete Files="@(PluginPreviewOnlyOutput)" />
+        <Delete Files="@(PluginManagedOutput)" />
         <Delete Files="@(PluginLegacyProviderOutput)" ContinueOnError="WarnAndContinue" />
         <RemoveDir Directories="$(HostPluginDir)runtimes" />
 

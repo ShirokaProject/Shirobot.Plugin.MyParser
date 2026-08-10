@@ -72,9 +72,34 @@ public static class MyParserMessageContextExtensions
     public static Task<SentMessage> ReplyAsync(
         this IMessageContext context,
         MessageEvent message,
-        Shirobot.Plugin.MyParser.Sdk.ForwardOutgoingSegment forward) =>
-        context.SendMessageAsync(
-            message.Channel,
-            [Shirobot.Plugin.MyParser.Sdk.ForwardMessageMapper.ToRawSegment(forward)]);
+        Shirobot.Plugin.MyParser.Sdk.ForwardOutgoingSegment forward)
+    {
+        if (string.Equals(message.Platform, "qq", StringComparison.OrdinalIgnoreCase))
+        {
+            return context.SendMessageAsync(
+                message.Channel,
+                [Shirobot.Plugin.MyParser.Sdk.ForwardMessageMapper.ToRawSegment(forward)]);
+        }
+
+        // Platforms without QQ's native forward format receive the same nodes as ordinary messages.
+        var segments = new List<MessageSegment>();
+        if (!string.IsNullOrWhiteSpace(forward.Title))
+        {
+            segments.Add(new TextSegment(forward.Title + "\n"));
+        }
+
+        foreach (var node in forward.Messages)
+        {
+            if (!string.IsNullOrWhiteSpace(node.SenderName))
+            {
+                segments.Add(new TextSegment($"[{node.SenderName}] "));
+            }
+
+            segments.AddRange(node.Segments);
+            segments.Add(new TextSegment("\n"));
+        }
+
+        return context.SendMessageAsync(message.Channel, segments);
+    }
 }
 }
