@@ -24,7 +24,7 @@
         <ProjectReference Include="..\ShiroBot.AvaloniaSdk\ShiroBot.AvaloniaSdk.csproj">
             <Private>false</Private>
         </ProjectReference>
-        <ProjectReference Include="..\ShiroBot.Qq.Model\ShiroBot.Qq.Model.csproj">
+        <ProjectReference Include="..\ShiroBot.QQ\ShiroBot.QQ.csproj">
             <Private>false</Private>
         </ProjectReference>
     </ItemGroup>

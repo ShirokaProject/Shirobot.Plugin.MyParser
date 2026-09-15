@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using Net.Codecrete.QrCodeGenerator;
-using ShiroBot.Qq.Model;
+using ShiroBot.QQ;
 using ShiroBot.SDK.Models;
 using Shirobot.Plugin.MyParser.Parsing;
 using Shirobot.Plugin.MyParser.Providers.Bilibili.Facade;

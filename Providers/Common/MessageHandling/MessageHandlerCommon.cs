@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.Collections.Concurrent;
-using ShiroBot.Qq.Model;
+using ShiroBot.QQ;
 using ShiroBot.SDK.Abstractions;
 using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Plugin;
@@ -73,14 +73,14 @@ internal static class MessageHandlerCommon
     private static bool TryGetQqGroupReactionTarget(
         IBotContext context,
         MessageEvent message,
-        out IQqGroupApi groupApi,
+        out IQGroupApi groupApi,
         out long groupId,
         out long messageSeq)
     {
         groupApi = null!;
         groupId = 0;
         messageSeq = 0;
-        var api = context.GetAdapterExtension<IQqGroupApi>();
+        var api = context.GetAdapterExtension<IQGroupApi>();
         if (api is null
             || !long.TryParse(message.Channel.Id, out groupId)
             || !long.TryParse(message.MessageId, out messageSeq))
@@ -163,7 +163,7 @@ internal static class MessageHandlerCommon
 
         BotLog.Info($"MyParser {platformName} 文件上传开始: media_id={mediaId}, mode={uploadMode}, file_mb={fileSize / 1024d / 1024d:F2}, file={localPath}");
 
-        var fileApi = context.GetAdapterExtension<IQqFileApi>();
+        var fileApi = context.GetAdapterExtension<IQFileApi>();
         if (fileApi is null || !long.TryParse(message.Channel.Id, out var peerId))
         {
             throw new NotSupportedException("当前平台/消息类型不支持文件上传。");
@@ -196,13 +196,13 @@ internal static class MessageHandlerCommon
 
     /// <summary>把 QQ 合并转发内容包装为可经通用发送接口透传的 RawSegment。</summary>
     public static RawSegment BuildForwardSegment(
-        IReadOnlyList<QqForwardedMessage> messages,
+        IReadOnlyList<QForwardedMessage> messages,
         string? title,
         IReadOnlyList<string>? preview,
         string? summary,
         string? prompt)
     {
-        return new RawSegment("qq", "forward", new QqForwardOutgoing(messages)
+        return new RawSegment("qq", "forward", new QOutgoingForward(messages)
         {
             Title = title,
             Preview = preview,

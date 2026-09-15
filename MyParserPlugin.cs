@@ -721,15 +721,15 @@ public sealed class MyParserPlugin : PluginBase
         }
 
         // 新 SDK 的 QuoteSegment 不携带被回复消息内容；QQ 平台从 Raw 原始消息里的
-        // QqReplyIncoming 拿被回复消息的文本段（保持旧 GetReply() 的同步语义）。
-        var reply = (message.Raw as ShiroBot.Qq.Model.QqIncomingMessage)?
-            .Segments.OfType<ShiroBot.Qq.Model.QqReplyIncoming>().FirstOrDefault();
+        // QIncomingReply 拿被回复消息的文本段（保持旧 GetReply() 的同步语义）。
+        var reply = (message.Raw as ShiroBot.QQ.QIncomingMessage)?
+            .Segments.OfType<ShiroBot.QQ.QIncomingReply>().FirstOrDefault();
         if (reply is null)
         {
             return false;
         }
 
-        var repliedText = string.Concat(reply.Segments.OfType<ShiroBot.Qq.Model.QqTextIncoming>().Select(i => i.Text)).Trim();
+        var repliedText = string.Concat(reply.Segments.OfType<ShiroBot.QQ.QIncomingText>().Select(i => i.Text)).Trim();
         if (!IsBilibiliPageTemplateLink(repliedText))
         {
             return false;

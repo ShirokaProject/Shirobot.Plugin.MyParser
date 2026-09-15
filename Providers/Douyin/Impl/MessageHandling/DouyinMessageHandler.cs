@@ -11,7 +11,7 @@ using System.Text;
 using ShiroBot.AvaloniaSdk;
 using Shirobot.Plugin.MyParser.Parsing;
 using Shirobot.Plugin.MyParser.Providers.Common.MessageHandling;
-using ShiroBot.Qq.Model;
+using ShiroBot.QQ;
 using ShiroBot.SDK.Abstractions;
 using ShiroBot.SDK.Core;
 using ShiroBot.SDK.Models;
@@ -343,7 +343,7 @@ private async Task SendGalleryMessageAsync(MessageEvent message, DouyinParseResu
             return;
         }
 
-        var forwardedMessages = new List<QqForwardedMessage>();
+        var forwardedMessages = new List<QForwardedMessage>();
         var senderId = GetBotOrSenderId(message);
         var senderName = string.IsNullOrWhiteSpace(result.AuthorName) ? "抖音图文" : result.AuthorName!;
 
@@ -359,7 +359,7 @@ private async Task SendGalleryMessageAsync(MessageEvent message, DouyinParseResu
                 continue;
             }
 
-            forwardedMessages.Add(new QqForwardedMessage(senderId, senderName, [new QqImageOutgoing(imageFile.Uri)]));
+            forwardedMessages.Add(new QForwardedMessage(senderId, senderName, [new QOutgoingImage(imageFile.Uri)]));
         }
 
         if (forwardedMessages.Count == 0)

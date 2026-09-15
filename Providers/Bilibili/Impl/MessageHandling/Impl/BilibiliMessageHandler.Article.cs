@@ -7,7 +7,7 @@ using Shirobot.Plugin.MyParser.Providers.Bilibili.Models;
 using Shirobot.Plugin.MyParser.Providers.Bilibili.ViewModels;
 using Shirobot.Plugin.MyParser.Providers.Bilibili.Views;
 using Shirobot.Plugin.MyParser.Utility;
-using ShiroBot.Qq.Model;
+using ShiroBot.QQ;
 using ShiroBot.SDK.Abstractions;
 using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Plugin;
@@ -20,9 +20,9 @@ private async Task SendArticleForwardAsync(MessageEvent message, BilibiliArticle
     {
         var senderId = GetBotOrSenderId(message);
         var senderName = string.IsNullOrWhiteSpace(result.AuthorName) ? GetArticleKindText(result) : result.AuthorName!;
-        var forwarded = new List<QqForwardedMessage>();
+        var forwarded = new List<QForwardedMessage>();
 
-        forwarded.Add(new QqForwardedMessage(senderId, senderName, [new QqTextOutgoing(BuildArticleHeaderText(result))]));
+        forwarded.Add(new QForwardedMessage(senderId, senderName, [new QOutgoingText(BuildArticleHeaderText(result))]));
 
         var forwardBlocks = BuildForwardBlocks(result).ToArray();
         var imageBlocks = forwardBlocks
@@ -43,13 +43,13 @@ private async Task SendArticleForwardAsync(MessageEvent message, BilibiliArticle
             {
                 if (imageBySourceIndex.TryGetValue(sourceIndex, out var image) && !string.IsNullOrWhiteSpace(image.Uri))
                 {
-                    var segments = new List<QqOutgoingSegment> { new QqImageOutgoing(image.Uri) };
+                    var segments = new List<QOutgoingSegment> { new QOutgoingImage(image.Uri) };
                     if (!string.IsNullOrWhiteSpace(block.Caption))
                     {
-                        segments.Add(new QqTextOutgoing(block.Caption));
+                        segments.Add(new QOutgoingText(block.Caption));
                     }
 
-                    forwarded.Add(new QqForwardedMessage(senderId, senderName, segments));
+                    forwarded.Add(new QForwardedMessage(senderId, senderName, segments));
                 }
 
                 continue;
@@ -62,13 +62,13 @@ private async Task SendArticleForwardAsync(MessageEvent message, BilibiliArticle
 
             foreach (var chunk in SplitText(block.Text, 1200))
             {
-                forwarded.Add(new QqForwardedMessage(senderId, senderName, [new QqTextOutgoing(chunk)]));
+                forwarded.Add(new QForwardedMessage(senderId, senderName, [new QOutgoingText(chunk)]));
             }
         }
 
         if (!string.IsNullOrWhiteSpace(result.SourceUrl))
         {
-            forwarded.Add(new QqForwardedMessage(senderId, senderName, [new QqTextOutgoing("原文：" + result.SourceUrl)]));
+            forwarded.Add(new QForwardedMessage(senderId, senderName, [new QOutgoingText("原文：" + result.SourceUrl)]));
         }
 
         if (forwarded.Count == 0)

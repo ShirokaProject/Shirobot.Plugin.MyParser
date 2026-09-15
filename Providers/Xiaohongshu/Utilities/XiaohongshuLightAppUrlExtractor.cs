@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Shirobot.Plugin.MyParser.Providers.Xiaohongshu.Facade;
-using ShiroBot.Qq.Model;
+using ShiroBot.QQ;
 using ShiroBot.SDK.Abstractions;
 using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Plugin;
@@ -23,7 +23,7 @@ internal static partial class XiaohongshuLightAppUrlExtractor
         return parts.Count == 0 ? null : string.Join(' ', parts.Where(i => !string.IsNullOrWhiteSpace(i)));
     }
 
-    private static IEnumerable<string> ExtractXiaohongshuUrls(QqLightAppIncoming app)
+    private static IEnumerable<string> ExtractXiaohongshuUrls(QIncomingLightApp app)
     {
         if (string.IsNullOrWhiteSpace(app.JsonPayload))
         {
@@ -52,7 +52,7 @@ internal static partial class XiaohongshuLightAppUrlExtractor
         }
     }
 
-    private static void LogLightAppSummary(QqLightAppIncoming app)
+    private static void LogLightAppSummary(QIncomingLightApp app)
     {
         try
         {
@@ -212,11 +212,11 @@ internal static partial class XiaohongshuLightAppUrlExtractor
     private static IEnumerable<string> GetTextSegments(MessageEvent message) =>
         message.Segments.OfType<TextSegment>().Select(i => i.Text);
 
-    private static IEnumerable<QqLightAppIncoming> GetLightAppSegments(MessageEvent message) =>
+    private static IEnumerable<QIncomingLightApp> GetLightAppSegments(MessageEvent message) =>
         message.Segments
             .OfType<RawSegment>()
             .Select(segment => segment.Payload)
-            .OfType<QqLightAppIncoming>();
+            .OfType<QIncomingLightApp>();
 
     [GeneratedRegex("https?://[^\\s\\\"'<>，。)）\\]}]+", RegexOptions.IgnoreCase)]
     private static partial Regex UrlRegex();

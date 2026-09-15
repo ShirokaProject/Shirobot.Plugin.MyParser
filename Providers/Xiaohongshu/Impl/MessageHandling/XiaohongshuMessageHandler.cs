@@ -11,7 +11,7 @@ using Shirobot.Plugin.MyParser.Providers.Xiaohongshu.Models;
 using Shirobot.Plugin.MyParser.Providers.Xiaohongshu.ViewModels;
 using Shirobot.Plugin.MyParser.Providers.Xiaohongshu.Views;
 using Shirobot.Plugin.MyParser.Utility;
-using ShiroBot.Qq.Model;
+using ShiroBot.QQ;
 using ShiroBot.SDK.Abstractions;
 using ShiroBot.SDK.Core;
 using ShiroBot.SDK.Models;
@@ -251,10 +251,10 @@ internal sealed class XiaohongshuMessageHandler : IDisposable
 
     private async Task SendGalleryForwardAsync(MessageEvent message, XiaohongshuParseResult result)
     {
-        var forwarded = new List<QqForwardedMessage>();
+        var forwarded = new List<QForwardedMessage>();
         var senderId = GetBotOrSenderId(message);
         var senderName = string.IsNullOrWhiteSpace(result.AuthorName) ? "小红书图文" : result.AuthorName!;
-        forwarded.Add(new QqForwardedMessage(senderId, senderName, [new QqTextOutgoing(BuildHeaderText(result))]));
+        forwarded.Add(new QForwardedMessage(senderId, senderName, [new QOutgoingText(BuildHeaderText(result))]));
         var imageInputs = result.Images.Select((image, index) => (image, Index: index + 1)).ToArray();
         var imageFiles = await MessageFetchConcurrency.SelectParallelOrderedAsync(
             imageInputs,
@@ -264,18 +264,18 @@ internal sealed class XiaohongshuMessageHandler : IDisposable
         {
             if (!string.IsNullOrWhiteSpace(local.Uri))
             {
-                forwarded.Add(new QqForwardedMessage(senderId, senderName, [new QqImageOutgoing(local.Uri)]));
+                forwarded.Add(new QForwardedMessage(senderId, senderName, [new QOutgoingImage(local.Uri)]));
             }
         }
 
         if (result.Comments.Count > 0)
         {
-            forwarded.Add(new QqForwardedMessage(senderId, senderName, [new QqTextOutgoing(BuildCommentsText(result))]));
+            forwarded.Add(new QForwardedMessage(senderId, senderName, [new QOutgoingText(BuildCommentsText(result))]));
         }
 
         if (!string.IsNullOrWhiteSpace(result.SourceUrl))
         {
-            forwarded.Add(new QqForwardedMessage(senderId, senderName, [new QqTextOutgoing("原文：" + result.SourceUrl)]));
+            forwarded.Add(new QForwardedMessage(senderId, senderName, [new QOutgoingText("原文：" + result.SourceUrl)]));
         }
 
         var title = string.IsNullOrWhiteSpace(result.Title) ? "小红书图文" : TrimLine(result.Title!, 48);

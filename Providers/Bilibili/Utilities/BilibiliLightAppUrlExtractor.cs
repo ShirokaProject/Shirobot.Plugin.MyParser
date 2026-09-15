@@ -1,6 +1,6 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using ShiroBot.Qq.Model;
+using ShiroBot.QQ;
 using ShiroBot.SDK.Models;
 
 namespace Shirobot.Plugin.MyParser.Providers.Bilibili.Utilities;
@@ -19,7 +19,7 @@ internal static partial class BilibiliLightAppUrlExtractor
         return parts.Count == 0 ? null : string.Join(' ', parts.Where(i => !string.IsNullOrWhiteSpace(i)));
     }
 
-    private static IEnumerable<string> ExtractBilibiliUrls(QqLightAppIncoming app)
+    private static IEnumerable<string> ExtractBilibiliUrls(QIncomingLightApp app)
     {
         if (string.IsNullOrWhiteSpace(app.JsonPayload))
         {
@@ -113,11 +113,11 @@ internal static partial class BilibiliLightAppUrlExtractor
     private static IEnumerable<string> GetTextSegments(MessageEvent message) =>
         message.Segments.OfType<TextSegment>().Select(i => i.Text);
 
-    private static IEnumerable<QqLightAppIncoming> GetLightAppSegments(MessageEvent message) =>
+    private static IEnumerable<QIncomingLightApp> GetLightAppSegments(MessageEvent message) =>
         message.Segments
             .OfType<RawSegment>()
             .Select(segment => segment.Payload)
-            .OfType<QqLightAppIncoming>();
+            .OfType<QIncomingLightApp>();
 
     [GeneratedRegex("https?://[^\\s\\\"'<>，。)）\\]}]+", RegexOptions.IgnoreCase)]
     private static partial Regex UrlRegex();

@@ -3,7 +3,7 @@ using System.Text;
 using Shirobot.Plugin.MyParser.Providers.Bilibili.Impl.Services;
 using Shirobot.Plugin.MyParser.Providers.Bilibili.Models;
 using Shirobot.Plugin.MyParser.Utility;
-using ShiroBot.Qq.Model;
+using ShiroBot.QQ;
 using ShiroBot.SDK.Abstractions;
 using ShiroBot.SDK.Models;
 using Shirobot.Plugin.MyParser.Providers.Common.MessageHandling;
@@ -128,36 +128,36 @@ private async Task TrySendLiveReplayClipAsync(MessageEvent message, BilibiliLive
     {
         var senderId = GetBotOrSenderId(message);
         var senderName = string.IsNullOrWhiteSpace(result.AnchorName) ? "Bilibili 直播" : result.AnchorName!;
-        var forwarded = new List<QqForwardedMessage>();
-        var headerSegments = new List<QqOutgoingSegment>();
+        var forwarded = new List<QForwardedMessage>();
+        var headerSegments = new List<QOutgoingSegment>();
 
         if (!string.IsNullOrWhiteSpace(result.CoverUrl))
         {
             var cover = await BuildRemoteImageAsync(result.CoverUrl, result.SourceUrl, $"bilibili_live_cover_{result.RealRoomId}");
             if (!string.IsNullOrWhiteSpace(cover.Uri))
             {
-                headerSegments.Add(new QqImageOutgoing(cover.Uri));
+                headerSegments.Add(new QOutgoingImage(cover.Uri));
             }
         }
 
-        headerSegments.Add(new QqTextOutgoing(BuildLiveHeaderText(result)));
-        forwarded.Add(new QqForwardedMessage(senderId, senderName, headerSegments));
+        headerSegments.Add(new QOutgoingText(BuildLiveHeaderText(result)));
+        forwarded.Add(new QForwardedMessage(senderId, senderName, headerSegments));
 
         if (result.Streams.Count > 0)
         {
             foreach (var (stream, index) in result.Streams.Select((stream, index) => (stream, index + 1)))
             {
-                forwarded.Add(new QqForwardedMessage(senderId, senderName,
+                forwarded.Add(new QForwardedMessage(senderId, senderName,
                 [
-                    new QqTextOutgoing(BuildLiveStreamText(stream, index))
+                    new QOutgoingText(BuildLiveStreamText(stream, index))
                 ]));
             }
         }
         else
         {
-            forwarded.Add(new QqForwardedMessage(senderId, senderName,
+            forwarded.Add(new QForwardedMessage(senderId, senderName,
             [
-                new QqTextOutgoing("当前未返回可用直播流。")
+                new QOutgoingText("当前未返回可用直播流。")
             ]));
         }
 
