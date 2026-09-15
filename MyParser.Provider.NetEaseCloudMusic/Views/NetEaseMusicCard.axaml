@@ -57,27 +57,27 @@
                 </Border>
 
                 <StackPanel Grid.Column="1" Spacing="7" VerticalAlignment="Center" Margin="14,0,0,0">
-                    <Border Background="#E60026" CornerRadius="9" Padding="8,3" HorizontalAlignment="Left">
-                        <TextBlock Text="{Binding SourceText}" Foreground="White" FontSize="10" FontWeight="Bold" />
+                    <Border Background="#E60026" CornerRadius="9" Padding="8,2" HorizontalAlignment="Left">
+                        <TextBlock Text="{Binding SourceText}" Foreground="White" FontSize="10" LineHeight="14" FontWeight="Bold" />
                     </Border>
                     <TextBlock Text="{Binding Title}" Foreground="{DynamicResource CardTextPrimary}" FontSize="18" FontWeight="Bold"
-                               TextWrapping="Wrap" MaxLines="2" />
+                               LineHeight="24" TextWrapping="Wrap" MaxLines="2" />
                     <TextBlock Text="{Binding Artists}" Foreground="{DynamicResource CardTextSecondary}" FontSize="13"
-                               TextTrimming="CharacterEllipsis" />
+                               LineHeight="18" TextTrimming="CharacterEllipsis" />
                     <TextBlock Text="{Binding Album}" Foreground="{DynamicResource CardTextSecondary}" FontSize="12"
-                               TextTrimming="CharacterEllipsis" />
+                               LineHeight="17" TextTrimming="CharacterEllipsis" />
                     <WrapPanel Margin="0,4,0,0">
-                        <Border Background="{DynamicResource CardPillBg}" BorderBrush="{DynamicResource CardPillBorder}" BorderThickness="1" CornerRadius="8" Padding="7,3" Margin="0,0,5,5">
-                            <TextBlock Text="{Binding QualityText}" Foreground="{DynamicResource CardTextPrimary}" FontSize="10" />
+                        <Border Background="{DynamicResource CardPillBg}" BorderBrush="{DynamicResource CardPillBorder}" BorderThickness="1" CornerRadius="8" Padding="7,2" Margin="0,0,5,5">
+                            <TextBlock Text="{Binding QualityText}" Foreground="{DynamicResource CardTextPrimary}" FontSize="10" LineHeight="14" />
                         </Border>
-                        <Border Background="{DynamicResource CardPillBg}" BorderBrush="{DynamicResource CardPillBorder}" BorderThickness="1" CornerRadius="8" Padding="7,3" Margin="0,0,5,5">
-                            <TextBlock Text="{Binding SizeText}" Foreground="{DynamicResource CardTextPrimary}" FontSize="10" />
+                        <Border Background="{DynamicResource CardPillBg}" BorderBrush="{DynamicResource CardPillBorder}" BorderThickness="1" CornerRadius="8" Padding="7,2" Margin="0,0,5,5">
+                            <TextBlock Text="{Binding SizeText}" Foreground="{DynamicResource CardTextPrimary}" FontSize="10" LineHeight="14" />
                         </Border>
-                        <Border Background="{DynamicResource CardPillBg}" BorderBrush="{DynamicResource CardPillBorder}" BorderThickness="1" CornerRadius="8" Padding="7,3" Margin="0,0,5,5">
-                            <TextBlock Text="{Binding BitrateText}" Foreground="{DynamicResource CardTextPrimary}" FontSize="10" />
+                        <Border Background="{DynamicResource CardPillBg}" BorderBrush="{DynamicResource CardPillBorder}" BorderThickness="1" CornerRadius="8" Padding="7,2" Margin="0,0,5,5">
+                            <TextBlock Text="{Binding BitrateText}" Foreground="{DynamicResource CardTextPrimary}" FontSize="10" LineHeight="14" />
                         </Border>
                     </WrapPanel>
-                    <TextBlock Text="{Binding SongIdText}" Foreground="{DynamicResource CardTextSecondary}" FontSize="10" />
+                    <TextBlock Text="{Binding SongIdText}" Foreground="{DynamicResource CardTextSecondary}" FontSize="10" LineHeight="14" />
                 </StackPanel>
             </Grid>
         </Grid>

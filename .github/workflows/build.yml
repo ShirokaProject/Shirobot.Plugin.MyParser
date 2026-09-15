@@ -53,6 +53,18 @@ jobs:
             throw "Unexpected plugin assembly name: $assemblyName"
           }
 
+          $dlls = @(Get-ChildItem $packageRoot -Recurse -File -Filter "*.dll")
+          if ($dlls.Count -ne 1 -or $dlls[0].Name -ne "Shirobot.Plugin.MyParser.dll") {
+            throw "The deployment package must contain only the merged plugin DLL. Found: $($dlls.Name -join ', ')"
+          }
+
+          $sharedAssets = @(Get-ChildItem $packageRoot -Recurse -File | Where-Object {
+            $_.Name -match '^(ShiroBot\.(SDK|Model\.)|Avalonia|SkiaSharp|HarfBuzzSharp|MicroCom).*'
+          })
+          if ($sharedAssets.Count -ne 0) {
+            throw "Host shared assemblies must not be deployed: $($sharedAssets.Name -join ', ')"
+          }
+
           Get-ChildItem $packageRoot -Recurse -File | Select-Object FullName, Length
 
       - name: Upload build artifacts

@@ -7,22 +7,18 @@
         <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
         <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
         <LocalSharpMp4Root>$(MSBuildProjectDirectory)\..\SharpMP4\src</LocalSharpMp4Root>
-        <HostPluginDir>..\..\ShiroBot\ShiroBot\bin\Debug\$(TargetFramework)\plugins\$(AssemblyName)\</HostPluginDir>
-        <ShiroBotPluginSharedAssemblies>ShiroBot.Model.QQ</ShiroBotPluginSharedAssemblies>
+        <HostPluginDir>..\..\..\ShiroBot\Core\bin\Debug\$(TargetFramework)\plugins\$(AssemblyName)\</HostPluginDir>
+        <ShiroBotPluginSharedAssemblies>ShiroBot.Model.QQ;ShiroBot.Model.Discord;ShiroBot.Model.Telegram</ShiroBotPluginSharedAssemblies>
+        <ShiroBotPluginPackagingEnabled>true</ShiroBotPluginPackagingEnabled>
+        <ShiroBotAvaloniaPreviewerSupport>true</ShiroBotAvaloniaPreviewerSupport>
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\ShiroBot\ShiroBot.SDK\ShiroBot.SDK.csproj" />
-        <ProjectReference Include="..\..\ShiroBot\ShiroBot.Model.QQ\ShiroBot.Model.QQ.csproj" />
+        <PackageReference Include="ShiroBot.SDK" />
         <PackageReference Include="Net.Codecrete.QrCodeGenerator" />
         <PackageReference Include="LightDl" />
-        <PackageReference Include="NLayer" />
         <PackageReference Include="SilkCodec.NET" />
     </ItemGroup>
-
-    <!-- ProjectReference does not import NuGet buildTransitive assets. -->
-    <Import Project="..\..\ShiroBot\ShiroBot.SDK\buildTransitive\ShiroBot.SDK.props" />
-    <Import Project="..\..\ShiroBot\ShiroBot.SDK\buildTransitive\ShiroBot.SDK.targets" />
 
     <ItemGroup>
         <ProjectReference Include="..\MyParser.Sharing\MyParser.Sharing.csproj" />
@@ -75,6 +71,14 @@
               DestinationFiles="@(PluginDebugNativeOutput->'$(HostPluginDir)%(Filename)%(Extension)')"
               SkipUnchangedFiles="true"
               Condition="'@(PluginDebugNativeOutput)' != ''" />
+    </Target>
+
+    <Target Name="RemoveBundledDependencySymbolsFromPublish" AfterTargets="Publish">
+        <ItemGroup>
+            <BundledDependencySymbols Include="$(PublishDir)*.pdb"
+                                      Exclude="$(PublishDir)Shirobot.Plugin.MyParser.pdb" />
+        </ItemGroup>
+        <Delete Files="@(BundledDependencySymbols)" />
     </Target>
 
     <Import Project="$(MSBuildProjectDirectory)\..\Directory.Build.local.props"

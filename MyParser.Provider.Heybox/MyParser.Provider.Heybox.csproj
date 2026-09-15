@@ -9,8 +9,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\ShiroBot\ShiroBot.SDK\ShiroBot.SDK.csproj" />
-        <ProjectReference Include="..\..\ShiroBot\ShiroBot.Model.QQ\ShiroBot.Model.QQ.csproj" />
+        <PackageReference Include="ShiroBot.SDK" />
     </ItemGroup>
 
     <ItemGroup>

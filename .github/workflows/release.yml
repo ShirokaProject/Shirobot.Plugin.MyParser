@@ -58,6 +58,18 @@ jobs:
             if (-not (Test-Path $path)) { throw "Missing expected release package file: $path" }
           }
 
+          $dlls = @(Get-ChildItem $packageRoot -Recurse -File -Filter "*.dll")
+          if ($dlls.Count -ne 1 -or $dlls[0].Name -ne "Shirobot.Plugin.MyParser.dll") {
+            throw "The release package must contain only the merged plugin DLL. Found: $($dlls.Name -join ', ')"
+          }
+
+          $sharedAssets = @(Get-ChildItem $packageRoot -Recurse -File | Where-Object {
+            $_.Name -match '^(ShiroBot\.(SDK|Model\.)|Avalonia|SkiaSharp|HarfBuzzSharp|MicroCom).*'
+          })
+          if ($sharedAssets.Count -ne 0) {
+            throw "Host shared assemblies must not be released: $($sharedAssets.Name -join ', ')"
+          }
+
           Compress-Archive -Path $packageRoot -DestinationPath "release/Shirobot.Plugin.MyParser.zip" -Force
           Get-ChildItem release -Recurse -File | Select-Object FullName, Length
 

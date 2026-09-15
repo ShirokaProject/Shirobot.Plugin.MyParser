@@ -68,14 +68,14 @@ internal sealed class ProviderDownloadService
         var mobile = new ProviderRecordVariant(
             "mobile-best",
             "手机最优",
-            "pcm_rate=48000 silk_rate=100000 max=24000 packet=20 tencent=true decoder=NLayer resampler=managed encoder=SilkCodec.NET/1.0.1",
-            Path.Combine(directory, safeBaseName + "_mobile_48k_100k_silkcodecnet_101.silk"),
+            "mp3_rate=24000 silk_rate=100000 max=24000 tencent=true profile=Flat encoder=SilkCodec.NET/1.2.0",
+            Path.Combine(directory, safeBaseName + "_mobile_24k_100k_silkcodecnet_120.silk"),
             100000);
         var pc = new ProviderRecordVariant(
             "pc-best",
             "电脑最优",
-            "pcm_rate=48000 silk_rate=35000 max=24000 packet=20 tencent=true decoder=NLayer resampler=managed encoder=SilkCodec.NET",
-            Path.Combine(directory, safeBaseName + "_pc_48k_35000_silkcodecnet_full.silk"),
+            "mp3_rate=24000 silk_rate=35000 max=24000 tencent=true profile=Flat encoder=SilkCodec.NET/1.2.0",
+            Path.Combine(directory, safeBaseName + "_pc_24k_35000_silkcodecnet_120.silk"),
             35000);
 
         var variants = request.IncludeMobileBest
@@ -414,27 +414,27 @@ internal sealed class ProviderDownloadService
         var workDirectory = Path.Combine(Path.GetTempPath(), "Shirobot.Plugin.MyParser", request.PlatformId, "silk-work");
         Directory.CreateDirectory(workDirectory);
         var tempBaseName = request.PlatformId + "_" + Guid.NewGuid().ToString("N");
-        var tempPcmPath = Path.Combine(workDirectory, tempBaseName + ".pcm");
         var tempSilkPath = Path.Combine(workDirectory, tempBaseName + ".silk");
 
         try
         {
-            await Task.Run(() => ManagedMp3PcmConverter.ConvertToMonoS16Le(request.LocalAudioPath, tempPcmPath, cancellationToken), cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             var encoder = new SilkEncoder(new SilkEncoderOptions
             {
-                SampleRate = 48000,
+                SampleRate = 24000,
                 BitRate = silkRate,
                 MaxInternalSampleRate = 24000,
-                PacketLengthMilliseconds = 20,
                 Tencent = true,
                 Complexity = 2,
-                PacketLossPercentage = 0,
-                UseDtx = false,
-                UseInBandFec = false,
             });
-            var pcm = await File.ReadAllBytesAsync(tempPcmPath, cancellationToken).ConfigureAwait(false);
-            var silk = await Task.Run(() => encoder.EncodePcm16LittleEndian(pcm), cancellationToken).ConfigureAwait(false);
-            await File.WriteAllBytesAsync(tempSilkPath, silk, cancellationToken).ConfigureAwait(false);
+            await using (var mp3 = File.OpenRead(request.LocalAudioPath))
+            await using (var silk = File.Create(tempSilkPath))
+            {
+                await Task.Run(
+                    () => encoder.EncodeMp3(mp3, silk, SilkMp3AudioProfile.Flat),
+                    cancellationToken).ConfigureAwait(false);
+                await silk.FlushAsync(cancellationToken).ConfigureAwait(false);
+            }
 
             if (!File.Exists(tempSilkPath) || new FileInfo(tempSilkPath).Length == 0)
             {
@@ -447,7 +447,6 @@ internal sealed class ProviderDownloadService
         }
         finally
         {
-            TryDelete(tempPcmPath);
             TryDelete(tempSilkPath);
         }
     }

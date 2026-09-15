@@ -10,6 +10,8 @@ using ShiroBot.SDK.Core;
 using ShiroBot.SDK.Plugin;
 using ShiroBot.Model.QQ;
 
+[assembly: ShiroBotApiCompatibility("0.8", "0.8")]
+
 namespace Shirobot.Plugin.MyParser;
 
 [BotPlugin(id: "MyParser",
@@ -19,7 +21,8 @@ namespace Shirobot.Plugin.MyParser;
     Category = PluginCategory.Utility,
     Description = "面向 Shirobot 的学习型内容消息处理插件。",
     GithubRepo = "PVPGOOD/Shirobot.Plugin.MyParser",
-    IsPluginSingleFile = false)
+    IsPluginSingleFile = true,
+    SharedAssemblies = "ShiroBot.Model.QQ")
 ]
 public sealed class MyParserPlugin : PluginBase
 {
@@ -52,6 +55,9 @@ public sealed class MyParserPlugin : PluginBase
     private readonly ConcurrentDictionary<ChannelTaskKey, byte> _wholeMutedChannels = new();
     private readonly ConcurrentDictionary<MemberTaskKey, DateTimeOffset> _mutedMembers = new();
     private readonly ConcurrentDictionary<ProviderCooldownKey, DateTimeOffset> _providerCooldowns = new();
+    private readonly Lock _backgroundTasksLock = new();
+    private readonly HashSet<Task> _backgroundTasks = [];
+    private bool _isUnloading;
 
     public override string Name => "MyParser";
 
@@ -602,10 +608,22 @@ public sealed class MyParserPlugin : PluginBase
             : Context.PluginDirectory;
     }
 
-    protected override Task OnUnloadAsync()
+    protected override async Task OnUnloadAsync()
     {
+        lock (_backgroundTasksLock)
+        {
+            _isUnloading = true;
+        }
+
         MyParserRuntime.BeginUnload();
         CancelParseTasks(_ => true, "plugin-unload");
+        Task[] backgroundTasks;
+        lock (_backgroundTasksLock)
+        {
+            backgroundTasks = [.. _backgroundTasks];
+        }
+
+        await Task.WhenAll(backgroundTasks);
         _mutedChannels.Clear();
         _wholeMutedChannels.Clear();
         _mutedMembers.Clear();
@@ -650,7 +668,6 @@ public sealed class MyParserPlugin : PluginBase
         _providerCommandContributors.Clear();
         _providerModuleIds.Clear();
         BotLog.Info("MyParser 已卸载。");
-        return Task.CompletedTask;
     }
 
     private Task HandleHelpAsync(IncomingMessage message)
@@ -728,18 +745,18 @@ public sealed class MyParserPlugin : PluginBase
     {
         if (TryBuildProviderReplyParseText(message, out var replyParseText))
         {
-            return DispatchParseAsync(message, replyParseText, silentProviderMismatch: true, isAutoParse: false);
+            return QueueParse(message, replyParseText, silentProviderMismatch: true, isAutoParse: false);
         }
 
         var parseText = GetStrictAutoParseText(message);
         if (!string.IsNullOrWhiteSpace(parseText) && _providerRegistry?.FindProvider(parseText, isAutoParse: true, out parseText) is not null)
         {
-            return DispatchParseAsync(message, parseText, silentProviderMismatch: true, isAutoParse: true);
+            return QueueParse(message, parseText, silentProviderMismatch: true, isAutoParse: true);
         }
 
         if (_providerRegistry?.FindProvider(message, out parseText) is { } fallbackProvider && !HasIncomingProviderNormalizer(fallbackProvider.Id) && !string.IsNullOrWhiteSpace(parseText))
         {
-            return DispatchParseAsync(message, parseText, silentProviderMismatch: true, isAutoParse: true);
+            return QueueParse(message, parseText, silentProviderMismatch: true, isAutoParse: true);
         }
 
         return Task.CompletedTask;
@@ -806,7 +823,44 @@ public sealed class MyParserPlugin : PluginBase
         var text = GetPlainText(message);
         var content = TryGetParseCommandContent(text, out var parsedContent) ? parsedContent : string.Empty;
 
-        return DispatchParseAsync(message, string.IsNullOrWhiteSpace(content) ? text : content);
+        return QueueParse(message, string.IsNullOrWhiteSpace(content) ? text : content);
+    }
+
+    private Task QueueParse(
+        IncomingMessage message,
+        string text,
+        bool silentProviderMismatch = false,
+        bool isAutoParse = false)
+    {
+        Task task;
+        lock (_backgroundTasksLock)
+        {
+            if (_isUnloading)
+            {
+                return Task.CompletedTask;
+            }
+
+            task = DispatchParseAsync(message, text, silentProviderMismatch, isAutoParse);
+            _backgroundTasks.Add(task);
+        }
+
+        _ = task.ContinueWith(
+            completedTask =>
+            {
+                lock (_backgroundTasksLock)
+                {
+                    _backgroundTasks.Remove(completedTask);
+                }
+
+                if (completedTask.Exception is { } exception)
+                {
+                    BotLog.Error($"MyParser 后台解析失败: {exception.GetBaseException().Message}");
+                }
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+        return Task.CompletedTask;
     }
 
     private bool TryGetParseCommandContent(string text, out string content)
@@ -1128,7 +1182,7 @@ public sealed class MyParserPlugin : PluginBase
         out ProviderCooldownKey cooldownKey,
         out TimeSpan remaining)
     {
-        cooldownKey = new ProviderCooldownKey(providerId, NormalizeWorkIdentity(parseText));
+        cooldownKey = new ProviderCooldownKey(providerId, NormalizeWorkIdentity(providerId, parseText));
         while (true)
         {
             var now = DateTimeOffset.UtcNow;
@@ -1157,7 +1211,7 @@ public sealed class MyParserPlugin : PluginBase
         }
     }
 
-    private static string NormalizeWorkIdentity(string parseText)
+    private static string NormalizeWorkIdentity(string providerId, string parseText)
     {
         var value = parseText.Trim();
         if (!Uri.TryCreate(value, UriKind.Absolute, out var uri))
@@ -1168,7 +1222,9 @@ public sealed class MyParserPlugin : PluginBase
         var builder = new UriBuilder(uri)
         {
             Host = uri.Host.ToLowerInvariant(),
-            Query = string.Empty,
+            Query = string.Equals(providerId, "neteasecloudmusic", StringComparison.OrdinalIgnoreCase)
+                ? uri.Query.TrimStart('?')
+                : string.Empty,
             Fragment = string.Empty,
         };
         builder.Path = builder.Path.TrimEnd('/');
