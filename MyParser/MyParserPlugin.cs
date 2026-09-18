@@ -20,7 +20,7 @@ namespace Shirobot.Plugin.MyParser;
     Author = "PVPGood",
     Category = PluginCategory.Utility,
     Description = "面向 Shirobot 的学习型内容消息处理插件。",
-    GithubRepo = "PVPGOOD/Shirobot.Plugin.MyParser",
+    GithubRepo = "ShirokaProject/Shirobot.Plugin.MyParser",
     IsPluginSingleFile = true,
     SharedAssemblies = "ShiroBot.Model.QQ")
 ]
