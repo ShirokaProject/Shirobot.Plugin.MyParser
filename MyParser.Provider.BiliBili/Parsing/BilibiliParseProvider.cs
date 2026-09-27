@@ -5,7 +5,7 @@ using ShiroBot.SDK.Models;
 
 namespace MyParser.Provider.BiliBili.Parsing;
 
-public sealed class BilibiliParseProvider(BilibiliParser parser) : IIncomingMessageParseProvider, IProviderParseTextMatcher, IParseProviderWithParser, IProviderLoginStatusProvider, IQrLoginProvider, IProviderPriority, IDisposable
+public sealed class BilibiliParseProvider(BilibiliParser parser) : IIncomingMessageParseProvider, IProviderParseTextMatcher, IParseProviderWithParser, IProviderPriority, IDisposable
 {
     public BilibiliParser Parser { get; } = parser;
     public object ParserObject => Parser;
@@ -37,30 +37,6 @@ public sealed class BilibiliParseProvider(BilibiliParser parser) : IIncomingMess
     {
         var text = BilibiliLightAppUrlExtractor.ExtractParseText(message);
         return BilibiliUrlParser.ExtractStrictBilibiliUrl(text ?? string.Empty);
-    }
-
-    public async Task<ProviderLoginStatus> CheckLoginStatusAsync(CancellationToken cancellationToken = default)
-    {
-        var status = await Parser.CheckLoginStatusAsync(cancellationToken);
-        return new ProviderLoginStatus(status.IsLogin, status.UserName, status.Mid <= 0 ? null : status.Mid.ToString(), status.Message);
-    }
-
-    public async Task<QrLoginSession> GenerateQrLoginSessionAsync(CancellationToken cancellationToken = default)
-    {
-        var session = await Parser.GenerateQrLoginSessionAsync(cancellationToken);
-        return new QrLoginSession(session.QrcodeKey, session.Url, session);
-    }
-
-    public async Task<QrLoginPollResult> PollQrLoginAsync(QrLoginSession session, CancellationToken cancellationToken = default)
-    {
-        var poll = await Parser.PollQrLoginAsync(session.Id, cancellationToken);
-        return new QrLoginPollResult(
-            poll.Code,
-            poll.Message,
-            poll.IsLogin,
-            IsExpired: poll.Code == 86038,
-            IsWaitingConfirmation: poll.Code == 86090,
-            UserName: poll.UserName);
     }
 
     public async Task<MediaParseResult> ParseAsync(string text, CancellationToken cancellationToken = default)

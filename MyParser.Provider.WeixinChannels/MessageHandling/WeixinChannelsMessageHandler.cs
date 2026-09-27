@@ -112,6 +112,7 @@ internal sealed class WeixinChannelsMessageHandler(ProviderMessageHandlerContext
 
     private async Task SendCardAsync(IncomingMessage message, WeixinChannelsParseResult result)
     {
+        if (!Config.IsCoverEnabled("weixinchannels")) return;
         var uri = await BuildCardUriAsync(result).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(uri))
         {

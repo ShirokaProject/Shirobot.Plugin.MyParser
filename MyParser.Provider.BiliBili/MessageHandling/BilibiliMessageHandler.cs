@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Text;
-using Net.Codecrete.QrCodeGenerator;
 using ShiroBot.SDK.Models;
 using Shirobot.Plugin.MyParser.Parsing;
 using MyParser.Provider.BiliBili.Infrastructure;
@@ -76,7 +75,6 @@ internal sealed partial class BilibiliMessageHandler(
             }
 
             LogBilibiliQualityInfo(result);
-            await SendCommentsMessagesAsync(message, result);
             if (!config.SendVideoSegment || !result.IsVideo)
             {
                 await ReplyAsync(message, FormatBilibiliResult(result, videoDownloadAttempted: false));
@@ -91,7 +89,7 @@ internal sealed partial class BilibiliMessageHandler(
 
             try
             {
-                if (config.SendBilibiliVideoCover)
+                if (config.IsCoverEnabled("bilibili"))
                 {
                     _ = StartSendCoverMessageAsync(message, result, cancellationToken);
                 }
@@ -192,57 +190,6 @@ internal sealed partial class BilibiliMessageHandler(
                || message.Contains("不是动态", StringComparison.OrdinalIgnoreCase)
                || message.Contains("接口错误 -400", StringComparison.OrdinalIgnoreCase)
                || message.Contains("请求错误", StringComparison.OrdinalIgnoreCase);
-    }
-
-    public override async Task HandleLoginAsync(IncomingMessage message)
-    {
-        try
-        {
-            if (bilibiliProvider is not IQrLoginProvider qrLoginProvider)
-            {
-                await ReplyAsync(message, "Bilibili provider 不支持扫码登录。");
-                return;
-            }
-
-            var session = await qrLoginProvider.GenerateQrLoginSessionAsync();
-            await ReplyAsync(message,
-                "Bilibili 扫码登录\n"
-                + "请用哔哩哔哩 App 扫描下面二维码，并在 3 分钟内确认登录。\n"
-                + $"如果二维码图片无法显示，请打开：{session.Url}");
-            await SendQrImageAsync(message, session.Url, $"bilibili_qr_{session.Id}");
-
-            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(3));
-            while (!cts.IsCancellationRequested)
-            {
-                await Task.Delay(TimeSpan.FromSeconds(3), cts.Token);
-                var poll = await qrLoginProvider.PollQrLoginAsync(session, cts.Token);
-                switch (poll)
-                {
-                    case { IsLogin: true }:
-                        SaveBilibiliCookieToPluginDirectory();
-                        await ReplyAsync(message, $"Bilibili 登录成功，Cookie 已保存到插件 cookies/bilibili.txt。");
-                        return;
-                    case { IsExpired: true }:
-                        await ReplyAsync(message, "Bilibili 登录二维码已过期，请重新发送登录命令。");
-                        return;
-                    case { IsWaitingConfirmation: true }:
-                        BotLog.Info("MyParser Bilibili 二维码已扫码，等待确认。");
-                        break;
-                    default:
-                        BotLog.Info($"MyParser Bilibili 二维码轮询: code={poll.Code}, message={poll.Message}");
-                        break;
-                }
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            await ReplyAsync(message, "Bilibili 登录二维码已超时，请重新发送登录命令。");
-        }
-        catch (Exception ex)
-        {
-            BotLog.Warning($"MyParser Bilibili 扫码登录失败：{ex}");
-            await ReplyAsync(message, "Bilibili 扫码登录失败：" + ex.Message);
-        }
     }
 
     private async Task<VideoOutgoingSegment> BuildVideoSegmentAsync(BilibiliParseResult result)
@@ -366,33 +313,9 @@ internal sealed partial class BilibiliMessageHandler(
         _hostServices.DeleteLocalVideoIfConfigured(config, result.LocalVideoPath, "bilibili");
     }
 
-    private async Task SendQrImageAsync(IncomingMessage message, string text, string fileName)
-    {
-        var qrFile = await BuildQrImageAsync(text, fileName);
-        var segment = new ImageOutgoingSegment(qrFile.Uri);
-        await context.Message.ReplyAsync(message, segment);
-    }
-
-    private static async Task<(string Uri, string Path)> BuildQrImageAsync(string text, string fileName)
-    {
-        var dir = Path.Combine(Path.GetTempPath(), "Shirobot.Plugin.MyParser", "bilibili", "qr");
-        Directory.CreateDirectory(dir);
-        var path = Path.Combine(dir, fileName + ".png");
-        var qr = QrCode.EncodeText(text, QrCode.Ecc.Medium);
-        var png = qr.ToPngBitmap(border: 4, scale: 8);
-        await File.WriteAllBytesAsync(path, png);
-        return ("base64://" + Convert.ToBase64String(png), path);
-    }
-
     private Task<string> UploadVideoFileAsync(IncomingMessage message, BilibiliParseResult result)
     {
         return _hostServices.UploadLocalVideoFileAsync(config, message, result.LocalVideoPath, "Bilibili", result.Bvid);
-    }
-
-    private void SaveBilibiliCookieToPluginDirectory()
-    {
-        var path = ResolveCookiePath("bilibili.txt");
-        File.WriteAllText(path, MyParserRuntime.BilibiliCookie, Encoding.UTF8);
     }
 
     private Task<SendMessageResult> SendReplyAsync(IncomingMessage message, string text)

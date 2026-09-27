@@ -9,7 +9,7 @@ using ShiroBot.SDK.Plugin;
 
 namespace Shirobot.Plugin.MyParser;
 
-internal sealed class ProviderHostServices(IBotContext context) : IProviderHostServices, IDisposable
+internal sealed class ProviderHostServices(IBotContext context, PluginConfig pluginConfig) : IProviderHostServices, IDisposable
 {
     private LocalVideoHttpServer? _localVideoHttpServer;
 
@@ -75,6 +75,9 @@ internal sealed class ProviderHostServices(IBotContext context) : IProviderHostS
         ProviderImageBuildRequest request,
         CancellationToken cancellationToken = default)
     {
+        if (request.FilePrefix.Contains("cover", StringComparison.OrdinalIgnoreCase)
+            && !pluginConfig.IsCoverEnabled(request.PlatformDisplayName))
+            return new ProviderImageBuildResult(string.Empty, null);
         var (uri, localPath) = await RemoteImageFetchService.BuildRemoteImageAsync(
             request.PlatformDisplayName,
             request.ImageUrl,
@@ -96,28 +99,32 @@ internal sealed class ProviderHostServices(IBotContext context) : IProviderHostS
         string videoUri;
         string uriMode;
         var registeredToHttpServer = false;
-        if (config.FileProtocol == VideoSegmentFileProtocol.Base64)
+        if (config.FileProtocol == 0)
         {
             var bytes = await File.ReadAllBytesAsync(request.LocalPath, cancellationToken).ConfigureAwait(false);
             videoUri = "base64://" + Convert.ToBase64String(bytes);
             uriMode = "base64";
         }
-        else if (config.FileProtocol == VideoSegmentFileProtocol.Http)
+        else if (config.FileProtocol == 2)
         {
             videoUri = GetLocalVideoHttpServer().RegisterFile(request.LocalPath);
             registeredToHttpServer = true;
             uriMode = "http";
         }
-        else
+        else if (config.FileProtocol == 1)
         {
             videoUri = string.IsNullOrWhiteSpace(request.FileUri) ? new Uri(request.LocalPath).AbsoluteUri : request.FileUri;
             uriMode = "file";
+        }
+        else
+        {
+            throw new InvalidOperationException("FileProtocol 必须为 0（Base64）、1（File）或 2（Http）。");
         }
 
         BotLog.Info($"MyParser {request.PlatformDisplayName} VideoSegment URI 模式：{uriMode}, {request.IdentifierName}={request.MediaId}, file_mb={fileSize / 1024d / 1024d:F2}, uri_preview={PreviewUri(videoUri)}");
         var segment = new VideoOutgoingSegment(videoUri)
         {
-            ThumbnailUri = string.IsNullOrWhiteSpace(request.ThumbUri) ? null : request.ThumbUri,
+            ThumbnailUri = config.IsCoverEnabled(request.PlatformDisplayName) && !string.IsNullOrWhiteSpace(request.ThumbUri) ? request.ThumbUri : null,
         };
         return new ProviderLocalVideoSegmentResult(segment, uriMode, videoUri, fileSize, registeredToHttpServer);
     }

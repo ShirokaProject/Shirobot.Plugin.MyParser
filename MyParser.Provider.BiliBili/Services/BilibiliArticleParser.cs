@@ -222,7 +222,7 @@ public sealed partial class BilibiliArticleParser(HttpClient http, PluginConfig 
         if (code != 0)
         {
             var message = json.RootElement.GetStringOrDefault("message") ?? "未知错误";
-            throw new BilibiliParseException($"B站图文接口错误 {code}: {message}。该接口通常需要 Cookie 中存在有效 buvid3/登录态，可先使用 #bili-login。");
+            throw new BilibiliParseException($"B站图文接口错误 {code}: {message}。该接口通常需要有效 buvid3/登录态，请更新 cookies/bilibili.txt。");
         }
 
         return json;

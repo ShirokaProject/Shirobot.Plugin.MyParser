@@ -13,7 +13,6 @@ public sealed class DouyinParser : IParserHttpClientAccessor, IDisposable
     private readonly HttpClient _http;
     private readonly bool _ownsHttpClient;
     private readonly DouyinParseService _parseService;
-    private readonly DouyinLoginStatusChecker _loginStatusChecker;
 
     public HttpClient HttpClient => _http;
 
@@ -30,7 +29,6 @@ public sealed class DouyinParser : IParserHttpClientAccessor, IDisposable
         ];
 
         _parseService = new DouyinParseService(_http, workParsers, config);
-        _loginStatusChecker = new DouyinLoginStatusChecker(_http);
     }
 
     public void SetCookieIfEmpty(string? cookie)
@@ -41,11 +39,6 @@ public sealed class DouyinParser : IParserHttpClientAccessor, IDisposable
         }
 
         MyParserRuntime.DouyinCookie = cookie.Trim();
-    }
-
-    public Task<string> CheckLoginStatusAsync(CancellationToken cancellationToken = default)
-    {
-        return _loginStatusChecker.CheckLoginStatusAsync(cancellationToken);
     }
 
     public Task<DouyinParseResult> ParseAsync(string text, CancellationToken cancellationToken = default)

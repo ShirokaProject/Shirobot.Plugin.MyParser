@@ -164,6 +164,11 @@ private async Task TrySendLiveReplayClipAsync(IncomingMessage message, BilibiliL
 
     private async Task SendLiveForwardAsync(IncomingMessage message, BilibiliLiveParseResult result)
     {
+        if (!config.IsCoverEnabled("bilibili"))
+        {
+            await ReplyAsync(message, $"Bilibili 直播：{result.Title}\n{result.SourceUrl}");
+            return;
+        }
         var cardUri = await BuildLiveCardUriAsync(result);
         var segment = new ImageOutgoingSegment(cardUri);
         var stopwatch = Stopwatch.StartNew();

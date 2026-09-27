@@ -105,7 +105,7 @@ private async Task SendBangumiForwardAsync(IncomingMessage message, BilibiliBang
         headerSegments.Add(new TextOutgoingSegment(BuildMultiPageHeaderText(result)));
         forwarded.Add(new OutgoingForwardedMessage(senderId, senderName, headerSegments));
 
-        var coverImageLimit = Math.Max(0, config.BilibiliMultiPageCoverImageLimit);
+        var coverImageLimit = config.IsCoverEnabled("bilibili") ? Math.Max(0, config.BilibiliMultiPageCoverImageLimit) : 0;
         var pages = result.Pages.ToArray();
         var pageCoverInputs = pages
             .Where(page => page.Page <= coverImageLimit && !string.IsNullOrWhiteSpace(page.CoverUrl))

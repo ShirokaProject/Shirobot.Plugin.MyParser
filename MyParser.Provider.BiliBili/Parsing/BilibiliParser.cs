@@ -42,7 +42,6 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
     private readonly bool _ownsHttpClient;
     private readonly PluginConfig _config;
     private readonly BilibiliArticleParser _articleParser;
-    private readonly BilibiliCommentService _commentService;
 
     public HttpClient HttpClient => _http;
     private string? _mixinKey;
@@ -63,7 +62,6 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
         }
 
         _articleParser = new BilibiliArticleParser(_http, config);
-        _commentService = new BilibiliCommentService(_http, GetMixinKeyAsync);
     }
 
     public Task<object> ParseMediaAsync(string text, CancellationToken cancellationToken = default)
@@ -159,31 +157,7 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
             VideoStreams = videos,
             AudioStreams = audios,
         };
-        return await TryApplyCommentsAsync(result, cancellationToken);
-    }
-
-    private async Task<BilibiliParseResult> TryApplyCommentsAsync(
-        BilibiliParseResult result,
-        CancellationToken cancellationToken)
-    {
-        var requestedCount = Math.Clamp(_config.BilibiliCommentCount, 0, 50);
-        if (!_config.BilibiliFetchComments || requestedCount == 0)
-        {
-            return result;
-        }
-
-        try
-        {
-            var comments = await _commentService.FetchAsync(result, requestedCount, cancellationToken);
-            BotLog.Info($"MyParser Bilibili 评论解析完成: bvid={result.Bvid}, aid={result.Aid}, requested={requestedCount}, parsed={comments.Count}");
-            return result with { Comments = comments };
-        }
-        catch (Exception ex) when (!cancellationToken.IsCancellationRequested
-                                   && ex is HttpRequestException or IOException or JsonException or BilibiliParseException or TaskCanceledException)
-        {
-            BotLog.Warning($"MyParser Bilibili 评论获取失败，继续发送视频: bvid={result.Bvid}, aid={result.Aid}, error={ex.Message}");
-            return result;
-        }
+        return result;
     }
 
     private static BilibiliMultiPageParseResult BuildMultiPageResult(string bvid, JsonElement view, JsonElement[] pages, int requestedPage)
@@ -231,66 +205,6 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
         return _articleParser.ParseAsync(text, cancellationToken);
     }
 
-    public async Task<BilibiliLoginStatus> CheckLoginStatusAsync(CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(MyParserRuntime.BilibiliCookie))
-        {
-            return new BilibiliLoginStatus(false, null, 0, 0, "未配置 BilibiliCookie");
-        }
-
-        try
-        {
-            using var json = await GetJsonDocumentAsync(BilibiliConstants.NavApi, null, BilibiliConstants.Origin + "/", cancellationToken);
-            var data = json.RootElement.GetPropertyOrDefault("data");
-            var isLogin = data?.GetBoolOrDefault("isLogin") ?? false;
-            var uname = data?.GetStringOrDefault("uname");
-            var mid = data?.GetInt64OrDefault("mid") ?? 0;
-            var vip = data?.GetInt32OrDefault("vipStatus") ?? 0;
-            return new BilibiliLoginStatus(isLogin, uname, mid, vip, isLogin ? $"已登录：{uname}" : "Cookie 未登录或已失效");
-        }
-        catch (Exception ex)
-        {
-            return new BilibiliLoginStatus(false, null, 0, 0, $"检查失败：{ex.Message}");
-        }
-    }
-
-    public async Task<BilibiliQrLoginSession> GenerateQrLoginSessionAsync(CancellationToken cancellationToken = default)
-    {
-        using var json = await GetJsonDocumentAsync(BilibiliConstants.QrGenerateApi, null, "https://passport.bilibili.com/login", cancellationToken, passportHeaders: true);
-        var data = json.RootElement.GetPropertyOrDefault("data") ?? throw new BilibiliParseException("二维码接口未返回 data。");
-        var key = data.GetStringOrDefault("qrcode_key");
-        var url = data.GetStringOrDefault("url");
-        if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(url))
-        {
-            throw new BilibiliParseException("二维码接口未返回 qrcode_key/url。");
-        }
-
-        return new BilibiliQrLoginSession(key, url, DateTimeOffset.UtcNow);
-    }
-
-    public async Task<BilibiliQrPollResult> PollQrLoginAsync(string qrcodeKey, CancellationToken cancellationToken = default)
-    {
-        var parameters = new Dictionary<string, string> { ["qrcode_key"] = qrcodeKey };
-        using var json = await GetJsonDocumentAsync(BilibiliConstants.QrPollApi, parameters, "https://passport.bilibili.com/login", cancellationToken, passportHeaders: true);
-        var data = json.RootElement.GetPropertyOrDefault("data") ?? throw new BilibiliParseException("二维码轮询接口未返回 data。");
-        var code = data.GetInt32OrDefault("code");
-        var message = data.GetStringOrDefault("message") ?? json.RootElement.GetStringOrDefault("message") ?? string.Empty;
-        if (code != 0)
-        {
-            return new BilibiliQrPollResult(code, message, false, null);
-        }
-
-        var cookie = CollectCookiesForHeader();
-        if (!LooksLikeBilibiliCookie(cookie))
-        {
-            throw new BilibiliParseException("扫码成功但未从响应中提取到 SESSDATA，请重试或手动填写 Cookie。");
-        }
-
-        MyParserRuntime.BilibiliCookie = cookie;
-        var status = await CheckLoginStatusAsync(cancellationToken);
-        return new BilibiliQrPollResult(code, status.Message, status.IsLogin, status.UserName);
-    }
-
     public static bool ContainsBilibiliUrl(string text) => BilibiliUrlParser.ContainsBilibiliUrl(text);
 
     public static bool LooksLikeBilibiliCookie(string cookie)
@@ -304,7 +218,7 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
     {
         if (!LooksLikeBilibiliCookie(MyParserRuntime.BilibiliCookie))
         {
-            throw new BilibiliLoginRequiredException("解析 Bilibili 视频需要登录态。请先发送 #bili-login 扫码登录，或在插件目录 cookies/bilibili.txt / 配置项 BilibiliCookie 填入 Cookie 后重启。");
+            throw new BilibiliLoginRequiredException("解析 Bilibili 视频需要登录态。请在插件目录 cookies/bilibili.txt 填入网页 Cookie，保存后自动重载。");
         }
     }
 
@@ -413,13 +327,13 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
         return _mixinKey;
     }
 
-    private async Task<JsonDocument> GetJsonDocumentAsync(string url, IReadOnlyDictionary<string, string>? parameters, string referer, CancellationToken cancellationToken, bool passportHeaders = false)
+    private async Task<JsonDocument> GetJsonDocumentAsync(string url, IReadOnlyDictionary<string, string>? parameters, string referer, CancellationToken cancellationToken)
     {
         var requestUrl = parameters is null || parameters.Count == 0
             ? url
             : url + "?" + string.Join("&", parameters.Select(i => $"{Uri.EscapeDataString(i.Key)}={Uri.EscapeDataString(i.Value)}"));
         using var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
-        ApplyHeaders(request, referer, passportHeaders);
+        ApplyHeaders(request, referer);
         using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         response.EnsureSuccessStatusCode();
         var json = await response.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken: cancellationToken)
@@ -434,48 +348,16 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
         return json;
     }
 
-    private void ApplyHeaders(HttpRequestMessage request, string referer, bool passportHeaders = false)
+    private void ApplyHeaders(HttpRequestMessage request, string referer)
     {
         request.Headers.TryAddWithoutValidation("User-Agent", BilibiliConstants.UserAgent);
         request.Headers.TryAddWithoutValidation("Referer", referer);
-        request.Headers.TryAddWithoutValidation("Origin", passportHeaders ? "https://passport.bilibili.com" : BilibiliConstants.Origin);
+        request.Headers.TryAddWithoutValidation("Origin", BilibiliConstants.Origin);
         request.Headers.TryAddWithoutValidation("Accept", "application/json, text/plain, */*");
         if (!string.IsNullOrWhiteSpace(MyParserRuntime.BilibiliCookie))
         {
             request.Headers.TryAddWithoutValidation("Cookie", MyParserRuntime.BilibiliCookie);
         }
-    }
-
-    private string CollectCookiesForHeader()
-    {
-        if (_handler is null)
-        {
-            return MyParserRuntime.BilibiliCookie;
-        }
-
-        var domains = new[]
-        {
-            new Uri("https://bilibili.com/"),
-            new Uri("https://www.bilibili.com/"),
-            new Uri("https://passport.bilibili.com/"),
-            new Uri("https://api.bilibili.com/"),
-        };
-        var parts = new List<string>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var uri in domains)
-        {
-            foreach (Cookie cookie in _handler.CookieContainer.GetCookies(uri))
-            {
-                if (string.IsNullOrWhiteSpace(cookie.Name) || !seen.Add(cookie.Name))
-                {
-                    continue;
-                }
-
-                parts.Add($"{cookie.Name}={cookie.Value}");
-            }
-        }
-
-        return string.Join("; ", parts);
     }
 
     private List<BilibiliMediaStream> ParseVideoStreams(JsonElement playInfo)

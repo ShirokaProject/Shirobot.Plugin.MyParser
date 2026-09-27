@@ -6,7 +6,7 @@ using ShiroBot.SDK.Models;
 namespace MyParser.Provider.Douyin;
 
 [MyParserProvider("douyin")]
-public sealed class DouyinProviderModule : MyParserProviderModuleBase, IProviderMessageHandlerFactory, ICookieValidator, IProviderCookieStore, IProviderAutoParsePolicy, IProviderResultMessageClassifier, IProviderCommandContributor
+public sealed class DouyinProviderModule : MyParserProviderModuleBase, IProviderMessageHandlerFactory, ICookieValidator, IProviderCookieStore, IProviderAutoParsePolicy, IProviderResultMessageClassifier
 {
     public override string Id => "douyin";
 
@@ -62,23 +62,4 @@ public sealed class DouyinProviderModule : MyParserProviderModuleBase, IProvider
                || text.StartsWith("抖音解析", StringComparison.OrdinalIgnoreCase);
     }
 
-    public IReadOnlyList<ProviderCommandDescriptor> CreateCommands(ProviderCommandContext context)
-    {
-        return [new ProviderCommandDescriptor("#douyin-cookie-check", message => HandleCookieCheckAsync(context, message), AdminOnly: true)];
-    }
-
-    private static async Task HandleCookieCheckAsync(ProviderCommandContext context, IncomingMessage message)
-    {
-        if (context.PrimaryProvider is not IProviderLoginStatusProvider loginStatusProvider)
-        {
-            await context.BotContext.Message.ReplyAsync(message, "Douyin 解析器尚未初始化或不支持 Cookie 检查。");
-            return;
-        }
-
-        var status = await loginStatusProvider.CheckLoginStatusAsync();
-        var detail = status.IsLogin
-            ? $"有效 / 已登录：{status.UserName ?? "未知用户"}" + (string.IsNullOrWhiteSpace(status.UserId) ? string.Empty : $" ({status.UserId})")
-            : status.NeedVerify ? "触发安全验证：" + status.Message : "无效 / 未登录：" + status.Message;
-        await context.BotContext.Message.ReplyAsync(message, "DouyinCookie 状态：" + detail);
-    }
 }

@@ -14,8 +14,8 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="VideoLibrary" />
         <PackageReference Include="ShiroBot.SDK" />
-        <PackageReference Include="Net.Codecrete.QrCodeGenerator" />
         <PackageReference Include="LightDl" />
         <PackageReference Include="SilkCodec.NET" />
     </ItemGroup>

@@ -254,10 +254,40 @@ private async Task SendGalleryMessageAsync(
                 BotLog.Info($"MyParser 图文音乐 SILK AudioSegment 发送完成: aweme_id={result.AwemeId}, variant={variant.Name}, scene={GetMessageScene(message)}, message_id={response.MessageId}, time={response.Timestamp}, elapsed={stopwatch.Elapsed:mm\\:ss}");
             }
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
-            BotLog.Warning($"MyParser 图文音乐 RecordSegment 发送失败，回退文本链接: aweme_id={result.AwemeId}, error={ex.Message}");
-            await _context.Message.ReplyAsync(message, "音乐：" + result.MusicUrl);
+            if (string.IsNullOrWhiteSpace(localPath) || !File.Exists(localPath))
+            {
+                BotLog.Warning($"MyParser 图文音乐下载失败: aweme_id={result.AwemeId}, error={ex.Message}");
+                await _context.Message.ReplyAsync(message, "抖音图文音乐下载失败：" + ex.Message);
+                return;
+            }
+
+            BotLog.Warning($"MyParser 图文音乐 SILK 编码或发送失败，尝试直接发送 MP3 语音: aweme_id={result.AwemeId}, error={ex.Message}");
+            try
+            {
+                var recordUri = await _hostServices.BuildRecordUriAsync(localPath);
+                var response = await _context.Message.ReplyAsync(message, new RecordOutgoingSegment(recordUri));
+                if (string.IsNullOrWhiteSpace(response.MessageId))
+                {
+                    throw new InvalidOperationException("抖音图文音乐 MP3 发送未返回有效 message_id。");
+                }
+
+                BotLog.Info($"MyParser 图文音乐 MP3 语音发送完成: aweme_id={result.AwemeId}, message_id={response.MessageId}");
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception fallbackEx)
+            {
+                BotLog.Warning($"MyParser 图文音乐 MP3 语音发送失败: aweme_id={result.AwemeId}, error={fallbackEx.Message}");
+                await _context.Message.ReplyAsync(message, "抖音图文音乐语音发送失败：" + fallbackEx.Message);
+            }
         }
         finally
         {

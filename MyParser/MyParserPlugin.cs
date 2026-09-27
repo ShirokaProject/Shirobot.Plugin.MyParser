@@ -16,7 +16,7 @@ namespace Shirobot.Plugin.MyParser;
 
 [BotPlugin(id: "MyParser",
     Name = "MyParser",
-    Version = "0.5.4",
+    Version = "0.5.5",
     Author = "PVPGood",
     Category = PluginCategory.Utility,
     Description = "面向 Shirobot 的学习型内容消息处理插件。",
@@ -43,7 +43,6 @@ public sealed class MyParserPlugin : PluginBase
     private readonly List<IProviderAutoParsePolicy> _providerAutoParsePolicies = [];
     private readonly List<IProviderResultMessageClassifier> _providerResultMessageClassifiers = [];
     private readonly List<IProviderReplyParseTextBuilder> _providerReplyParseTextBuilders = [];
-    private readonly List<IProviderCommandContributor> _providerCommandContributors = [];
     private readonly Dictionary<string, string> _providerModuleIds = new(StringComparer.OrdinalIgnoreCase);
     private ParseProviderRegistry? _providerRegistry;
     private ProviderHostServices? _hostServices;
@@ -73,7 +72,7 @@ public sealed class MyParserPlugin : PluginBase
         MyParserRuntime.ResetForLoad();
         ProviderMessageUtilities.ClearReactionCache();
         _config = Context.Config.Load<PluginConfig>();
-        _hostServices = new ProviderHostServices(Context);
+        _hostServices = new ProviderHostServices(Context, _config);
         var modules = DiscoverProviderModules();
         RegisterProviderModuleCapabilities(modules);
         NormalizeRuntimeDirectories();
@@ -107,38 +106,15 @@ public sealed class MyParserPlugin : PluginBase
 
         LogLoadedProviderCapabilities(modules, orderedProviders);
 
-        await LogProviderCookieLoginStatusesAsync(orderedProviders);
 
-        // GroupCommands.MapExact("b", async message =>
-        // {
-        //     BotLog.Error("MyParser 错误日志测试");
-        //     var text = GetPlainText(message);
-        //     var pic = await Context.RenderControlPngAsync<BiliCard>(new BiliCardViewModel(),
-        //         new ControlRenderOptions(RenderTheme.Light,192));
-        //     await Context.Message.ReplyAsync(message, $"b卡",new ImageOutgoingSegment($"base64://{Convert.ToBase64String(pic)}"));
-        // });
-        //
-        // GroupCommands.MapExact("d", async message =>
-        // {
-        //     BotLog.Error("MyParser 错误日志测试");
-        //     var text = GetPlainText(message);
-        //     var pic = await Context.RenderControlPngAsync<DouyinCard>(new DouyinCardViewModel(),
-        //         new ControlRenderOptions(RenderTheme.Light));
-        //     await Context.Message.ReplyAsync(message, $"dycard",new ImageOutgoingSegment($"base64://{Convert.ToBase64String(pic)}"));
-        // });
-        //
-        DirectCommands.MapExact("#parser", HandleHelpAsync);
-        GroupCommands.MapExact("#parser", HandleHelpAsync);
         RegisterProviderCommands(modules, orderedProviders);
 
-        DirectCommands.MapWhen(IsParseCommand, HandleParseCommandAsync);
-        GroupCommands.MapWhen(IsParseCommand, HandleParseCommandAsync);
 
         DirectCommands.MapWhen(ShouldAutoParse, HandleAutoParseAsync);
         GroupCommands.MapWhen(ShouldAutoParse, HandleAutoParseAsync);
 
         StartHotReloadWatchers();
-        BotLog.Info($"MyParser 已加载：provider 自动注册完成。命令：#parser / {_config.ParseCommandPrefix} <链接>");
+        BotLog.Info("MyParser 已加载：自动检测平台链接，搜索命令：#wyy <歌名/歌手>。");
     }
 
     private static IMyParserProviderModule[] DiscoverProviderModules()
@@ -168,7 +144,6 @@ public sealed class MyParserPlugin : PluginBase
         _providerAutoParsePolicies.Clear();
         _providerResultMessageClassifiers.Clear();
         _providerReplyParseTextBuilders.Clear();
-        _providerCommandContributors.Clear();
 
         foreach (var module in modules)
         {
@@ -202,10 +177,6 @@ public sealed class MyParserPlugin : PluginBase
                 _providerReplyParseTextBuilders.Add(replyParseTextBuilder);
             }
 
-            if (module is IProviderCommandContributor commandContributor)
-            {
-                _providerCommandContributors.Add(commandContributor);
-            }
         }
     }
 
@@ -290,16 +261,6 @@ public sealed class MyParserPlugin : PluginBase
             capabilities.Add("incoming-message-extract");
         }
 
-        if (provider is IProviderLoginStatusProvider)
-        {
-            capabilities.Add("login-status");
-        }
-
-        if (provider is IQrLoginProvider)
-        {
-            capabilities.Add("qr-login");
-        }
-
         if (provider is IParserHttpClientAccessor)
         {
             capabilities.Add("http-client");
@@ -382,33 +343,6 @@ public sealed class MyParserPlugin : PluginBase
         return provider is IProviderPriority priorityProvider ? priorityProvider.Priority : 100;
     }
 
-    private async Task LogProviderCookieLoginStatusesAsync(IEnumerable<IParseProvider> providers)
-    {
-        foreach (var provider in providers.OfType<IProviderLoginStatusProvider>())
-        {
-            var parseProvider = (IParseProvider)provider;
-            await LogProviderCookieLoginStatusAsync(parseProvider, parseProvider.Name);
-        }
-    }
-
-    private static async Task LogProviderCookieLoginStatusAsync(IParseProvider? provider, string platformName)
-    {
-        if (provider is not IProviderLoginStatusProvider loginStatusProvider)
-        {
-            return;
-        }
-
-        try
-        {
-            var status = await loginStatusProvider.CheckLoginStatusAsync();
-            BotLog.Info($"MyParser {platformName}Cookie 登录状态：{status.Message}");
-        }
-        catch (Exception ex)
-        {
-            BotLog.Warning($"MyParser {platformName}Cookie 登录状态检查失败：{ex.GetType().Name}: {ex.Message}");
-        }
-    }
-
     private void LoadProviderCookiesFromPluginDirectory()
     {
         foreach (var descriptor in _providerCookieDescriptors)
@@ -458,19 +392,18 @@ public sealed class MyParserPlugin : PluginBase
 
         MyParserRuntime.DouyinCookie = string.Empty;
         MyParserRuntime.BilibiliCookie = string.Empty;
-        MyParserRuntime.XiaohongshuCookie = string.Empty;
         MyParserRuntime.NetEaseCloudMusicCookie = string.Empty;
 
         MyParserRuntime.DownloadDirectory = Path.Combine(pluginDir, "tmp", "douyin");
         MyParserRuntime.BilibiliDownloadDirectory = Path.Combine(pluginDir, "tmp", "bilibili");
-        MyParserRuntime.XiaohongshuDownloadDirectory = Path.Combine(pluginDir, "tmp", "xiaohongshu");
+        MyParserRuntime.YouTubeDownloadDirectory = Path.Combine(pluginDir, "tmp", "youtube");
         MyParserRuntime.WeixinChannelsDownloadDirectory = Path.Combine(pluginDir, "tmp", "weixinchannels");
 
         Directory.CreateDirectory(Path.Combine(pluginDir, CookieDirectoryName));
         LocalMediaCleanup.CleanupStartupResidues(_config);
         Directory.CreateDirectory(MyParserRuntime.DownloadDirectory);
         Directory.CreateDirectory(MyParserRuntime.BilibiliDownloadDirectory);
-        Directory.CreateDirectory(MyParserRuntime.XiaohongshuDownloadDirectory);
+        Directory.CreateDirectory(MyParserRuntime.YouTubeDownloadDirectory);
         Directory.CreateDirectory(MyParserRuntime.WeixinChannelsDownloadDirectory);
     }
 
@@ -579,7 +512,7 @@ public sealed class MyParserPlugin : PluginBase
     {
         var updated = Context.Config.Load<PluginConfig>();
         ApplyConfigValues(_config, updated);
-        BotLog.Info("MyParser 配置已热重载。注意：命令热重载仅支持 #parse 前缀；登录/Cookie 检查命令为固定命令。 ");
+        BotLog.Info("MyParser 配置已热重载。");
     }
 
     private void ReloadCookiesNow()
@@ -665,50 +598,8 @@ public sealed class MyParserPlugin : PluginBase
         _providerAutoParsePolicies.Clear();
         _providerResultMessageClassifiers.Clear();
         _providerReplyParseTextBuilders.Clear();
-        _providerCommandContributors.Clear();
         _providerModuleIds.Clear();
         BotLog.Info("MyParser 已卸载。");
-    }
-
-    private Task HandleHelpAsync(IncomingMessage message)
-    {
-        var modules = _providerModuleIds.Values.Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray();
-        var commands = _providerCommandDescriptors.Select(i => i.Command).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray();
-        var cookies = _providerCookieDescriptors.Select(i => $"cookies/{i.FileName}").Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray();
-        var runtimeHelp = _providerRuntimeModules
-            .Select(module => module.GetHelpText(_config))
-            .Where(i => !string.IsNullOrWhiteSpace(i))
-            .ToArray();
-        var help = new StringBuilder();
-        help.AppendLine("MyParser");
-        help.AppendLine($"已加载 provider：{(modules.Length == 0 ? "无" : string.Join(" / ", modules))}");
-        help.AppendLine();
-        help.AppendLine("用法：");
-        help.AppendLine($"1. {_config.ParseCommandPrefix} <分享链接>");
-        help.AppendLine("2. 直接发送 provider 支持的链接可自动解析");
-        if (commands.Length > 0)
-        {
-            help.AppendLine($"3. provider 命令：{string.Join(" / ", commands)}");
-        }
-
-        if (cookies.Length > 0)
-        {
-            help.AppendLine();
-            help.AppendLine("Cookie 文件：" + string.Join("、", cookies));
-        }
-
-        foreach (var item in runtimeHelp)
-        {
-            help.AppendLine();
-            help.AppendLine(item);
-        }
-
-        return Context.Message.ReplyAsync(message, help.ToString().TrimEnd());
-    }
-
-    private bool IsParseCommand(IncomingMessage message)
-    {
-        return TryGetParseCommandContent(GetPlainText(message), out _);
     }
 
     private bool ShouldAutoParse(IncomingMessage message)
@@ -722,8 +613,7 @@ public sealed class MyParserPlugin : PluginBase
         if (!string.IsNullOrWhiteSpace(text))
         {
             var trimmed = text.TrimStart();
-            if (TryGetParseCommandContent(trimmed, out _)
-                || IsPluginResultMessage(trimmed)
+            if (IsPluginResultMessage(trimmed)
                 || IsDeferredProviderParseText(trimmed)
                 || _providerCommandDescriptors.Any(i => IsProviderCommand(trimmed, i)))
             {
@@ -818,14 +708,6 @@ public sealed class MyParserPlugin : PluginBase
         return policy?.IsAutoParseEnabled(_config) ?? false;
     }
 
-    private Task HandleParseCommandAsync(IncomingMessage message)
-    {
-        var text = GetPlainText(message);
-        var content = TryGetParseCommandContent(text, out var parsedContent) ? parsedContent : string.Empty;
-
-        return QueueParse(message, string.IsNullOrWhiteSpace(content) ? text : content);
-    }
-
     private Task QueueParse(
         IncomingMessage message,
         string text,
@@ -861,35 +743,6 @@ public sealed class MyParserPlugin : PluginBase
             TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default);
         return Task.CompletedTask;
-    }
-
-    private bool TryGetParseCommandContent(string text, out string content)
-    {
-        var trimmed = text.TrimStart();
-        return TryStripParseCommandPrefix(trimmed, _config.ParseCommandPrefix, requireContent: false, out content)
-               || TryStripParseCommandPrefix(trimmed, "#parser", requireContent: true, out content);
-    }
-
-    private static bool TryStripParseCommandPrefix(string text, string prefix, bool requireContent, out string content)
-    {
-        content = string.Empty;
-        if (string.IsNullOrWhiteSpace(prefix) || !text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        if (text.Length == prefix.Length)
-        {
-            return !requireContent;
-        }
-
-        if (!char.IsWhiteSpace(text[prefix.Length]))
-        {
-            return false;
-        }
-
-        content = text[prefix.Length..].Trim();
-        return !requireContent || !string.IsNullOrWhiteSpace(content);
     }
 
     private void RegisterProviderCommands(IReadOnlyCollection<IMyParserProviderModule> modules, IReadOnlyList<IParseProvider> orderedProviders)
@@ -952,29 +805,7 @@ public sealed class MyParserPlugin : PluginBase
 
     private async Task HandleProviderCommandAsync(IncomingMessage message, ProviderCommandDescriptor descriptor)
     {
-        if (descriptor.AdminOnly && !await EnsurePrivateAdminCommandAsync(message, descriptor.Command))
-        {
-            return;
-        }
-
         await descriptor.HandleAsync(message);
-    }
-
-    private async Task<bool> EnsurePrivateAdminCommandAsync(IncomingMessage message, string command)
-    {
-        if (!message.IsDirect)
-        {
-            await Context.Message.ReplyAsync(message, $"{command} 涉及账号登录凭据，仅允许机器人 Owner/Admin 私信机器人使用，请不要在群内触发。");
-            return false;
-        }
-
-        if (Context.IsAdmin(message.Sender.Id))
-        {
-            return true;
-        }
-
-        await Context.Message.ReplyAsync(message, $"{command} 仅允许机器人 Owner/Admin 私信使用。");
-        return false;
     }
 
     private bool IsPluginResultMessage(string text)
@@ -1006,6 +837,11 @@ public sealed class MyParserPlugin : PluginBase
         }
 
         var handler = TryGetProviderMessageHandler(provider.Id);
+        if (provider.Id == "youtube" && _config.YouTubeAdminOnly && !Context.IsAdmin(message.Sender.Id))
+        {
+            return;
+        }
+
         if (handler is null)
         {
             await Context.Message.ReplyAsync(message, $"{provider.Name} 已识别，但该 provider 未接入消息发送流程。");

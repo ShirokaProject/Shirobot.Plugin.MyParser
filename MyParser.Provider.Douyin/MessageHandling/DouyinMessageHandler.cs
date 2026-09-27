@@ -78,7 +78,8 @@ internal sealed partial class DouyinMessageHandler : ProviderMessageHandlerBase
             {
                 try
                 {
-                    _ = StartSendCoverMessageAsync(message, result, cancellationToken);
+                    if (_config.IsCoverEnabled("douyin"))
+                        _ = StartSendCoverMessageAsync(message, result, cancellationToken);
                     var videoSegment = await BuildVideoSegmentAsync(result);
                     cancellationToken.ThrowIfCancellationRequested();
                     if (videoSegment is null)
@@ -165,7 +166,7 @@ internal sealed partial class DouyinMessageHandler : ProviderMessageHandlerBase
 
             if (result.IsGallery)
             {
-                if (!string.IsNullOrWhiteSpace(result.CoverUrl))
+                if (_config.IsCoverEnabled("douyin") && !string.IsNullOrWhiteSpace(result.CoverUrl))
                 {
                     await SendCoverMessageAsync(message, result, cancellationToken);
                 }
@@ -213,11 +214,6 @@ internal sealed partial class DouyinMessageHandler : ProviderMessageHandlerBase
             BotLog.Error($"MyParser 解析异常：{ex}");
             await _context.Message.ReplyAsync(message, "解析异常：" + ex.Message);
         }
-    }
-
-    public override Task HandleLoginAsync(IncomingMessage message)
-    {
-        return _context.Message.ReplyAsync(message, "Douyin provider 暂不支持扫码登录，请编辑插件 cookies/douyin.txt。 ");
     }
 
     private Task TryReactToSourceMessageAsync(IncomingMessage message, string faceId)

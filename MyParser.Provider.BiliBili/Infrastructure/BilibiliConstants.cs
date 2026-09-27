@@ -11,6 +11,4 @@ public static class BilibiliConstants
     public const string ArticleViewApi = "https://api.bilibili.com/x/article/view";
     public const string OpusDetailApi = "https://api.bilibili.com/x/polymer/web-dynamic/v1/opus/detail";
     public const string OpusDetailFeatures = "onlyfansVote,onlyfansAssetsV2,decorationCard,htmlNewStyle,ugcDelete,editable,opusPrivateVisible,tribeeEdit,avatarAutoTheme,avatarTypeOpus";
-    public const string QrGenerateApi = "https://passport.bilibili.com/x/passport-login/web/qrcode/generate";
-    public const string QrPollApi = "https://passport.bilibili.com/x/passport-login/web/qrcode/poll";
 }

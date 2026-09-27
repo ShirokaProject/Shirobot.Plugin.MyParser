@@ -23,7 +23,7 @@ public sealed class NetEaseCloudMusicProviderModule : MyParserProviderModuleBase
             "netease.txt",
             cookie => MyParserRuntime.NetEaseCloudMusicCookie = cookie,
             LooksLikeCookie,
-            EmptyHint: "可私信发送 #wyy-login 扫码登录，或编辑 cookies/netease.txt 后重启/等待热重载；无 Cookie 仍可搜索，VIP/高音质通常不可用。",
+            EmptyHint: "请编辑 cookies/netease.txt，保存后自动重载；无 Cookie 仍可搜索，VIP/高音质通常不可用。",
             InvalidHint: "请填入网易云网页请求中的完整 Cookie，建议包含 MUSIC_U/__csrf/NMTID。")
     ];
 
@@ -68,8 +68,6 @@ public sealed class NetEaseCloudMusicProviderModule : MyParserProviderModuleBase
         return
         [
             new ProviderCommandDescriptor("#wyy", message => HandleSearchCommandAsync(context, message)),
-            new ProviderCommandDescriptor("#wyy-login", message => HandleLoginAsync(context, message), AdminOnly: true),
-            new ProviderCommandDescriptor("#wyy-cookie-check", message => HandleCookieCheckAsync(context, message), AdminOnly: true),
         ];
     }
 
@@ -131,34 +129,6 @@ public sealed class NetEaseCloudMusicProviderModule : MyParserProviderModuleBase
         {
             SearchReplySongIds[BuildSearchReplyCacheKey(message, response.MessageId)] = songIds;
         }
-    }
-
-    private static Task HandleLoginAsync(ProviderCommandContext context, IncomingMessage message)
-    {
-        if (!context.Config.EnableNetEaseCloudMusic)
-        {
-            return context.BotContext.Message.ReplyAsync(message, "网易云音乐解析已关闭。");
-        }
-
-        return context.MessageHandler?.HandleLoginAsync(message)
-               ?? context.BotContext.Message.ReplyAsync(message, "网易云音乐解析器尚未初始化或不支持登录。");
-    }
-
-    private static async Task HandleCookieCheckAsync(ProviderCommandContext context, IncomingMessage message)
-    {
-        if (!context.Config.EnableNetEaseCloudMusic)
-        {
-            await context.BotContext.Message.ReplyAsync(message, "网易云音乐解析已关闭。");
-            return;
-        }
-
-        if (context.PrimaryProvider is not IProviderLoginStatusProvider loginStatusProvider)
-        {
-            await context.BotContext.Message.ReplyAsync(message, "网易云音乐解析器尚未初始化或不支持 Cookie 检查。");
-            return;
-        }
-        var status = await loginStatusProvider.CheckLoginStatusAsync().ConfigureAwait(false);
-        await context.BotContext.Message.ReplyAsync(message, "网易云音乐 Cookie 状态：" + (status.IsLogin ? "可用：" : "不可用：") + status.Message);
     }
 
     private static IReadOnlyList<long>? TryGetCachedSearchReplySongIds(IncomingMessage message, string replyMessageId, int index)

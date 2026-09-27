@@ -14,8 +14,6 @@ public sealed class NetEaseParser : IParserHttpClientAccessor, IDisposable
     private const string SongDetailApi = "https://music.163.com/api/v3/song/detail";
     private const string LyricApi = "https://music.163.com/api/song/lyric";
     private const string SearchApi = "https://music.163.com/api/cloudsearch/pc";
-    private const string QrUnikeyApi = "https://interface3.music.163.com/eapi/login/qrcode/unikey";
-    private const string QrLoginApi = "https://interface3.music.163.com/eapi/login/qrcode/client/login";
     private readonly NetEaseHttp _http;
     private readonly TimeSpan _apiTimeout;
     public HttpClient HttpClient => _http.Client;
@@ -30,72 +28,6 @@ public sealed class NetEaseParser : IParserHttpClientAccessor, IDisposable
         && (cookie.Contains("MUSIC_U=", StringComparison.OrdinalIgnoreCase)
             || cookie.Contains("__csrf=", StringComparison.OrdinalIgnoreCase)
             || cookie.Contains("NMTID=", StringComparison.OrdinalIgnoreCase));
-
-    public Task<ProviderLoginStatus> CheckLoginStatusAsync(CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(MyParserRuntime.NetEaseCloudMusicCookie))
-        {
-            return Task.FromResult(new ProviderLoginStatus(false, null, null, "Cookie 为空；请编辑 cookies/netease.txt。无 Cookie 仍可搜索，VIP/高音质通常不可用。"));
-        }
-        return Task.FromResult(LooksLikeCookie(MyParserRuntime.NetEaseCloudMusicCookie)
-            ? new ProviderLoginStatus(true, null, null, "Cookie 格式可用（未调用账号接口校验）。")
-            : new ProviderLoginStatus(false, null, null, "Cookie 缺少 MUSIC_U/__csrf/NMTID 等关键字段。"));
-    }
-
-    public async Task<NetEaseQrLoginSession> GenerateQrLoginSessionAsync(CancellationToken cancellationToken = default)
-    {
-        var config = CreateEApiHeader();
-        var payload = new
-        {
-            type = 1,
-            header = JsonSerializer.Serialize(config, NetEaseJson.Options),
-        };
-        var encrypted = NetEaseCrypto.EncryptEApiParams(QrUnikeyApi, payload);
-        var json = await _http.PostFormAsync(QrUnikeyApi, new Dictionary<string, string> { ["params"] = encrypted }, string.Empty, cancellationToken).ConfigureAwait(false);
-        using var doc = JsonDocument.Parse(json);
-        var root = doc.RootElement;
-        var code = root.TryGetProperty("code", out var codeElement) ? codeElement.GetInt32() : 0;
-        if (code != 200)
-        {
-            throw new NetEaseParseException("生成网易云登录二维码失败：" + (GetString(root, "message") ?? code.ToString()));
-        }
-
-        var key = GetString(root, "unikey") ?? throw new NetEaseParseException("生成网易云登录二维码失败：响应缺少 unikey。");
-        return new NetEaseQrLoginSession(key, $"https://music.163.com/login?codekey={Uri.EscapeDataString(key)}");
-    }
-
-    public async Task<NetEaseQrLoginPollResult> PollQrLoginAsync(string key, CancellationToken cancellationToken = default)
-    {
-        var config = CreateEApiHeader();
-        var payload = new
-        {
-            key,
-            type = 1,
-            header = JsonSerializer.Serialize(config, NetEaseJson.Options),
-        };
-        var encrypted = NetEaseCrypto.EncryptEApiParams(QrLoginApi, payload);
-        using var response = await _http.PostFormResponseAsync(QrLoginApi, new Dictionary<string, string> { ["params"] = encrypted }, string.Empty, cancellationToken).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
-        var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        using var doc = JsonDocument.Parse(json);
-        var root = doc.RootElement;
-        var code = root.TryGetProperty("code", out var codeElement) ? codeElement.GetInt32() : -1;
-        var message = GetString(root, "message") ?? code switch
-        {
-            801 => "等待扫码",
-            802 => "已扫码，等待确认",
-            803 => "登录成功",
-            800 => "二维码已过期",
-            _ => "未知状态",
-        };
-        var cookie = code == 803 ? ExtractCookie(response) : null;
-        if (!string.IsNullOrWhiteSpace(cookie))
-        {
-            MyParserRuntime.NetEaseCloudMusicCookie = cookie;
-        }
-
-        return new NetEaseQrLoginPollResult(code, message, code == 803, code == 800, code == 802, cookie);
-    }
 
     public async Task<IReadOnlyList<NetEaseSearchSong>> SearchAsync(string keywords, int limit = 10, CancellationToken cancellationToken = default)
     {
@@ -223,39 +155,6 @@ public sealed class NetEaseParser : IParserHttpClientAccessor, IDisposable
             deviceId = "pyncm!",
             requestId = Random.Shared.Next(20000000, 30000000).ToString(),
         };
-    }
-
-    private static string? ExtractCookie(HttpResponseMessage response)
-    {
-        if (!response.Headers.TryGetValues("Set-Cookie", out var values))
-        {
-            return null;
-        }
-
-        var parts = new List<string>();
-        foreach (var value in values)
-        {
-            foreach (var raw in value.Split(','))
-            {
-                var segment = raw.Trim();
-                var first = segment.Split(';', 2)[0].Trim();
-                if (string.IsNullOrWhiteSpace(first) || !first.Contains('='))
-                {
-                    continue;
-                }
-
-                if (first.StartsWith("MUSIC_U=", StringComparison.OrdinalIgnoreCase)
-                    || first.StartsWith("__csrf=", StringComparison.OrdinalIgnoreCase)
-                    || first.StartsWith("NMTID=", StringComparison.OrdinalIgnoreCase))
-                {
-                    parts.Add(first);
-                }
-            }
-        }
-
-        if (!parts.Any(i => i.StartsWith("os=", StringComparison.OrdinalIgnoreCase))) parts.Add("os=pc");
-        if (!parts.Any(i => i.StartsWith("appver=", StringComparison.OrdinalIgnoreCase))) parts.Add("appver=8.9.70");
-        return parts.Count == 0 ? null : string.Join("; ", parts.Distinct(StringComparer.OrdinalIgnoreCase));
     }
 
     private static async Task<T> TimedAsync<T>(string name, Func<Task<T>> action)

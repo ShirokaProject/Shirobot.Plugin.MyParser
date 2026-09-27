@@ -6,8 +6,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MyParser.Sharing", "MyParse
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Shirobot.Plugin.MyParser", "MyParser\Shirobot.Plugin.MyParser.csproj", "{CAB2AB13-311D-4741-94DB-C5735B045422}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MyParser.Provider.Douyin", "MyParser.Provider.Douyin\MyParser.Provider.Douyin.csproj", "{13D5B428-BC72-4D18-9AC6-96895B90CE1E}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -22,10 +20,6 @@ Global
 		{CAB2AB13-311D-4741-94DB-C5735B045422}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{CAB2AB13-311D-4741-94DB-C5735B045422}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{CAB2AB13-311D-4741-94DB-C5735B045422}.Release|Any CPU.Build.0 = Release|Any CPU
-		{13D5B428-BC72-4D18-9AC6-96895B90CE1E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{13D5B428-BC72-4D18-9AC6-96895B90CE1E}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{13D5B428-BC72-4D18-9AC6-96895B90CE1E}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{13D5B428-BC72-4D18-9AC6-96895B90CE1E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

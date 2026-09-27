@@ -39,7 +39,8 @@ internal sealed class HeyboxMessageHandler(ProviderMessageHandlerContext context
                 return;
             }
 
-            await SendInfoCardAsync(message, result);
+            if (Config.IsCoverEnabled("heybox"))
+                await SendInfoCardAsync(message, result);
             await SendHeyboxArticleAsync(message, result);
             await SendArticleDocumentCardAsync(message, result);
             await ReactAsync(message, "426", "小黑盒");

@@ -29,7 +29,7 @@ private async Task<VideoOutgoingSegment?> BuildVideoSegmentAsync(DouyinParseResu
         LogFinalVideoFileInfo(result);
 
         string? thumbUri = null;
-        if (!string.IsNullOrWhiteSpace(result.CoverUrl))
+        if (_config.IsCoverEnabled("douyin") && !string.IsNullOrWhiteSpace(result.CoverUrl))
         {
             var localCover = await BuildRemoteImageAsync(
                 result.CoverUrl,

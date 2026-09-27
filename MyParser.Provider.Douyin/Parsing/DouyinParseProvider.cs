@@ -3,7 +3,7 @@ using Shirobot.Plugin.MyParser.Parsing;
 using MyParser.Provider.Douyin.Parsing;
 namespace MyParser.Provider.Douyin.Parsing;
 
-public sealed class DouyinParseProvider(DouyinParser parser) : IParseProviderWithParser, IProviderLoginStatusProvider, IProviderPriority, IDisposable
+public sealed class DouyinParseProvider(DouyinParser parser) : IParseProviderWithParser, IProviderPriority, IDisposable
 {
     public DouyinParser Parser { get; } = parser;
     public object ParserObject => Parser;
@@ -13,14 +13,6 @@ public sealed class DouyinParseProvider(DouyinParser parser) : IParseProviderWit
     public int Priority => 10;
 
     public bool CanHandle(string text) => DouyinParser.ContainsDouyinUrl(text);
-
-    public async Task<ProviderLoginStatus> CheckLoginStatusAsync(CancellationToken cancellationToken = default)
-    {
-        var message = await Parser.CheckLoginStatusAsync(cancellationToken);
-        var isLogin = message.Contains("有效/已登录", StringComparison.OrdinalIgnoreCase)
-                      || message.Contains("游客 Cookie", StringComparison.OrdinalIgnoreCase);
-        return new ProviderLoginStatus(isLogin, null, null, message);
-    }
 
     public async Task<MediaParseResult> ParseAsync(string text, CancellationToken cancellationToken = default)
     {

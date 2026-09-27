@@ -35,7 +35,6 @@ appsettings.Development.local.json
 *.local.json
 .env
 .env.*
-!.env.example
 
 # Plugin packages
 *.nupkg

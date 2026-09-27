@@ -15,17 +15,6 @@ public interface IParserHttpClientAccessor
     HttpClient HttpClient { get; }
 }
 
-public interface IProviderLoginStatusProvider
-{
-    Task<ProviderLoginStatus> CheckLoginStatusAsync(CancellationToken cancellationToken = default);
-}
-
-public interface IQrLoginProvider
-{
-    Task<QrLoginSession> GenerateQrLoginSessionAsync(CancellationToken cancellationToken = default);
-    Task<QrLoginPollResult> PollQrLoginAsync(QrLoginSession session, CancellationToken cancellationToken = default);
-}
-
 public interface IVideoDownloadGate
 {
     void EnsureVideoDownloadAllowed();
@@ -113,18 +102,15 @@ public interface IProviderMessageHandler : IDisposable
         string text,
         bool silentProviderMismatch = false,
         CancellationToken cancellationToken = default);
-    Task HandleLoginAsync(MessageEvent message);
 }
 
 public interface IProviderRuntimeModule
 {
     IReadOnlyList<string> ProviderIds { get; }
-    IReadOnlyList<string> CommandPrefixes { get; }
     void LoadRuntime(ProviderRuntimeContext context);
     void ReloadRuntime(ProviderRuntimeContext context);
     Task LogRuntimeStatusAsync(ProviderRuntimeContext context);
     IReadOnlyList<ProviderCommandDescriptor> CreateCommands(ProviderCommandContext context);
-    string? GetHelpText(PluginConfig config);
     bool IsPluginResultMessage(string text);
     bool IsAutoParseEnabled(PluginConfig config);
 }
@@ -223,22 +209,7 @@ public sealed record ProviderCommandContext(
 
 public sealed record ProviderCommandDescriptor(
     string Command,
-    Func<MessageEvent, Task> HandleAsync,
-    bool AdminOnly = false);
-
-public sealed record ProviderLoginStatus(bool IsLogin, string? UserName, string? UserId, string Message, bool NeedVerify = false);
-
-public sealed record QrLoginSession(string Id, string Url, object? State = null);
-
-public sealed record QrLoginPollResult(
-    int Code,
-    string Message,
-    bool IsLogin,
-    bool IsExpired = false,
-    bool IsWaitingConfirmation = false,
-    bool NeedVerify = false,
-    string? UserName = null,
-    object? State = null);
+    Func<MessageEvent, Task> HandleAsync);
 
 public enum ProviderVideoValidationKind
 {

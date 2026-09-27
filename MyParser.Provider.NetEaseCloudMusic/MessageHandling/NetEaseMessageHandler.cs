@@ -1,8 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
-using System.Text;
 using System.Text.RegularExpressions;
-using Net.Codecrete.QrCodeGenerator;
 using MyParser.Provider.NetEaseCloudMusic.Infrastructure;
 using MyParser.Provider.NetEaseCloudMusic.Models;
 using MyParser.Provider.NetEaseCloudMusic.Parsing;
@@ -18,63 +16,6 @@ namespace MyParser.Provider.NetEaseCloudMusic.MessageHandling;
 internal sealed partial class NetEaseMessageHandler(ProviderMessageHandlerContext context) : ProviderMessageHandlerBase(context)
 {
     public override string ProviderId => "neteasecloudmusic";
-
-    public override async Task HandleLoginAsync(IncomingMessage message)
-    {
-        if (!Config.EnableNetEaseCloudMusic)
-        {
-            await ReplyAsync(message, "网易云音乐解析已关闭。");
-            return;
-        }
-
-        try
-        {
-            if (PrimaryProvider is not IQrLoginProvider qrLoginProvider)
-            {
-                await ReplyAsync(message, "网易云音乐 provider 不支持扫码登录。");
-                return;
-            }
-
-            var session = await qrLoginProvider.GenerateQrLoginSessionAsync().ConfigureAwait(false);
-            await ReplyAsync(message,
-                "网易云音乐扫码登录\n"
-                + "请使用网易云音乐手机 App 扫描下面二维码，并在 3 分钟内确认登录。\n"
-                + $"如果二维码图片无法显示，请打开：{session.Url}");
-            await SendQrImageAsync(message, session.Url, $"netease_qr_{session.Id}").ConfigureAwait(false);
-
-            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(3));
-            while (!cts.IsCancellationRequested)
-            {
-                await Task.Delay(TimeSpan.FromSeconds(3), cts.Token).ConfigureAwait(false);
-                var poll = await qrLoginProvider.PollQrLoginAsync(session, cts.Token).ConfigureAwait(false);
-                switch (poll)
-                {
-                    case { IsLogin: true }:
-                        SaveNetEaseCookieToPluginDirectory();
-                        await ReplyAsync(message, "网易云音乐登录成功，Cookie 已保存到插件 cookies/netease.txt。");
-                        return;
-                    case { IsExpired: true }:
-                        await ReplyAsync(message, "网易云音乐登录二维码已过期，请重新发送 #wyy-login。");
-                        return;
-                    case { IsWaitingConfirmation: true }:
-                        BotLog.Info("MyParser 网易云音乐二维码已扫码，等待确认。");
-                        break;
-                    default:
-                        BotLog.Info($"MyParser 网易云音乐二维码轮询: code={poll.Code}, message={poll.Message}");
-                        break;
-                }
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            await ReplyAsync(message, "网易云音乐登录二维码已超时，请重新发送 #wyy-login。");
-        }
-        catch (Exception ex)
-        {
-            BotLog.Warning($"MyParser 网易云音乐扫码登录失败：{ex}");
-            await ReplyAsync(message, "网易云音乐扫码登录失败：" + ex.Message);
-        }
-    }
 
     public override async Task ParseAndReplyAsync(IncomingMessage message, string text, bool silentProviderMismatch = false, CancellationToken cancellationToken = default)
     {
@@ -100,7 +41,7 @@ internal sealed partial class NetEaseMessageHandler(ProviderMessageHandlerContex
                 return;
             }
 
-            if (Config.SendNetEaseCloudMusicIntroCard)
+                if (Config.IsCoverEnabled("neteasecloudmusic"))
             {
                 await SendCoverCardMessageAsync(message, result).ConfigureAwait(false);
             }
@@ -138,30 +79,6 @@ internal sealed partial class NetEaseMessageHandler(ProviderMessageHandlerContex
             BotLog.Error("MyParser 网易云音乐解析异常：" + ex);
             await ReplyAsync(message, "网易云音乐解析异常：" + ex.Message);
         }
-    }
-
-    private async Task SendQrImageAsync(IncomingMessage message, string text, string fileName)
-    {
-        var qrFile = await BuildQrImageAsync(text, fileName).ConfigureAwait(false);
-        var segment = new ImageOutgoingSegment(qrFile.Uri);
-        await BotContext.Message.ReplyAsync(message, segment).ConfigureAwait(false);
-    }
-
-    private static async Task<(string Uri, string Path)> BuildQrImageAsync(string text, string fileName)
-    {
-        var dir = Path.Combine(Path.GetTempPath(), "Shirobot.Plugin.MyParser", "neteasecloudmusic", "qr");
-        Directory.CreateDirectory(dir);
-        var path = Path.Combine(dir, fileName + ".png");
-        var qr = QrCode.EncodeText(text, QrCode.Ecc.Medium);
-        var png = qr.ToPngBitmap(border: 4, scale: 8);
-        await File.WriteAllBytesAsync(path, png).ConfigureAwait(false);
-        return ("base64://" + Convert.ToBase64String(png), path);
-    }
-
-    private void SaveNetEaseCookieToPluginDirectory()
-    {
-        var path = ResolveCookiePath("netease.txt");
-        File.WriteAllText(path, MyParserRuntime.NetEaseCloudMusicCookie, Encoding.UTF8);
     }
 
     private async Task SendCoverCardMessageAsync(IncomingMessage message, NetEaseParseResult result)

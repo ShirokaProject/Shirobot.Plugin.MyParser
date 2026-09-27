@@ -29,11 +29,6 @@ public abstract class ProviderMessageHandlerBase(ProviderMessageHandlerContext c
         bool silentProviderMismatch = false,
         CancellationToken cancellationToken = default);
 
-    public virtual Task HandleLoginAsync(MessageEvent message)
-    {
-        return ReplyAsync(message, $"{ProviderId} provider 不支持扫码登录。");
-    }
-
     protected Task ReactAsync(MessageEvent message, string faceId, string platformName)
     {
         return HostServices.ReactAsync(message, faceId, platformName);

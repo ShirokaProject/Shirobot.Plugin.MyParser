@@ -45,13 +45,6 @@ internal sealed class NetEaseHttp : IDisposable
         return await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<HttpResponseMessage> PostFormResponseAsync(string url, IEnumerable<KeyValuePair<string, string>> form, string cookie, CancellationToken cancellationToken)
-    {
-        using var request = CreateRequest(HttpMethod.Post, url, cookie);
-        request.Content = new FormUrlEncodedContent(form);
-        return await SendWithRetryAsync(request, cancellationToken).ConfigureAwait(false);
-    }
-
     public async Task<string> ResolveRedirectUrlAsync(string url, CancellationToken cancellationToken)
     {
         using var request = CreateRequest(HttpMethod.Get, url, string.Empty);
