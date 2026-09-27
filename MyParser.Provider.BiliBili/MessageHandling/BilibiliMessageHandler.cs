@@ -91,7 +91,10 @@ internal sealed partial class BilibiliMessageHandler(
 
             try
             {
-                _ = StartSendCoverMessageAsync(message, result, cancellationToken);
+                if (config.SendBilibiliVideoCover)
+                {
+                    _ = StartSendCoverMessageAsync(message, result, cancellationToken);
+                }
                 var videoSegment = await BuildVideoSegmentAsync(result);
                 await SendVideoMessageAsync(message, result, videoSegment);
                 videoSent = true;

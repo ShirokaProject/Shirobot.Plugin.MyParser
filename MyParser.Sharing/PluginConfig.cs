@@ -23,6 +23,9 @@ public sealed class PluginConfig
     [ConfigField("是否自动解析聊天中的 Bilibili 链接。", Label = "自动解析 Bilibili 链接")]
     public bool AutoParseBilibiliLinks { get; set; } = true;
 
+    [ConfigField("解析 Bilibili 视频时是否发送封面卡片。", Label = "发送 Bilibili 视频封面")]
+    public bool SendBilibiliVideoCover { get; set; } = true;
+
     [ConfigField("解析 Bilibili 视频时是否获取并发送热门评论。评论接口失败不会影响视频发送。", Label = "获取 Bilibili 评论")]
     public bool BilibiliFetchComments { get; set; } = true;
 

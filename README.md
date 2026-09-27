@@ -110,6 +110,7 @@ plugins/Shirobot.Plugin.MyParser/
   "FfmpegPath": "",
   "AutoParseDouyinLinks": true,
   "AutoParseBilibiliLinks": true,
+  "SendBilibiliVideoCover": true,
   "BilibiliFetchComments": true,
   "BilibiliCommentCount": 10,
   "AutoParseXiaohongshuLinks": false,
