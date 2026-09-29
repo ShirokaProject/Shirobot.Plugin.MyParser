@@ -28,9 +28,20 @@ internal sealed class ProviderHostServices(IBotContext context, PluginConfig plu
         return ProviderMessageUtilities.ReplyTextAsync(context, config, message, text);
     }
 
-    public Task SendImageAsync(IncomingMessage message, ImageOutgoingSegment segment)
+    public Task ReportFailureAsync(PluginConfig config, IncomingMessage message, string providerName,
+        ProviderFailureKind kind, Exception? exception = null, string? diagnosticContext = null)
+    {
+        return ProviderMessageUtilities.ReportFailureAsync(context, config, message, providerName, kind, exception, diagnosticContext);
+    }
+
+    public Task<SendMessageResult> SendImageAsync(IncomingMessage message, ImageOutgoingSegment segment)
     {
         return ProviderMessageUtilities.SendImageAsync(context, message, segment);
+    }
+
+    public Task<SendMessageResult> SendSegmentsAsync(IncomingMessage message, IReadOnlyList<OutgoingSegment> segments)
+    {
+        return ProviderMessageUtilities.SendSegmentsAsync(context, message, segments);
     }
 
     public Task RunLoggedBackgroundAsync(string description, Func<Task> action)

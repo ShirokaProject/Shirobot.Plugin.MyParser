@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using MyParser.Provider.Heybox.Models;
+using Shirobot.Plugin.MyParser.Parsing;
 
 namespace MyParser.Provider.Heybox.Parsing;
 
@@ -869,11 +870,7 @@ public sealed partial class HeyboxParser(PluginConfig config) : IDisposable
 
     private static HttpClient CreateHttpClient(PluginConfig config)
     {
-        var http = new HttpClient(new HttpClientHandler
-        {
-            AutomaticDecompression = DecompressionMethods.All,
-            AllowAutoRedirect = true,
-        });
+        var http = new HttpClient(SafeHttpTransport.CreateHandler());
         http.Timeout = TimeSpan.FromSeconds(Math.Clamp(config.RequestTimeoutSeconds, 5, 60));
         http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", BrowserUserAgent);
         http.DefaultRequestHeaders.TryAddWithoutValidation("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8");

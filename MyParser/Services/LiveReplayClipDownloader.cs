@@ -12,11 +12,7 @@ internal sealed class LiveReplayClipDownloader(PluginConfig config, ProviderDown
 {
     private const int MaxPlaylistBytes = 2 * 1024 * 1024;
 
-    private static readonly HttpClient PlaylistHttp = new(new HttpClientHandler
-    {
-        AutomaticDecompression = DecompressionMethods.All,
-        AllowAutoRedirect = true,
-    });
+    private static readonly HttpClient PlaylistHttp = new(SafeHttpTransport.CreateHandler());
 
     public async Task<ProviderLiveReplayClipDownloadResult> DownloadAsync(ProviderLiveReplayClipDownloadRequest request, CancellationToken cancellationToken = default)
     {

@@ -1,4 +1,5 @@
 using System.Net;
+using Shirobot.Plugin.MyParser.Parsing;
 using Shirobot.Plugin.MyParser.Utility;
 using ShiroBot.SDK.Abstractions;
 
@@ -36,8 +37,8 @@ internal static class RemoteImageFetchService
             var contentLength = response.Content.Headers.ContentLength;
             if (contentLength is > 0 && contentLength > maxBytes)
             {
-                BotLog.Warning($"MyParser {platformName} 图片过大，回退原始 URL: url={imageUrl}, image_mb={contentLength.Value / 1024d / 1024d:F2}, limit_mb={maxBytes / 1024d / 1024d:F0}");
-                return (imageUrl, null);
+                BotLog.Warning($"MyParser {platformName} 图片过大，已跳过远程图片: url={imageUrl}, image_mb={contentLength.Value / 1024d / 1024d:F2}, limit_mb={maxBytes / 1024d / 1024d:F0}");
+                return (string.Empty, null);
             }
 
             await using var input = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
@@ -55,8 +56,8 @@ internal static class RemoteImageFetchService
                 total += read;
                 if (total > maxBytes)
                 {
-                    BotLog.Warning($"MyParser {platformName} 图片下载超过限制，回退原始 URL: url={imageUrl}, limit_mb={maxBytes / 1024d / 1024d:F0}");
-                    return (imageUrl, null);
+                    BotLog.Warning($"MyParser {platformName} 图片下载超过限制，已跳过远程图片: url={imageUrl}, limit_mb={maxBytes / 1024d / 1024d:F0}");
+                    return (string.Empty, null);
                 }
 
                 output.Write(buffer, 0, read);
@@ -89,8 +90,8 @@ internal static class RemoteImageFetchService
         }
         catch (Exception ex)
         {
-            BotLog.Warning($"MyParser {platformName} 图片转 base64/本地文件失败，回退原始 URL: url={imageUrl}, error={ex.Message}");
-            return (imageUrl, null);
+            BotLog.Warning($"MyParser {platformName} 图片转 base64/本地文件失败，已跳过远程图片: url={imageUrl}, error={ex.Message}");
+            return (string.Empty, null);
         }
     }
 
@@ -119,10 +120,6 @@ internal static class RemoteImageFetchService
 
     public static HttpClient CreateImageHttpClient()
     {
-        return new HttpClient(new HttpClientHandler
-        {
-            AutomaticDecompression = DecompressionMethods.All,
-            AllowAutoRedirect = true,
-        });
+        return new HttpClient(SafeHttpTransport.CreateHandler());
     }
 }

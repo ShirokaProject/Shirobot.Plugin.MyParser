@@ -1,21 +1,13 @@
 using System.Diagnostics;
 using System.Net;
-using LightDl;
 using Shirobot.Plugin.MyParser.Parsing;
 using ShiroBot.SDK.Abstractions;
 
 namespace Shirobot.Plugin.MyParser.Services;
 
-internal sealed class Downloader(HttpClient http, DownloadProgressLogger progressLogger)
+internal sealed class Downloader(DownloadProgressLogger progressLogger)
 {
-    private readonly HttpClient _ = http;
-    private static readonly HttpClient DownloadHttp = new(new SocketsHttpHandler
-    {
-        AutomaticDecompression = DecompressionMethods.None,
-        MaxConnectionsPerServer = 128,
-        PooledConnectionLifetime = TimeSpan.FromMinutes(10),
-        PooledConnectionIdleTimeout = TimeSpan.FromMinutes(2),
-    })
+    private static readonly HttpClient DownloadHttp = new(SafeHttpTransport.CreateHandler(DecompressionMethods.None))
     {
         Timeout = Timeout.InfiniteTimeSpan,
     };
@@ -28,7 +20,7 @@ internal sealed class Downloader(HttpClient http, DownloadProgressLogger progres
             throw request.CreateTooLargeException(probe.ContentLength.Value);
         }
 
-        return await DownloadWithLightDlAsync(request, probe.ContentLength, cancellationToken);
+        return await DownloadWithHttpClientAsync(request, probe.ContentLength, cancellationToken);
     }
 
     public async Task<long> DownloadStreamAsync(HttpRangeDownloadRequest request, CancellationToken cancellationToken = default)
@@ -39,16 +31,15 @@ internal sealed class Downloader(HttpClient http, DownloadProgressLogger progres
             throw request.CreateTooLargeException(probe.ContentLength.Value);
         }
 
-        return await DownloadWithLightDlAsync(request, probe.ContentLength, cancellationToken);
+        return await DownloadWithHttpClientAsync(request, probe.ContentLength, cancellationToken);
     }
 
-    private async Task<long> DownloadWithLightDlAsync(HttpRangeDownloadRequest request, long? contentLength, CancellationToken cancellationToken)
+    private async Task<long> DownloadWithHttpClientAsync(HttpRangeDownloadRequest request, long? contentLength, CancellationToken cancellationToken)
     {
         BotLog.Info($"Downloading {request.Path} url:{request.Url}");
         var stopwatch = Stopwatch.StartNew();
         var nextLogAt = TimeSpan.Zero;
-        var segmentCount = Math.Clamp(request.SegmentCount, 1, 64);
-        var mode = request.EnableParallel && segmentCount > 1 ? $"lightdl/{segmentCount}" : "lightdl";
+        const string mode = "safe-http";
 
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(request.Path)) ?? AppContext.BaseDirectory);
         CleanupFailedDownload(request.Path);
@@ -56,26 +47,39 @@ internal sealed class Downloader(HttpClient http, DownloadProgressLogger progres
 
         try
         {
-            var lightRequest = LightDownloadRequest.ToFile(request.Url, request.Path, CreateHeaders(request))
-                .OnProgress(progress =>
-                {
-                    if (request.MaxBytes != long.MaxValue && progress.DownloadedBytes > request.MaxBytes)
-                    {
-                        throw request.CreateExceededLimitException();
-                    }
-
-                    progressLogger.LogProgress(mode, request.MediaId, progress.DownloadedBytes, progress.TotalBytes > 0 ? progress.TotalBytes : contentLength, stopwatch.Elapsed, ref nextLogAt);
-                });
-            var config = new LightDownloadConfig
+            using var httpRequest = request.CreateRequest(HttpMethod.Get, null);
+            using var response = await DownloadHttp.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                .ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
             {
-                ChunkCount = request.EnableParallel ? segmentCount : 1,
-                FileConflictPolicy = LightDownloadFileConflictPolicy.Overwrite,
-                EnableResume = false,
-            };
+                throw request.CreateHttpException(response.StatusCode);
+            }
 
-            using var downloader = new LightDownloader(config);
-            var result = await downloader.DownloadAsync(lightRequest, cancellationToken);
-            var totalBytes = new FileInfo(result.FilePath).Length;
+            var responseLength = response.Content.Headers.ContentLength;
+            if (request.MaxBytes != long.MaxValue && responseLength is > 0 && responseLength > request.MaxBytes)
+            {
+                throw request.CreateTooLargeException(responseLength.Value);
+            }
+
+            await using var input = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            await using var output = new FileStream(request.Path, FileMode.Create, FileAccess.Write, FileShare.None,
+                128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            var buffer = new byte[128 * 1024];
+            long totalBytes = 0;
+            while (true)
+            {
+                var read = await input.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
+                if (read == 0) break;
+                totalBytes += read;
+                if (request.MaxBytes != long.MaxValue && totalBytes > request.MaxBytes)
+                {
+                    throw request.CreateExceededLimitException();
+                }
+
+                await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+                progressLogger.LogProgress(mode, request.MediaId, totalBytes, responseLength ?? contentLength, stopwatch.Elapsed, ref nextLogAt);
+            }
+
             if (totalBytes <= 0)
             {
                 return 0;
@@ -86,7 +90,7 @@ internal sealed class Downloader(HttpClient http, DownloadProgressLogger progres
                 throw request.CreateExceededLimitException();
             }
 
-            progressLogger.LogComplete(request.MediaId, result.FilePath, totalBytes, stopwatch.Elapsed);
+            progressLogger.LogComplete(request.MediaId, request.Path, totalBytes, stopwatch.Elapsed);
             return totalBytes;
         }
         catch
@@ -110,26 +114,6 @@ internal sealed class Downloader(HttpClient http, DownloadProgressLogger progres
                            || response.Headers.AcceptRanges.Any(i => string.Equals(i, "bytes", StringComparison.OrdinalIgnoreCase))
                            || response.Content.Headers.ContentRange is not null;
         return (contentLength, acceptRanges);
-    }
-
-    private static Dictionary<string, string> CreateHeaders(HttpRangeDownloadRequest request)
-    {
-        using var httpRequest = request.CreateRequest(HttpMethod.Get, null);
-        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var header in httpRequest.Headers)
-        {
-            headers[header.Key] = string.Join(", ", header.Value);
-        }
-
-        if (httpRequest.Content is not null)
-        {
-            foreach (var header in httpRequest.Content.Headers)
-            {
-                headers[header.Key] = string.Join(", ", header.Value);
-            }
-        }
-
-        return headers;
     }
 
     private static void CleanupFailedDownload(string path)

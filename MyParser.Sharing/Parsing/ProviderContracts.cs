@@ -126,7 +126,15 @@ public interface IProviderHostServices
     Task ReactAsync(MessageEvent message, string faceId, string platformName);
     Task RemoveReactionAsync(MessageEvent message, string faceId, string platformName);
     Task<SentMessage> ReplyTextAsync(PluginConfig config, MessageEvent message, string text);
-    Task SendImageAsync(MessageEvent message, ImageSegment segment);
+    Task ReportFailureAsync(
+        PluginConfig config,
+        MessageEvent message,
+        string providerName,
+        ProviderFailureKind kind,
+        Exception? exception = null,
+        string? diagnosticContext = null);
+    Task<SentMessage> SendImageAsync(MessageEvent message, ImageSegment segment);
+    Task<SentMessage> SendSegmentsAsync(MessageEvent message, IReadOnlyList<MessageSegment> segments);
     Task RunLoggedBackgroundAsync(string description, Func<Task> action);
     string ResolveCookiePath(string fileName);
     Task<string> UploadLocalVideoFileAsync(PluginConfig config, MessageEvent message, string? localVideoPath, string platformName, string mediaId);
@@ -185,6 +193,16 @@ public interface IProviderHostServices
         string logPrefix,
         string identifierName,
         CancellationToken cancellationToken = default);
+}
+
+public enum ProviderFailureKind
+{
+    Parse,
+    Timeout,
+    AuthenticationRequired,
+    UnsupportedContent,
+    MediaDelivery,
+    Unexpected,
 }
 
 public sealed record ProviderMessageHandlerContext(

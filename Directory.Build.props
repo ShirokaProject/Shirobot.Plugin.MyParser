@@ -1,0 +1,5 @@
+<Project>
+  <PropertyGroup>
+    <ShiroBotSourceRoot Condition="'$(ShiroBotSourceRoot)' == ''">$(MSBuildThisFileDirectory)..\ShiroBot</ShiroBotSourceRoot>
+  </PropertyGroup>
+</Project>

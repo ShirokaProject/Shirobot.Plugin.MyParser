@@ -4,8 +4,6 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageVersion Include="VideoLibrary" Version="3.3.1" />
-    <PackageVersion Include="LightDl" Version="0.4.2" />
     <PackageVersion Include="SilkCodec.NET" Version="1.2.0" />
-    <PackageVersion Include="ShiroBot.SDK" Version="0.9.1" />
   </ItemGroup>
 </Project>

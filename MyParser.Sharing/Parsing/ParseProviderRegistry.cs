@@ -108,8 +108,7 @@ public sealed class ParseProviderRegistry(IEnumerable<IParseProvider> providers)
     private static bool IsProviderMismatch(Exception ex)
     {
         var message = ex.Message;
-        return message.Contains("短链接跳转后未找到", StringComparison.OrdinalIgnoreCase)
-               || message.Contains("无法从输入中提取", StringComparison.OrdinalIgnoreCase)
+        return message.Contains("无法从输入中提取", StringComparison.OrdinalIgnoreCase)
                || message.Contains("不是视频", StringComparison.OrdinalIgnoreCase)
                || message.Contains("不是专栏", StringComparison.OrdinalIgnoreCase)
                || message.Contains("不是图文", StringComparison.OrdinalIgnoreCase)

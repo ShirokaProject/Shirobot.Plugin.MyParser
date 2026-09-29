@@ -124,7 +124,7 @@ internal sealed class ProviderDownloadService
         string identifierName,
         CancellationToken cancellationToken = default)
     {
-        var downloader = new Downloader(new HttpClient(), new DownloadProgressLogger(logProgress, intervalSeconds, logPrefix, identifierName));
+        var downloader = new Downloader(new DownloadProgressLogger(logProgress, intervalSeconds, logPrefix, identifierName));
         return downloader.DownloadAsync(request, cancellationToken);
     }
 
@@ -136,7 +136,7 @@ internal sealed class ProviderDownloadService
         string identifierName,
         CancellationToken cancellationToken = default)
     {
-        var downloader = new Downloader(new HttpClient(), new DownloadProgressLogger(logProgress, intervalSeconds, logPrefix, identifierName));
+        var downloader = new Downloader(new DownloadProgressLogger(logProgress, intervalSeconds, logPrefix, identifierName));
         return downloader.ProbeAsync(request, cancellationToken);
     }
 

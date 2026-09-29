@@ -80,4 +80,6 @@ public sealed record DouyinCommentInfo
     public bool IsAuthor { get; init; }
 }
 
-public sealed class DouyinParseException(string message) : Exception(message);
+public class DouyinParseException(string message) : Exception(message);
+
+public sealed class DouyinUnsupportedWorkTypeException(string message) : DouyinParseException(message);

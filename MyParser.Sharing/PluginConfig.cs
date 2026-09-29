@@ -5,6 +5,9 @@ namespace Shirobot.Plugin.MyParser;
 public sealed class PluginConfig
 {
     // 通用设置
+    [ConfigField("启用开发模式时只解析并发送文本/卡片，不下载或发送视频。", Label = "【通用设置】开发模式")]
+    public bool DevelopmentMode { get; set; } = false;
+
     [ConfigField("是否发送各平台封面图片和封面卡片，不影响正文图片。", Label = "【通用设置】发送封面（总开关）")]
     public bool SendCoverImages { get; set; } = true;
 
@@ -29,8 +32,18 @@ public sealed class PluginConfig
     [ConfigField("回复解析结果时是否引用原消息。", Label = "引用回复")]
     public bool QuoteReply { get; set; } = false;
 
+    [ConfigField("是否将 Provider 的统一错误提示发送到聊天。关闭后只记录错误日志。", Label = "发送解析错误提示")]
+    public bool SendProviderFailureMessages { get; set; } = true;
+
+    [ConfigField("通用 Provider 错误提示模板，支持 {provider} 占位符。", Label = "错误提示模板", Placeholder = "{provider}处理失败，请稍后重试。")]
+    public string ProviderFailureMessageTemplate { get; set; } = "{provider}处理失败，请稍后重试。";
+
     [ConfigField("是否下载并发送 VideoSegment。关闭后只发送解析文本或卡片。", Label = "发送 VideoSegment")]
     public bool SendVideoSegment { get; set; } = true;
+
+    public bool IsVideoDeliveryEnabled() => !DevelopmentMode && SendVideoSegment;
+    public bool IsVideoFileUploadEnabled() => !DevelopmentMode && UploadVideoAsFile;
+    public bool IsBilibiliLiveReplayEnabled() => !DevelopmentMode && SendBilibiliLiveReplayClip;
 
     [ConfigField("是否上传视频为群/私聊文件。", Label = "上传视频文件")]
     public bool UploadVideoAsFile { get; set; } = false;

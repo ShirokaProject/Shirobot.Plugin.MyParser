@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using Shirobot.Plugin.MyParser.Parsing;
 using MyParser.Provider.WeixinChannels.Infrastructure;
 using MyParser.Provider.WeixinChannels.Models;
 using MyParser.Provider.WeixinChannels.Utilities;
@@ -20,11 +21,7 @@ public sealed class WeixinChannelsParser : IDisposable
     public WeixinChannelsParser(PluginConfig config)
     {
         _config = config;
-        _http = new HttpClient(new HttpClientHandler
-        {
-            AutomaticDecompression = DecompressionMethods.All,
-            AllowAutoRedirect = true,
-        })
+        _http = new HttpClient(SafeHttpTransport.CreateHandler())
         {
             Timeout = TimeSpan.FromSeconds(Math.Max(5, config.RequestTimeoutSeconds)),
         };

@@ -7,21 +7,23 @@
         <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
         <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
         <LocalSharpMp4Root>$(MSBuildProjectDirectory)\..\SharpMP4\src</LocalSharpMp4Root>
-        <HostPluginDir>..\..\..\ShiroBot\Core\bin\Debug\$(TargetFramework)\plugins\$(AssemblyName)\</HostPluginDir>
+        <HostPluginDir>..\..\ShiroBot\Core\bin\Debug\$(TargetFramework)\plugins\$(AssemblyName)\</HostPluginDir>
         <ShiroBotPluginSharedAssemblies>ShiroBot.Model.QQ;ShiroBot.Model.Discord;ShiroBot.Model.Telegram</ShiroBotPluginSharedAssemblies>
         <ShiroBotPluginPackagingEnabled>true</ShiroBotPluginPackagingEnabled>
         <ShiroBotAvaloniaPreviewerSupport>true</ShiroBotAvaloniaPreviewerSupport>
     </PropertyGroup>
 
+    <Import Project="$(ShiroBotSourceRoot)\SDK\buildTransitive\ShiroBot.SDK.props" />
+
     <ItemGroup>
         <PackageReference Include="VideoLibrary" />
-        <PackageReference Include="ShiroBot.SDK" />
-        <PackageReference Include="LightDl" />
         <PackageReference Include="SilkCodec.NET" />
     </ItemGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\MyParser.Sharing\MyParser.Sharing.csproj" />
+        <ProjectReference Include="$(ShiroBotSourceRoot)\SDK\ShiroBot.SDK.csproj" Private="false" />
+        <ProjectReference Include="$(ShiroBotSourceRoot)\Models\QQ\ShiroBot.Model.QQ.csproj" Private="false" />
     </ItemGroup>
 
     <ItemGroup>
@@ -80,6 +82,8 @@
         </ItemGroup>
         <Delete Files="@(BundledDependencySymbols)" />
     </Target>
+
+    <Import Project="$(ShiroBotSourceRoot)\SDK\buildTransitive\ShiroBot.SDK.targets" />
 
     <Import Project="$(MSBuildProjectDirectory)\..\Directory.Build.local.props"
             Condition="Exists('$(MSBuildProjectDirectory)\..\Directory.Build.local.props')" />

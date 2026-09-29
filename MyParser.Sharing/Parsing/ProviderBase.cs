@@ -44,9 +44,20 @@ public abstract class ProviderMessageHandlerBase(ProviderMessageHandlerContext c
         return HostServices.ReplyTextAsync(Config, message, text);
     }
 
-    protected Task SendImageAsync(MessageEvent message, ImageSegment segment)
+    protected Task ReportFailureAsync(MessageEvent message, ProviderFailureKind kind,
+        Exception? exception = null, string? diagnosticContext = null)
+    {
+        return HostServices.ReportFailureAsync(Config, message, PrimaryProvider.Name, kind, exception, diagnosticContext);
+    }
+
+    protected Task<SentMessage> SendImageAsync(MessageEvent message, ImageSegment segment)
     {
         return HostServices.SendImageAsync(message, segment);
+    }
+
+    protected Task<SentMessage> SendSegmentsAsync(MessageEvent message, IReadOnlyList<MessageSegment> segments)
+    {
+        return HostServices.SendSegmentsAsync(message, segments);
     }
 
     protected string ResolveCookiePath(string fileName)

@@ -628,7 +628,9 @@ public sealed class MyParserPlugin : PluginBase
             provider = fallbackProvider;
         }
 
-        return IsAutoParseEnabledForProvider(provider);
+        return provider is not null
+            ? IsAutoParseEnabledForProvider(provider)
+            : ContainsHttpUrl(parseText ?? text) && HasAnyAutoParseProviderEnabled();
     }
 
     private Task HandleAutoParseAsync(IncomingMessage message)
@@ -638,15 +640,25 @@ public sealed class MyParserPlugin : PluginBase
             return QueueParse(message, replyParseText, silentProviderMismatch: true, isAutoParse: false);
         }
 
-        var parseText = GetStrictAutoParseText(message);
-        if (!string.IsNullOrWhiteSpace(parseText) && _providerRegistry?.FindProvider(parseText, isAutoParse: true, out parseText) is not null)
+        var normalizedText = GetStrictAutoParseText(message);
+        var parseText = normalizedText;
+        if (!string.IsNullOrWhiteSpace(parseText)
+            && _providerRegistry?.FindProvider(parseText, isAutoParse: true, out parseText) is not null)
         {
             return QueueParse(message, parseText, silentProviderMismatch: true, isAutoParse: true);
         }
 
-        if (_providerRegistry?.FindProvider(message, out parseText) is { } fallbackProvider && !HasIncomingProviderNormalizer(fallbackProvider.Id) && !string.IsNullOrWhiteSpace(parseText))
+        if (_providerRegistry?.FindProvider(message, out parseText) is { } fallbackProvider
+            && !HasIncomingProviderNormalizer(fallbackProvider.Id)
+            && !string.IsNullOrWhiteSpace(parseText))
         {
             return QueueParse(message, parseText, silentProviderMismatch: true, isAutoParse: true);
+        }
+
+        var unresolvedText = normalizedText ?? GetPlainText(message);
+        if (ContainsHttpUrl(unresolvedText) && HasAnyAutoParseProviderEnabled())
+        {
+            return QueueParse(message, unresolvedText, silentProviderMismatch: true, isAutoParse: true);
         }
 
         return Task.CompletedTask;
@@ -692,6 +704,18 @@ public sealed class MyParserPlugin : PluginBase
         return _incomingProviderTextNormalizers.Any(normalizer =>
             normalizer is IMyParserProviderModule module
             && string.Equals(module.Id, moduleId, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private bool HasAnyAutoParseProviderEnabled()
+    {
+        return _providerAutoParsePolicies.Any(policy => policy.IsAutoParseEnabled(_config));
+    }
+
+    private static bool ContainsHttpUrl(string? text)
+    {
+        return !string.IsNullOrWhiteSpace(text)
+               && (text.Contains("https://", StringComparison.OrdinalIgnoreCase)
+                   || text.Contains("http://", StringComparison.OrdinalIgnoreCase));
     }
 
     private bool IsAutoParseEnabledForProvider(IParseProvider? provider)
@@ -816,23 +840,33 @@ public sealed class MyParserPlugin : PluginBase
 
     private async Task DispatchParseAsync(IncomingMessage message, string text, bool silentProviderMismatch = false, bool isAutoParse = false)
     {
-        text = NormalizeParseText(text);
-        if (IsDeferredProviderParseText(text))
-        {
-            return;
-        }
-
+        var registry = _providerRegistry;
+        if (registry is null) return;
         if (IsResponseSuppressed(message))
         {
             BotLog.Info($"MyParser 忽略禁言状态下的解析请求: channel={message.Channel.Id}, sender={message.Sender.Id}, message_id={message.MessageId}");
             return;
         }
 
-        var parseText = text;
-        var provider = _providerRegistry?.FindProvider(text, isAutoParse, out parseText);
+        text = await UrlRedirectResolver.ResolveTextAsync(text, MyParserRuntime.BackgroundCancellationToken).ConfigureAwait(false);
+        text = NormalizeParseText(text);
+        if (IsDeferredProviderParseText(text))
+        {
+            return;
+        }
+
+        var provider = registry.FindProvider(text, isAutoParse, out var parseText);
         if (provider is null)
         {
-            await Context.Message.ReplyAsync(message, "未找到可处理该链接的解析提供商。");
+            if (!silentProviderMismatch)
+            {
+                await Context.Message.ReplyAsync(message, "未找到可处理该链接的解析提供商。");
+            }
+            return;
+        }
+
+        if (isAutoParse && !IsAutoParseEnabledForProvider(provider))
+        {
             return;
         }
 
