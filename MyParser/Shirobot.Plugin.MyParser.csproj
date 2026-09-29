@@ -11,19 +11,26 @@
         <ShiroBotPluginSharedAssemblies>ShiroBot.Model.QQ;ShiroBot.Model.Discord;ShiroBot.Model.Telegram</ShiroBotPluginSharedAssemblies>
         <ShiroBotPluginPackagingEnabled>true</ShiroBotPluginPackagingEnabled>
         <ShiroBotAvaloniaPreviewerSupport>true</ShiroBotAvaloniaPreviewerSupport>
+        <DefineConstants Condition="'$(UseShiroBotSource)' == 'true'">$(DefineConstants);SHIROBOT_SOURCE</DefineConstants>
     </PropertyGroup>
 
-    <Import Project="$(ShiroBotSourceRoot)\SDK\buildTransitive\ShiroBot.SDK.props" />
+    <Import Project="$(ShiroBotSourceRoot)\SDK\buildTransitive\ShiroBot.SDK.props"
+            Condition="'$(UseShiroBotSource)' == 'true'" />
 
     <ItemGroup>
         <PackageReference Include="VideoLibrary" />
+        <PackageReference Include="ShiroBot.SDK" Condition="'$(UseShiroBotSource)' != 'true'" />
         <PackageReference Include="SilkCodec.NET" />
     </ItemGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\MyParser.Sharing\MyParser.Sharing.csproj" />
-        <ProjectReference Include="$(ShiroBotSourceRoot)\SDK\ShiroBot.SDK.csproj" Private="false" />
-        <ProjectReference Include="$(ShiroBotSourceRoot)\Models\QQ\ShiroBot.Model.QQ.csproj" Private="false" />
+        <ProjectReference Include="$(ShiroBotSourceRoot)\SDK\ShiroBot.SDK.csproj"
+                          Private="false"
+                          Condition="'$(UseShiroBotSource)' == 'true'" />
+        <ProjectReference Include="$(ShiroBotSourceRoot)\Models\QQ\ShiroBot.Model.QQ.csproj"
+                          Private="false"
+                          Condition="'$(UseShiroBotSource)' == 'true'" />
     </ItemGroup>
 
     <ItemGroup>
@@ -83,7 +90,8 @@
         <Delete Files="@(BundledDependencySymbols)" />
     </Target>
 
-    <Import Project="$(ShiroBotSourceRoot)\SDK\buildTransitive\ShiroBot.SDK.targets" />
+    <Import Project="$(ShiroBotSourceRoot)\SDK\buildTransitive\ShiroBot.SDK.targets"
+            Condition="'$(UseShiroBotSource)' == 'true'" />
 
     <Import Project="$(MSBuildProjectDirectory)\..\Directory.Build.local.props"
             Condition="Exists('$(MSBuildProjectDirectory)\..\Directory.Build.local.props')" />

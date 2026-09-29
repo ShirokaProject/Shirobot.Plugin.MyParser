@@ -10,7 +10,9 @@ namespace Shirobot.Plugin.MyParser.MessageHandling;
 internal static class ProviderMessageUtilities
 {
     private static readonly ConcurrentDictionary<string, byte> SentReactions = new(StringComparer.Ordinal);
+#if SHIROBOT_SOURCE
     private static readonly HttpClient OfficialRemoteMediaHttp = new(SafeHttpTransport.CreateHandler());
+#endif
 
     public static async Task ReactAsync(IBotContext context, IncomingMessage message, string faceId, string platformName)
     {
@@ -118,6 +120,7 @@ internal static class ProviderMessageUtilities
         IncomingMessage message,
         IReadOnlyList<MessageSegment> segments)
     {
+#if SHIROBOT_SOURCE
         if (!segments.Any(segment => segment is ResourceSegment)
             || context.GetAdapterExtension<IQOfficialMessageApi>() is not { } officialApi
             || message.Channel.Type is not (ChannelType.Direct or ChannelType.Group)
@@ -174,8 +177,12 @@ internal static class ProviderMessageUtilities
         }
 
         return new SentMessage(lastMessageId ?? string.Empty);
+#else
+        return await context.Message.ReplyAsync(message, segments.ToArray()).ConfigureAwait(false);
+#endif
     }
 
+#if SHIROBOT_SOURCE
     private static async Task<(Stream Stream, HttpResponseMessage? Response)> OpenResourceStreamAsync(
         IBotContext context,
         ResourceSegment resource,
@@ -250,6 +257,7 @@ internal static class ProviderMessageUtilities
         return fullPath.StartsWith(pluginRoot, StringComparison.OrdinalIgnoreCase)
                || fullPath.StartsWith(tempRoot, StringComparison.OrdinalIgnoreCase);
     }
+#endif
 
     public static Task RunLoggedBackgroundAsync(string description, Func<Task> action)
     {
