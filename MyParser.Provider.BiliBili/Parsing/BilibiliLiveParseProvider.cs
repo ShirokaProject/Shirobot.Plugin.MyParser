@@ -1,6 +1,7 @@
 using Shirobot.Plugin.MyParser.Parsing;
 using MyParser.Provider.BiliBili.Services;
-using MyParser.Provider.BiliBili.Utilities;
+using MyParser.Provider.BiliBili.Parsing;
+using MyParser.Provider.BiliBili.Infrastructure;
 
 namespace MyParser.Provider.BiliBili.Parsing;
 
@@ -22,10 +23,10 @@ public sealed class BilibiliLiveParseProvider(BilibiliLiveParser parser) : IProv
         return context.IsUrlLike ? BilibiliUrlParser.ExtractStrictBilibiliUrl(text) : null;
     }
 
-    public async Task<MediaParseResult> ParseAsync(string text, CancellationToken cancellationToken = default)
+    public async Task<ParsedMedia> ParseAsync(string text, CancellationToken cancellationToken = default)
     {
         var result = await Parser.ParseAsync(text, cancellationToken);
-        return new MediaParseResult
+        return new ParsedMedia
         {
             ProviderId = Id,
             ProviderName = Name,
@@ -35,11 +36,40 @@ public sealed class BilibiliLiveParseProvider(BilibiliLiveParser parser) : IProv
             AuthorName = result.AnchorName,
             AuthorId = null,
             CoverUrl = result.CoverUrl,
-            MusicUrl = null,
+            Description = result.RoomAudienceText,
             Tags = [],
-            IsGallery = false,
-            IsVideo = false,
-            ProviderPayload = result,
+            Kind = ParsedMediaKind.Live,
+            Assets = result.Streams.Select(stream => new MediaAsset
+            {
+                Kind = MediaAssetKind.LiveStream, Url = stream.Url, Label = $"{stream.Protocol}/{stream.Format}/{stream.Codec}",
+                Referer = result.SourceUrl, CacheKey = $"bilibili-live:{result.RealRoomId}",
+                Protocol = stream.Protocol, Format = stream.Format, Codec = stream.Codec,
+                QualityId = stream.CurrentQn, CdnIndex = stream.CdnIndex,
+                DownloadDirectory = MyParserRuntime.BilibiliDownloadDirectory,
+                RequestHeaders = CreateLiveHeaders(result.SourceUrl),
+            }).ToArray(),
+            Attributes = new Dictionary<string, string>
+            {
+                ["room_id"] = result.RealRoomId, ["live_status"] = result.LiveStatus.ToString(),
+                ["online"] = result.OnlineCount.ToString(), ["watched"] = result.WatchedText ?? result.WatchedCount.ToString(),
+                ["duration"] = result.LiveDuration?.ToString() ?? string.Empty,
+                ["anchor_avatar_url"] = result.AnchorAvatarUrl ?? string.Empty,
+                ["live_start"] = result.LiveStartTime?.ToString("O") ?? string.Empty,
+                ["audience_text"] = result.RoomAudienceText ?? string.Empty,
+            },
         };
+    }
+
+    private static IReadOnlyDictionary<string, string> CreateLiveHeaders(string? referer)
+    {
+        var headers = new Dictionary<string, string>
+        {
+            ["User-Agent"] = BilibiliConstants.UserAgent,
+            ["Referer"] = referer ?? BilibiliConstants.Origin + "/",
+            ["Origin"] = BilibiliConstants.Origin,
+            ["Accept"] = "*/*",
+        };
+        if (!string.IsNullOrWhiteSpace(MyParserRuntime.BilibiliCookie)) headers["Cookie"] = MyParserRuntime.BilibiliCookie;
+        return headers;
     }
 }

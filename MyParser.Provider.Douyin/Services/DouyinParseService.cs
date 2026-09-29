@@ -5,12 +5,12 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using ShiroBot.SDK.Abstractions;
 using MyParser.Provider.Douyin.Abstractions;
-using static MyParser.Provider.Douyin.Utilities.DouyinAwemeExtractor;
-using static MyParser.Provider.Douyin.Utilities.DouyinCoverSelector;
+using static MyParser.Provider.Douyin.Parsing.DouyinAwemeExtractor;
+using static MyParser.Provider.Douyin.Parsing.DouyinCoverSelector;
 using static MyParser.Provider.Douyin.Infrastructure.DouyinRequestHeaders;
-using static MyParser.Provider.Douyin.Utilities.DouyinParseHelpers;
-using static MyParser.Provider.Douyin.Utilities.DouyinQueryBuilder;
-using static MyParser.Provider.Douyin.Utilities.DouyinUrlParser;
+using static MyParser.Provider.Douyin.Parsing.DouyinParseHelpers;
+using static MyParser.Provider.Douyin.Parsing.DouyinQueryBuilder;
+using static MyParser.Provider.Douyin.Parsing.DouyinUrlParser;
 
 namespace MyParser.Provider.Douyin.Services;
 

@@ -76,6 +76,12 @@ public sealed record BilibiliMediaStream
     public IEnumerable<string> UrlCandidates => string.IsNullOrWhiteSpace(Url) ? BackupUrls : new[] { Url }.Concat(BackupUrls);
 }
 
-public class BilibiliParseException(string message) : Exception(message);
+public class BilibiliParseException(string message) : Exception(message), IProviderClassifiedException
+{
+    public virtual ProviderFailureKind FailureKind => ProviderFailureKind.Parse;
+}
 
-public sealed class BilibiliLoginRequiredException(string message) : BilibiliParseException(message);
+public sealed class BilibiliLoginRequiredException(string message) : BilibiliParseException(message)
+{
+    public override ProviderFailureKind FailureKind => ProviderFailureKind.AuthenticationRequired;
+}

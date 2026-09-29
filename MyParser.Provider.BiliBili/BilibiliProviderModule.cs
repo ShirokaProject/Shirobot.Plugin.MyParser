@@ -2,19 +2,19 @@ using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Core;
 using ShiroBot.SDK.Plugin;
 using Shirobot.Plugin.MyParser.Parsing;
-using MyParser.Provider.BiliBili.Parsing;
-using MyParser.Provider.BiliBili.MessageHandling;
 using MyParser.Provider.BiliBili.Services;
-using MyParser.Provider.BiliBili.Utilities;
+using MyParser.Provider.BiliBili.Parsing;
 
 namespace MyParser.Provider.BiliBili;
 
 [MyParserProvider("bilibili")]
-public sealed class BilibiliProviderModule : MyParserProviderModuleBase, IProviderMessageHandlerFactory, IProviderTextNormalizer, IIncomingProviderTextNormalizer, ICookieValidator, IProviderCookieStore, IProviderAutoParsePolicy, IProviderResultMessageClassifier, IProviderReplyParseTextBuilder
+public sealed class BilibiliProviderModule : MyParserProviderModuleBase, IProviderTextNormalizer, IIncomingProviderTextNormalizer, ICookieValidator, IProviderCookieStore, IProviderAutoParsePolicy, IProviderResultMessageClassifier, IProviderReplyParseTextBuilder, IProviderMediaCardRendererFactory
 {
     public override string Id => "bilibili";
 
     public override string DisplayName => "Bilibili";
+
+    public IProviderMediaCardRenderer CreateMediaCardRenderer(ProviderCardRenderContext context) => new BilibiliMediaCardRenderer(context);
 
     public IReadOnlyList<ProviderCookieDescriptor> CookieDescriptors =>
     [
@@ -34,15 +34,10 @@ public sealed class BilibiliProviderModule : MyParserProviderModuleBase, IProvid
         return
         [
             new BilibiliArticleParseProvider(parser),
-            new BilibiliBangumiParseProvider(new BilibiliBangumiParser(parser.HttpClient, config)),
+            new BilibiliBangumiParseProvider(new BilibiliBangumiParser(parser.HttpClient, config), parser),
             new BilibiliLiveParseProvider(new BilibiliLiveParser(parser.HttpClient)),
             new BilibiliParseProvider(parser),
         ];
-    }
-
-    public IProviderMessageHandler? CreateMessageHandler(ProviderMessageHandlerContext context)
-    {
-        return new BilibiliMessageHandler(context.BotContext, context.Config, context.ProviderRegistry, context.PrimaryProvider, context.HostServices);
     }
 
     public string? NormalizeParseText(string text)

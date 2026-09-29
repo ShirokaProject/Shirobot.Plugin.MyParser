@@ -1,5 +1,6 @@
 using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Plugin;
+using ShiroBot.SDK.Abstractions;
 
 namespace Shirobot.Plugin.MyParser.Parsing;
 
@@ -17,17 +18,55 @@ public abstract class ProviderMessageHandlerBase(ProviderMessageHandlerContext c
 {
     protected IBotContext BotContext { get; } = context.BotContext;
     protected PluginConfig Config { get; } = context.Config;
-    protected ParseProviderRegistry ProviderRegistry { get; } = context.ProviderRegistry;
     protected IParseProvider PrimaryProvider { get; } = context.PrimaryProvider;
     protected IProviderHostServices HostServices { get; } = context.HostServices;
+    protected IProviderMediaCardRenderer? CardRenderer { get; } = context.CardRenderer;
+    protected virtual string ReactionPlatformName => PrimaryProvider.Id.StartsWith("bilibili", StringComparison.OrdinalIgnoreCase)
+        ? "Bilibili"
+        : PrimaryProvider.Name;
 
     public abstract string ProviderId { get; }
 
-    public abstract Task ParseAndReplyAsync(
+    public async Task ParseAndReplyAsync(
         MessageEvent message,
         string text,
         bool silentProviderMismatch = false,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default)
+    {
+        await ReactAsync(message, "351", ReactionPlatformName).ConfigureAwait(false);
+        try
+        {
+            var media = await PrimaryProvider.ParseAsync(text, cancellationToken).ConfigureAwait(false);
+            await PresentAsync(message, media, silentProviderMismatch, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (silentProviderMismatch && ParseProviderRegistry.IsProviderMismatch(ex))
+        {
+            await RemoveReactionAsync(message, "351", ReactionPlatformName).ConfigureAwait(false);
+            BotLog.Info($"MyParser 自动解析忽略不匹配链接: provider={PrimaryProvider.Id}, error={ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            await ReactAsync(message, "9", ReactionPlatformName).ConfigureAwait(false);
+            var failureKind = ex is IProviderClassifiedException classified
+                ? classified.FailureKind
+                : ex is TimeoutException or TaskCanceledException
+                    ? ProviderFailureKind.Timeout
+                    : ex is InvalidOperationException
+                        ? ProviderFailureKind.Parse
+                        : ProviderFailureKind.Unexpected;
+            await ReportFailureAsync(message, failureKind, ex).ConfigureAwait(false);
+        }
+    }
+
+    protected abstract Task PresentAsync(
+        MessageEvent message,
+        ParsedMedia media,
+        bool silentProviderMismatch,
+        CancellationToken cancellationToken);
 
     protected Task ReactAsync(MessageEvent message, string faceId, string platformName)
     {
@@ -47,7 +86,7 @@ public abstract class ProviderMessageHandlerBase(ProviderMessageHandlerContext c
     protected Task ReportFailureAsync(MessageEvent message, ProviderFailureKind kind,
         Exception? exception = null, string? diagnosticContext = null)
     {
-        return HostServices.ReportFailureAsync(Config, message, PrimaryProvider.Name, kind, exception, diagnosticContext);
+        return HostServices.ReportFailureAsync(Config, message, ReactionPlatformName, kind, exception, diagnosticContext);
     }
 
     protected Task<SentMessage> SendImageAsync(MessageEvent message, ImageSegment segment)
@@ -70,74 +109,7 @@ public abstract class ProviderMessageHandlerBase(ProviderMessageHandlerContext c
         return HostServices.GetMessageScene(message);
     }
 
-    protected static long GetBotOrSenderId(MessageEvent message)
-    {
-        return ProviderTextUtilities.GetBotOrSenderId(message);
-    }
-
     public virtual void Dispose()
     {
-    }
-}
-
-public static class ProviderTextUtilities
-{
-    public static long GetBotOrSenderId(MessageEvent message)
-    {
-        return long.TryParse(message.Sender.Id, out var senderId) ? senderId : 0;
-    }
-
-    public static string TrimLine(string value, int maxLength)
-    {
-        value = value.ReplaceLineEndings(" ").Trim();
-        return value.Length <= maxLength ? value : value[..maxLength] + "…";
-    }
-
-    public static IEnumerable<string> SplitText(string text, int chunkSize)
-    {
-        if (string.IsNullOrEmpty(text))
-        {
-            yield break;
-        }
-
-        for (var index = 0; index < text.Length; index += chunkSize)
-        {
-            yield return text.Substring(index, Math.Min(chunkSize, text.Length - index));
-        }
-    }
-
-    public static string FormatSize(long? bytes)
-    {
-        if (bytes is null)
-        {
-            return "unknown";
-        }
-
-        if (bytes.Value >= 1024L * 1024L * 1024L)
-        {
-            return $"{bytes.Value / 1024d / 1024d / 1024d:F2}GB";
-        }
-
-        if (bytes.Value >= 1024L * 1024L)
-        {
-            return $"{bytes.Value / 1024d / 1024d:F2}MB";
-        }
-
-        if (bytes.Value >= 1024L)
-        {
-            return $"{bytes.Value / 1024d:F1}KB";
-        }
-
-        return bytes.Value + "B";
-    }
-
-    public static string SanitizeFileName(string value, int? maxLength = null)
-    {
-        foreach (var c in Path.GetInvalidFileNameChars())
-        {
-            value = value.Replace(c, '_');
-        }
-
-        return maxLength is > 0 && value.Length > maxLength.Value ? value[..maxLength.Value] : value;
     }
 }

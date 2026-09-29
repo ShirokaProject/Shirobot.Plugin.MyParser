@@ -8,12 +8,11 @@ using VideoLibrary;
 namespace MyParser.Provider.YouTube;
 
 [MyParserProvider("youtube")]
-public sealed class YouTubeProviderModule : MyParserProviderModuleBase, IProviderMessageHandlerFactory, IProviderAutoParsePolicy, IProviderResultMessageClassifier
+public sealed class YouTubeProviderModule : MyParserProviderModuleBase, IProviderAutoParsePolicy, IProviderResultMessageClassifier
 {
     public override string Id => "youtube";
     public override string DisplayName => "YouTube";
     public override IReadOnlyList<IParseProvider> CreateProviders(PluginConfig config) => [new YouTubeParseProvider(config)];
-    public IProviderMessageHandler CreateMessageHandler(ProviderMessageHandlerContext context) => new YouTubeMessageHandler(context);
     public bool IsAutoParseEnabled(PluginConfig config) => config.AutoParseYouTubeLinks;
     public bool IsPluginResultMessage(string text) => text.StartsWith("YouTube 解析", StringComparison.OrdinalIgnoreCase);
 }
@@ -30,7 +29,7 @@ internal sealed partial class YouTubeParseProvider(PluginConfig config) : IParse
 
     public bool CanHandle(string text) => TryExtractVideoId(text) is not null;
 
-    public async Task<MediaParseResult> ParseAsync(string text, CancellationToken cancellationToken = default)
+    public async Task<ParsedMedia> ParseAsync(string text, CancellationToken cancellationToken = default)
     {
         var id = TryExtractVideoId(text) ?? throw new InvalidOperationException("未找到 YouTube 视频链接。");
         var url = $"https://www.youtube.com/watch?v={id}";
@@ -44,10 +43,14 @@ internal sealed partial class YouTubeParseProvider(PluginConfig config) : IParse
         if (audios.Length == 0) throw new InvalidOperationException("未找到可用的 AAC 音频流。");
         var result = new YouTubeResult(id, videos[0].Title, url,
             videos.Select(v => ToStream(v, false)).ToArray(), audios.Select(v => ToStream(v, true)).ToArray());
-        return new MediaParseResult
+        return new ParsedMedia
         {
             ProviderId = Id, ProviderName = Name, MediaId = id, SourceUrl = url,
-            Title = result.Title, CoverUrl = result.CoverUrl, IsVideo = true, ProviderPayload = result,
+            Title = result.Title, CoverUrl = result.CoverUrl, Kind = ParsedMediaKind.Video,
+            Assets = result.Videos.Select(stream => new MediaAsset
+                { Kind = MediaAssetKind.Video, Url = stream.Url, Label = stream.QualityName, CacheKey = $"youtube:{id}", FileNamePrefix = "youtube", DownloadDirectory = MyParserRuntime.YouTubeDownloadDirectory, QualityId = stream.QualityId, Height = stream.Height, Codec = stream.CodecName, RequestHeaders = new Dictionary<string, string> { ["User-Agent"] = "Mozilla/5.0" } })
+                .Concat(result.Audios.Select(stream => new MediaAsset
+                { Kind = MediaAssetKind.Audio, Url = stream.Url, Label = stream.QualityName, CacheKey = $"youtube:{id}", FileNamePrefix = "youtube", DownloadDirectory = MyParserRuntime.YouTubeDownloadDirectory, QualityId = stream.QualityId, Codec = stream.CodecName, RequestHeaders = new Dictionary<string, string> { ["User-Agent"] = "Mozilla/5.0" } })).ToArray(),
         };
     }
 
@@ -111,83 +114,4 @@ internal sealed partial class YouTubeParseProvider(PluginConfig config) : IParse
 
     [GeneratedRegex(@"^[A-Za-z0-9_-]{11}$")]
     private static partial Regex VideoIdRegex();
-}
-
-internal sealed class YouTubeMessageHandler(ProviderMessageHandlerContext context) : ProviderMessageHandlerBase(context)
-{
-    public override string ProviderId => "youtube";
-    public override async Task ParseAndReplyAsync(MessageEvent message, string text, bool silentProviderMismatch = false, CancellationToken cancellationToken = default)
-    {
-        string? localPath = null;
-        var registered = false;
-        try
-        {
-            await ReactAsync(message, "351", "YouTube");
-            var media = await ProviderRegistry.ParseAsync(text, cancellationToken);
-            if (media.ProviderPayload is not YouTubeResult result)
-            {
-                await ReportFailureAsync(message, ProviderFailureKind.Unexpected,
-                    diagnosticContext: "provider-result-type-mismatch");
-                return;
-            }
-            await ReplyAsync(message, $"YouTube 解析：{result.Title}\n{result.Url}");
-            if (Config.IsCoverEnabled("youtube"))
-            {
-                try
-                {
-                    var cover = await HostServices.BuildProviderImageAsync(new ProviderImageBuildRequest("YouTube",
-                        result.CoverUrl, result.Url, $"youtube_cover_{result.Id}"), cancellationToken);
-                    if (!string.IsNullOrWhiteSpace(cover.Uri)) await SendImageAsync(message, new ImageSegment(cover.Uri));
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    ShiroBot.SDK.Abstractions.BotLog.Warning($"YouTube 封面发送失败：{ex.Message}");
-                }
-            }
-            if (!Config.IsVideoDeliveryEnabled())
-            {
-                await ReactAsync(message, "426", "YouTube");
-                return;
-            }
-            var directory = MyParserRuntime.YouTubeDownloadDirectory;
-            var download = await HostServices.DownloadMuxedProviderVideoAsync(Config,
-                new ProviderMuxedVideoDownloadRequest("youtube", "YouTube", result.Id, $"youtube:{result.Id}", result.Title,
-                    directory, result.Videos, result.Audios, CreateRequest), cancellationToken);
-            localPath = download.LocalPath;
-            var segment = await HostServices.BuildLocalVideoSegmentAsync(Config,
-                new ProviderLocalVideoSegmentRequest("YouTube", result.Id, localPath, download.FileUri), cancellationToken);
-            registered = segment.RegisteredToHttpServer;
-            try
-            {
-                var sent = await HostServices.SendSegmentsAsync(message, [segment.Segment]);
-                if (string.IsNullOrWhiteSpace(sent.MessageId)) throw new InvalidOperationException("视频发送未返回消息 ID。");
-                if (Config.IsVideoFileUploadEnabled() && !Config.UploadVideoAsFileOnlyOnVideoSendFailure)
-                    await HostServices.UploadLocalVideoFileAsync(Config, message, localPath, "YouTube", result.Id);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException && Config.IsVideoFileUploadEnabled())
-            {
-                await HostServices.UploadLocalVideoFileAsync(Config, message, localPath, "YouTube", result.Id);
-            }
-            await ReactAsync(message, "426", "YouTube");
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-        catch (Exception ex)
-        {
-            await ReportFailureAsync(message, ProviderFailureKind.Unexpected, ex);
-            await ReactAsync(message, "9", "YouTube");
-        }
-        finally
-        {
-            if (registered && Config.DeleteLocalVideoDelaySeconds <= 0) HostServices.UnregisterLocalVideoFile(localPath);
-            HostServices.DeleteLocalVideoIfConfigured(Config, localPath, "youtube");
-        }
-    }
-
-    private static HttpRequestMessage CreateRequest(HttpMethod method, string url, string? range)
-    {
-        var request = new HttpRequestMessage(method, url);
-        request.Headers.UserAgent.ParseAdd("Mozilla/5.0");
-        if (!string.IsNullOrWhiteSpace(range)) request.Headers.Range = RangeHeaderValue.Parse(range);
-        return request;
-    }
 }

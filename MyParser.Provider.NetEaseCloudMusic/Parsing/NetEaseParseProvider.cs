@@ -1,4 +1,5 @@
-using MyParser.Provider.NetEaseCloudMusic.Utilities;
+using MyParser.Provider.NetEaseCloudMusic.Parsing;
+using MyParser.Provider.NetEaseCloudMusic.Infrastructure;
 
 namespace MyParser.Provider.NetEaseCloudMusic.Parsing;
 
@@ -12,10 +13,10 @@ public sealed class NetEaseParseProvider(NetEaseParser parser) : IParseProviderW
 
     public bool CanHandle(string text) => NetEaseUrlParser.ContainsNetEaseSongUrl(text);
 
-    public async Task<MediaParseResult> ParseAsync(string text, CancellationToken cancellationToken = default)
+    public async Task<ParsedMedia> ParseAsync(string text, CancellationToken cancellationToken = default)
     {
         var result = await Parser.ParseAsync(text, cancellationToken).ConfigureAwait(false);
-        return new MediaParseResult
+        return new ParsedMedia
         {
             ProviderId = Id,
             ProviderName = Name,
@@ -26,9 +27,15 @@ public sealed class NetEaseParseProvider(NetEaseParser parser) : IParseProviderW
             CoverUrl = result.CoverUrl,
             MusicUrl = result.AudioUrl,
             Tags = [result.Quality],
-            IsGallery = false,
-            IsVideo = false,
-            ProviderPayload = result,
+            Kind = ParsedMediaKind.Track,
+            Assets = [new MediaAsset { Kind = MediaAssetKind.Audio, Url = result.AudioUrl, Label = result.Quality, CacheKey = $"neteasecloudmusic:{result.SongId}:{result.Quality}:{result.FileType}", FileNamePrefix = $"{result.Artists} - {result.Title}_{result.SongId}_{result.Quality}", FileExtension = result.FileType ?? "mp3", DownloadDirectory = MyParserRuntime.DownloadDirectory, RequestHeaders = new Dictionary<string, string> { ["User-Agent"] = NetEaseHttp.UserAgent, ["Referer"] = NetEaseHttp.Referer } }],
+            Description = $"{result.Album} · {result.Quality}",
+            Attributes = new Dictionary<string, string>
+            {
+                ["album"] = result.Album, ["quality"] = result.Quality, ["file_type"] = result.FileType ?? "mp3",
+                ["file_size"] = result.FileSize?.ToString() ?? string.Empty, ["bitrate"] = result.Bitrate?.ToString() ?? string.Empty,
+                ["lyrics"] = result.Lyric ?? string.Empty, ["translated_lyrics"] = result.TranslatedLyric ?? string.Empty,
+            },
         };
     }
 

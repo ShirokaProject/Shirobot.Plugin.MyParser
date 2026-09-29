@@ -1,7 +1,7 @@
 using MyParser.Provider.Douyin.Models;
 using System.Text.Json;
 using MyParser.Provider.Douyin.Abstractions;
-using static MyParser.Provider.Douyin.Utilities.DouyinParseHelpers;
+using static MyParser.Provider.Douyin.Parsing.DouyinParseHelpers;
 
 namespace MyParser.Provider.Douyin.WorkParsers;
 

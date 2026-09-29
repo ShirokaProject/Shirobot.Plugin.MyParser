@@ -80,6 +80,12 @@ public sealed record DouyinCommentInfo
     public bool IsAuthor { get; init; }
 }
 
-public class DouyinParseException(string message) : Exception(message);
+public class DouyinParseException(string message) : Exception(message), IProviderClassifiedException
+{
+    public virtual ProviderFailureKind FailureKind => ProviderFailureKind.Parse;
+}
 
-public sealed class DouyinUnsupportedWorkTypeException(string message) : DouyinParseException(message);
+public sealed class DouyinUnsupportedWorkTypeException(string message) : DouyinParseException(message)
+{
+    public override ProviderFailureKind FailureKind => ProviderFailureKind.UnsupportedContent;
+}

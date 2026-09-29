@@ -3,7 +3,7 @@ using System.Text.Json;
 using MyParser.Provider.NetEaseCloudMusic.Infrastructure;
 using ShiroBot.SDK.Abstractions;
 using MyParser.Provider.NetEaseCloudMusic.Models;
-using MyParser.Provider.NetEaseCloudMusic.Utilities;
+using MyParser.Provider.NetEaseCloudMusic.Parsing;
 
 namespace MyParser.Provider.NetEaseCloudMusic.Parsing;
 

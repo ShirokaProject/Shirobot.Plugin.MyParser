@@ -3,8 +3,8 @@ using MyParser.Provider.Douyin.Infrastructure;
 using MyParser.Provider.Douyin.Models;
 using ShiroBot.SDK.Abstractions;
 using static MyParser.Provider.Douyin.Infrastructure.DouyinRequestHeaders;
-using static MyParser.Provider.Douyin.Utilities.DouyinParseHelpers;
-using static MyParser.Provider.Douyin.Utilities.DouyinQueryBuilder;
+using static MyParser.Provider.Douyin.Parsing.DouyinParseHelpers;
+using static MyParser.Provider.Douyin.Parsing.DouyinQueryBuilder;
 
 namespace MyParser.Provider.Douyin.Services;
 

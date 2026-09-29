@@ -2,10 +2,9 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using MyParser.Provider.BiliBili.Parsing;
 using MyParser.Provider.BiliBili.Infrastructure;
 using MyParser.Provider.BiliBili.Models;
-using MyParser.Provider.BiliBili.Utilities;
+using MyParser.Provider.BiliBili.Parsing;
 
 namespace MyParser.Provider.BiliBili.Services;
 

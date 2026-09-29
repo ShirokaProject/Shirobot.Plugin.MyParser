@@ -5,7 +5,7 @@ using Shirobot.Plugin.MyParser.Parsing;
 using MyParser.Provider.BiliBili.Infrastructure;
 using MyParser.Provider.BiliBili.Services;
 using MyParser.Provider.BiliBili.Models;
-using MyParser.Provider.BiliBili.Utilities;
+using MyParser.Provider.BiliBili.Parsing;
 using ShiroBot.SDK.Abstractions;
 
 namespace MyParser.Provider.BiliBili.Parsing;
