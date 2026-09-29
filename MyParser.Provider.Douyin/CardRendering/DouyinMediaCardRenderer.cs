@@ -68,8 +68,6 @@ internal sealed class DouyinMediaCardRenderer(ProviderCardRenderContext context)
         var bitmaps = new List<Bitmap>();
         try
         {
-            var cover = await LoadImageAsync(media.CoverUrl, media, "comments_cover", cancellationToken).ConfigureAwait(false);
-            if (cover is not null) bitmaps.Add(cover);
             var comments = new List<DouyinCommentItemViewModel>(blocks.Length);
             foreach (var (block, index) in blocks.Select((value, index) => (value, index)))
             {
@@ -78,35 +76,38 @@ internal sealed class DouyinMediaCardRenderer(ProviderCardRenderContext context)
                 var image = await LoadImageAsync(block.Attributes.GetValueOrDefault("image_url"), media, $"comment_{index + 1}_image", cancellationToken).ConfigureAwait(false);
                 if (avatar is not null) bitmaps.Add(avatar);
                 if (image is not null) bitmaps.Add(image);
-                var created = long.TryParse(block.Attributes.GetValueOrDefault("created"), out var timestamp) && timestamp > 0
-                    ? DateTimeOffset.FromUnixTimeSeconds(timestamp).ToLocalTime().ToString("MM-dd HH:mm") : "时间未知";
+                var createdAt = long.TryParse(block.Attributes.GetValueOrDefault("created"), out var timestamp) && timestamp > 0
+                    ? DateTimeOffset.FromUnixTimeSeconds(timestamp).ToLocalTime()
+                    : (DateTimeOffset?)null;
+                var timeText = createdAt is { } value ? FormatRelativeTime(value) : string.Empty;
+                var location = block.Attributes.GetValueOrDefault("ip");
+                var metadata = string.Join("  ·  ", new[] { timeText, location }.Where(value => !string.IsNullOrWhiteSpace(value)));
+                var message = block.Text.Trim();
+                var replyCount = long.TryParse(block.Attributes.GetValueOrDefault("replies"), out var count) ? count : 0;
                 comments.Add(new DouyinCommentItemViewModel
                 {
                     Avatar = avatar,
                     CommentImage = image,
                     HasImage = image is not null,
                     UserName = block.Caption,
-                    UserIdText = "抖音号 " + block.Attributes.GetValueOrDefault("user_id", "--"),
-                    IpText = string.IsNullOrWhiteSpace(block.Attributes.GetValueOrDefault("ip")) ? "IP 未知" : "IP " + block.Attributes.GetValueOrDefault("ip"),
-                    Message = block.Text,
-                    LikeText = block.Attributes.GetValueOrDefault("likes", "0"),
-                    ReplyText = block.Attributes.GetValueOrDefault("replies", "0"),
-                    TimeText = created,
-                    IndexText = (index + 1).ToString("D2"),
+                    TimeLocationText = metadata,
+                    Message = message,
+                    LikeText = FormatCount(block.Attributes.GetValueOrDefault("likes", "0")),
+                    HasReplies = replyCount > 0,
+                    ReplyCountText = $"查看 {FormatCount(replyCount.ToString())} 条回复 ›",
+                    EstimatedHeight = 120 + Math.Max(0, (message.Length - 1) / 42) * 20 + (image is null ? 0 : 145) + (replyCount > 0 ? 30 : 0),
                     IsAuthor = block.Attributes.GetValueOrDefault("is_author") == bool.TrueString,
                 });
             }
 
             var model = new DouyinCommentCardViewModel
             {
-                Cover = cover,
-                Title = $"{media.Title ?? "抖音作品"} · 热门评论",
-                MetaText = media.AuthorName ?? string.Empty,
-                StatsText = $"赞 {Value(media, "likes")}  ·  评论 {blocks.Length}",
+                SourceTitle = media.Title ?? "抖音作品",
+                CommentCountText = $"{blocks.Length} 条评论",
                 Comments = comments,
-                CanvasHeight = Math.Clamp(280 + blocks.Length * 220, 520, 9000),
+                CanvasHeight = Math.Clamp(92 + comments.Sum(comment => comment.EstimatedHeight + 1), 400, 9000),
             };
-            var png = await context.BotContext.RenderControlPngAsync<DouyinCommentCard>(model, new ControlRenderOptions(RenderTheme.Dark)).ConfigureAwait(false);
+            var png = await context.BotContext.RenderControlPngAsync<DouyinCommentCard>(model, new ControlRenderOptions(RenderTheme.Light)).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             return "base64://" + Convert.ToBase64String(png);
         }
@@ -127,4 +128,22 @@ internal sealed class DouyinMediaCardRenderer(ProviderCardRenderContext context)
     }
 
     private static string Value(ParsedMedia media, string key) => media.Attributes.GetValueOrDefault(key, string.Empty);
+
+    private static string FormatRelativeTime(DateTimeOffset timestamp)
+    {
+        var elapsed = DateTimeOffset.Now - timestamp;
+        if (elapsed < TimeSpan.FromMinutes(1)) return "刚刚";
+        if (elapsed < TimeSpan.FromHours(1)) return $"{Math.Max(1, (int)elapsed.TotalMinutes)} 分钟前";
+        if (elapsed < TimeSpan.FromDays(1)) return $"{Math.Max(1, (int)elapsed.TotalHours)} 小时前";
+        if (elapsed < TimeSpan.FromDays(7)) return $"{Math.Max(1, (int)elapsed.TotalDays)} 天前";
+        return timestamp.ToString("MM-dd");
+    }
+
+    private static string FormatCount(string? value)
+    {
+        if (!long.TryParse(value, out var count) || count < 0) return value ?? "0";
+        return count >= 100_000_000
+            ? $"{count / 100_000_000d:0.#} 亿"
+            : count >= 10_000 ? $"{count / 10_000d:0.#} 万" : count.ToString();
+    }
 }
