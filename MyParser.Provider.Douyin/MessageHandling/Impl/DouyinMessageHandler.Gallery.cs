@@ -109,7 +109,7 @@ private async Task SendGalleryMessageAsync(
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var response = await _context.Message.ReplyAsync(message, segments);
+            var response = await SendSegmentsAsync(message, segments);
             BotLog.Info($"MyParser 单图图文媒体发送完成: aweme_id={result.AwemeId}, scene={GetMessageScene(message)}, message_id={response.MessageId}, time={response.Timestamp}, elapsed={stopwatch.Elapsed:mm\\:ss}");
         }
         finally
@@ -130,7 +130,7 @@ private async Task SendGalleryMessageAsync(
             persistLocalFile: !string.IsNullOrWhiteSpace(image.LivePhotoUrl));
         BotLog.Info($"MyParser 图文图片发送资源物理位置: aweme_id={result.AwemeId}, index={index}, physical_path={DescribePhysicalPath(imageFile.LocalPath)}");
 
-        if (!_config.SendVideoSegment || string.IsNullOrWhiteSpace(image.LivePhotoUrl))
+        if (!_config.IsVideoDeliveryEnabled() || string.IsNullOrWhiteSpace(image.LivePhotoUrl))
         {
             return new GalleryMediaBuildResult([new ImageOutgoingSegment(imageFile.Uri)], null, false);
         }
@@ -245,7 +245,7 @@ private async Task SendGalleryMessageAsync(
                 var recordUri = await _hostServices.BuildRecordUriAsync(variant.Path);
                 var segment = new RecordOutgoingSegment(recordUri);
                 BotLog.Info($"MyParser 图文音乐 SILK RecordSegment 发送开始: aweme_id={result.AwemeId}, variant={variant.Name}, scene={GetMessageScene(message)}, silk_path={variant.Path}, file_kb={new FileInfo(variant.Path).Length / 1024d:F1}, uri_preview={_hostServices.PreviewUri(recordUri)}");
-                var response = await _context.Message.ReplyAsync(message, segment);
+                var response = await SendSegmentsAsync(message, [segment]);
                 if (string.IsNullOrWhiteSpace(response.MessageId))
                 {
                     throw new InvalidOperationException("抖音图文音乐 SILK 发送未返回有效 message_id。");
@@ -263,7 +263,8 @@ private async Task SendGalleryMessageAsync(
             if (string.IsNullOrWhiteSpace(localPath) || !File.Exists(localPath))
             {
                 BotLog.Warning($"MyParser 图文音乐下载失败: aweme_id={result.AwemeId}, error={ex.Message}");
-                await _context.Message.ReplyAsync(message, "抖音图文音乐下载失败：" + ex.Message);
+                await ReportFailureAsync(message, ProviderFailureKind.MediaDelivery, ex,
+                    $"aweme_id={result.AwemeId}; feature=gallery-audio");
                 return;
             }
 
@@ -271,7 +272,7 @@ private async Task SendGalleryMessageAsync(
             try
             {
                 var recordUri = await _hostServices.BuildRecordUriAsync(localPath);
-                var response = await _context.Message.ReplyAsync(message, new RecordOutgoingSegment(recordUri));
+                var response = await SendSegmentsAsync(message, [new RecordOutgoingSegment(recordUri)]);
                 if (string.IsNullOrWhiteSpace(response.MessageId))
                 {
                     throw new InvalidOperationException("抖音图文音乐 MP3 发送未返回有效 message_id。");
@@ -286,7 +287,8 @@ private async Task SendGalleryMessageAsync(
             catch (Exception fallbackEx)
             {
                 BotLog.Warning($"MyParser 图文音乐 MP3 语音发送失败: aweme_id={result.AwemeId}, error={fallbackEx.Message}");
-                await _context.Message.ReplyAsync(message, "抖音图文音乐语音发送失败：" + fallbackEx.Message);
+                await ReportFailureAsync(message, ProviderFailureKind.MediaDelivery, fallbackEx,
+                    $"aweme_id={result.AwemeId}; feature=gallery-audio-fallback");
             }
         }
         finally

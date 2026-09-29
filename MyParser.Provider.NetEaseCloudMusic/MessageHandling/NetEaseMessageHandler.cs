@@ -36,7 +36,8 @@ internal sealed partial class NetEaseMessageHandler(ProviderMessageHandlerContex
             cancellationToken.ThrowIfCancellationRequested();
             if (media.ProviderPayload is not NetEaseParseResult result)
             {
-                await ReplyAsync(message, $"{media.ProviderName} 已识别，但返回类型未接入发送流程。");
+                await ReportFailureAsync(message, ProviderFailureKind.Unexpected,
+                    diagnosticContext: $"provider-result-type-mismatch; actual={media.ProviderId}");
                 await ReactAsync(message, "9", "网易云音乐");
                 return;
             }
@@ -66,18 +67,17 @@ internal sealed partial class NetEaseMessageHandler(ProviderMessageHandlerContex
         catch (NetEaseParseException ex)
         {
             await ReactAsync(message, "9", "网易云音乐");
-            await ReplyAsync(message, "网易云音乐解析失败：" + ex.Message);
+            await ReportFailureAsync(message, ProviderFailureKind.Parse, ex);
         }
-        catch (TaskCanceledException)
+        catch (TaskCanceledException ex)
         {
             await ReactAsync(message, "9", "网易云音乐");
-            await ReplyAsync(message, "网易云音乐解析超时，请稍后重试。若经常失败，请检查 Cookie/网络。");
+            await ReportFailureAsync(message, ProviderFailureKind.Timeout, ex);
         }
         catch (Exception ex)
         {
             await ReactAsync(message, "9", "网易云音乐");
-            BotLog.Error("MyParser 网易云音乐解析异常：" + ex);
-            await ReplyAsync(message, "网易云音乐解析异常：" + ex.Message);
+            await ReportFailureAsync(message, ProviderFailureKind.Unexpected, ex);
         }
     }
 
@@ -95,7 +95,7 @@ internal sealed partial class NetEaseMessageHandler(ProviderMessageHandlerContex
             var stopwatch = Stopwatch.StartNew();
             BotLog.Info($"MyParser 网易云音乐封面卡片 ImageSegment 发送开始: song_id={result.SongId}, scene={GetMessageScene(message)}, uri_preview={HostServices.PreviewUri(cardUri)}");
 
-            var response = await BotContext.Message.ReplyAsync(message, segment);
+            var response = await SendImageAsync(message, segment);
             BotLog.Info($"MyParser 网易云音乐封面卡片 ImageSegment 发送接口完成: song_id={result.SongId}, scene={GetMessageScene(message)}, message_id={response.MessageId}, time={response.Timestamp}, elapsed={stopwatch.Elapsed:mm\\:ss}");
         }
         catch (Exception ex)
@@ -118,7 +118,7 @@ internal sealed partial class NetEaseMessageHandler(ProviderMessageHandlerContex
             var stopwatch = Stopwatch.StartNew();
             BotLog.Info($"MyParser 网易云音乐歌词卡片 ImageSegment 发送开始: song_id={result.SongId}, scene={GetMessageScene(message)}, uri_preview={HostServices.PreviewUri(cardUri)}");
 
-            var response = await BotContext.Message.ReplyAsync(message, segment);
+            var response = await SendImageAsync(message, segment);
             BotLog.Info($"MyParser 网易云音乐歌词卡片 ImageSegment 发送接口完成: song_id={result.SongId}, scene={GetMessageScene(message)}, message_id={response.MessageId}, time={response.Timestamp}, elapsed={stopwatch.Elapsed:mm\\:ss}");
         }
         catch (Exception ex)
@@ -371,7 +371,7 @@ internal sealed partial class NetEaseMessageHandler(ProviderMessageHandlerContex
 
     private async Task SendRecordSegmentAsync(IncomingMessage message, RecordOutgoingSegment segment, long songId, string variantName, Stopwatch stopwatch)
     {
-        var response = await BotContext.Message.ReplyAsync(message, segment);
+        var response = await SendSegmentsAsync(message, [segment]);
         var scene = GetMessageScene(message);
         BotLog.Info($"MyParser 网易云音乐 SILK AudioSegment 发送接口完成: song_id={songId}, variant={variantName}, scene={scene}, message_id={response.MessageId}, time={response.Timestamp}, elapsed={stopwatch.Elapsed:mm\\:ss}");
         EnsureRecordSendAccepted(response.MessageId, scene);

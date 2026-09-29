@@ -17,7 +17,7 @@ internal sealed partial class BilibiliMessageHandler
 {
 private async Task TrySendLiveReplayClipAsync(IncomingMessage message, BilibiliLiveParseResult result)
     {
-        if (!config.SendBilibiliLiveReplayClip)
+        if (!config.IsBilibiliLiveReplayEnabled())
         {
             return;
         }
@@ -36,8 +36,7 @@ private async Task TrySendLiveReplayClipAsync(IncomingMessage message, BilibiliL
         }
         catch (Exception ex)
         {
-            BotLog.Warning($"MyParser Bilibili 直播片段发送未完成: room_id={result.RealRoomId}, detail={ex.Message}");
-            await ReplyAsync(message, "直播回看片段截取/发送未完成：" + ex.Message);
+            await ReportFailureAsync(message, ProviderFailureKind.MediaDelivery, ex, $"room_id={result.RealRoomId}; feature=live-replay");
         }
         finally
         {
@@ -65,7 +64,7 @@ private async Task TrySendLiveReplayClipAsync(IncomingMessage message, BilibiliL
     {
         var stopwatch = Stopwatch.StartNew();
         BotLog.Info($"MyParser Bilibili 直播片段 VideoSegment 发送开始: room_id={result.RealRoomId}, scene={GetMessageScene(message)}, stream={stream.Protocol}/{stream.Format}/{stream.Codec}, qn={stream.CurrentQn}, uri_mode={_hostServices.GetUriMode(videoSegment.Uri)}, uri_preview={_hostServices.PreviewUri(videoSegment.Uri)}");
-        var response = await context.Message.ReplyAsync(message, videoSegment);
+        var response = await SendSegmentsAsync(message, [videoSegment]);
         var scene = GetMessageScene(message);
         BotLog.Info($"MyParser Bilibili 直播片段 VideoSegment 发送接口完成: room_id={result.RealRoomId}, scene={scene}, message_id={response.MessageId}, elapsed={stopwatch.Elapsed:mm\\:ss}");
         EnsureVideoSendAccepted(response.MessageId, scene);
@@ -174,7 +173,7 @@ private async Task TrySendLiveReplayClipAsync(IncomingMessage message, BilibiliL
         var stopwatch = Stopwatch.StartNew();
         BotLog.Info($"MyParser Bilibili 直播卡片 ImageSegment 发送开始: room_id={result.RealRoomId}, scene={GetMessageScene(message)}, uri_preview={_hostServices.PreviewUri(cardUri)}");
 
-        var response = await context.Message.ReplyAsync(message, segment);
+        var response = await SendImageAsync(message, segment);
         BotLog.Info($"MyParser Bilibili 直播卡片 ImageSegment 发送接口完成: room_id={result.RealRoomId}, scene={GetMessageScene(message)}, message_id={response.MessageId}, elapsed={stopwatch.Elapsed:mm\\:ss}");
     }
 

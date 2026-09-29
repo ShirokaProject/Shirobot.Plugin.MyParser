@@ -83,14 +83,14 @@ private Task<string> UploadVideoFileAsync(IncomingMessage message, DouyinParseRe
             var videoStatus = videoSent
                 ? "视频：已下载并已调用 VideoSegment 发送接口"
                 : videoDownloadAttempted
-                    ? $"视频：下载或发送失败，已隐藏直链；原因：{TrimLine(videoSendError ?? "未知错误", 80)}"
+                    ? "视频：下载或发送未完成；详细错误已记录到插件日志。"
                     : "视频：已解析，未展示直链";
             sb.AppendLine(videoStatus);
-            if (_config.UploadVideoAsFile)
+            if (_config.IsVideoFileUploadEnabled())
             {
                 sb.AppendLine(fileUploaded
                     ? $"文件上传：已上传为{fileUploadInfo}"
-                    : $"文件上传：失败或未执行；原因：{TrimLine(fileUploadInfo ?? "未知", 80)}");
+                    : "文件上传：未完成；详细错误已记录到插件日志。");
             }
 
             if (quality is not null)

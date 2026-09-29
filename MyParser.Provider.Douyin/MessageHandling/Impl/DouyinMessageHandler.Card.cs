@@ -29,7 +29,7 @@ private async Task SendCoverMessageAsync(
 
         try
         {
-            var response = await _context.Message.ReplyAsync(message, segment);
+            var response = await SendImageAsync(message, segment);
             BotLog.Info($"MyParser 封面卡片 ImageSegment 发送接口完成: aweme_id={result.AwemeId}, scene={GetMessageScene(message)}, message_id={response.MessageId}, time={response.Timestamp}, elapsed={stopwatch.Elapsed:mm\\:ss}");
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -48,7 +48,7 @@ private async Task SendCoverMessageAsync(
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                await _context.Message.ReplyAsync(message, new ImageOutgoingSegment(result.CoverUrl));
+                await SendImageAsync(message, new ImageOutgoingSegment(result.CoverUrl));
                 BotLog.Info($"MyParser 原始封面回退发送完成: aweme_id={result.AwemeId}");
             }
             catch (Exception fallbackEx)

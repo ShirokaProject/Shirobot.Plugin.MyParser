@@ -75,7 +75,12 @@ internal sealed partial class BilibiliMessageHandler(
             }
 
             LogBilibiliQualityInfo(result);
-            if (!config.SendVideoSegment || !result.IsVideo)
+            if (config.IsCoverEnabled("bilibili"))
+            {
+                _ = StartSendCoverMessageAsync(message, result, cancellationToken);
+            }
+
+            if (!config.IsVideoDeliveryEnabled() || !result.IsVideo)
             {
                 await ReplyAsync(message, FormatBilibiliResult(result, videoDownloadAttempted: false));
                 await TryReactToSourceMessageAsync(message, "426");
@@ -89,15 +94,11 @@ internal sealed partial class BilibiliMessageHandler(
 
             try
             {
-                if (config.IsCoverEnabled("bilibili"))
-                {
-                    _ = StartSendCoverMessageAsync(message, result, cancellationToken);
-                }
                 var videoSegment = await BuildVideoSegmentAsync(result);
                 await SendVideoMessageAsync(message, result, videoSegment);
                 videoSent = true;
 
-                if (config is { UploadVideoAsFile: true, UploadVideoAsFileOnlyOnVideoSendFailure: false } && !string.IsNullOrWhiteSpace(result.LocalVideoPath))
+                if (config.IsVideoFileUploadEnabled() && !config.UploadVideoAsFileOnlyOnVideoSendFailure && !string.IsNullOrWhiteSpace(result.LocalVideoPath))
                 {
                     fileUploadInfo = await UploadVideoFileAsync(message, result);
                     fileUploaded = true;
@@ -114,9 +115,9 @@ internal sealed partial class BilibiliMessageHandler(
             }
             catch (Exception ex)
             {
-                videoSendError = ex.Message;
+                videoSendError = "发送未完成";
                 BotLog.Warning($"MyParser Bilibili VideoSegment 发送未确认: bvid={result.Bvid}, detail={ex.Message}");
-                if (config.UploadVideoAsFile && !string.IsNullOrWhiteSpace(result.LocalVideoPath))
+                if (config.IsVideoFileUploadEnabled() && !string.IsNullOrWhiteSpace(result.LocalVideoPath))
                 {
                     try
                     {
@@ -133,7 +134,7 @@ internal sealed partial class BilibiliMessageHandler(
                     }
                     catch (Exception uploadEx)
                     {
-                        fileUploadInfo = uploadEx.Message;
+                        fileUploadInfo = "上传未完成";
                         BotLog.Warning($"MyParser Bilibili VideoSegment 未确认，文件上传也未完成: bvid={result.Bvid}, detail={uploadEx.Message}");
                     }
                 }
@@ -149,7 +150,7 @@ internal sealed partial class BilibiliMessageHandler(
         catch (BilibiliLoginRequiredException ex)
         {
             await TryReactToSourceMessageAsync(message, "9");
-            await ReplyAsync(message, "Bilibili 解析需要登录：" + ex.Message);
+            await ReportFailureAsync(message, ProviderFailureKind.AuthenticationRequired, ex);
         }
         catch (BilibiliParseException ex) when (silentProviderMismatch && IsAutoParseProviderMismatch(ex))
         {
@@ -159,18 +160,17 @@ internal sealed partial class BilibiliMessageHandler(
         catch (BilibiliParseException ex)
         {
             await TryReactToSourceMessageAsync(message, "9");
-            await ReplyAsync(message, "Bilibili 解析未完成：" + ex.Message);
+            await ReportFailureAsync(message, ProviderFailureKind.Parse, ex);
         }
-        catch (TaskCanceledException)
+        catch (TaskCanceledException ex)
         {
             await TryReactToSourceMessageAsync(message, "9");
-            await ReplyAsync(message, "Bilibili 解析超时，请稍后再试。若经常超时，请检查 BilibiliCookie、网络和媒体处理配置。");
+            await ReportFailureAsync(message, ProviderFailureKind.Timeout, ex);
         }
         catch (Exception ex)
         {
             await TryReactToSourceMessageAsync(message, "9");
-            BotLog.Error($"MyParser Bilibili 解析异常：{ex}");
-            await ReplyAsync(message, "Bilibili 解析异常：" + ex.Message);
+            await ReportFailureAsync(message, ProviderFailureKind.Unexpected, ex);
         }
     }
 
@@ -183,7 +183,6 @@ internal sealed partial class BilibiliMessageHandler(
     {
         var message = ex.Message;
         return message.Contains("无法从输入中提取", StringComparison.OrdinalIgnoreCase)
-               || message.Contains("短链接跳转后未找到", StringComparison.OrdinalIgnoreCase)
                || message.Contains("不是视频", StringComparison.OrdinalIgnoreCase)
                || message.Contains("不是专栏", StringComparison.OrdinalIgnoreCase)
                || message.Contains("不是图文", StringComparison.OrdinalIgnoreCase)
@@ -288,7 +287,7 @@ internal sealed partial class BilibiliMessageHandler(
         var segments = new OutgoingSegment[] { videoSegment };
         var stopwatch = Stopwatch.StartNew();
         BotLog.Info($"MyParser Bilibili VideoSegment 发送开始: bvid={result.Bvid}, scene={GetMessageScene(message)}, uri_mode={_hostServices.GetUriMode(videoSegment.Uri)}, uri_preview={_hostServices.PreviewUri(videoSegment.Uri)}");
-        var response = await context.Message.ReplyAsync(message, segments);
+        var response = await SendSegmentsAsync(message, segments);
         var scene = GetMessageScene(message);
         BotLog.Info($"MyParser Bilibili VideoSegment 发送接口完成: bvid={result.Bvid}, scene={scene}, message_id={response.MessageId}, elapsed={stopwatch.Elapsed:mm\\:ss}");
         EnsureVideoSendAccepted(response.MessageId, scene);
@@ -486,12 +485,12 @@ internal sealed partial class BilibiliMessageHandler(
         var videoStatus = videoSent
             ? "视频：已下载音视频流、SharpMP4 合并（不支持时回退 ffmpeg），并已调用 VideoSegment 发送接口"
             : videoDownloadAttempted
-                ? $"视频：下载/合并/发送未完成；原因：{TrimLine(videoSendError ?? "未知错误", 100)}"
+                ? "视频：下载/合并/发送未完成；详细错误已记录到插件日志。"
                 : "视频：已解析，未下载发送";
         sb.AppendLine(videoStatus);
-        if (config.UploadVideoAsFile)
+        if (config.IsVideoFileUploadEnabled())
         {
-            sb.AppendLine(fileUploaded ? $"文件上传：已上传为{fileUploadInfo}" : $"文件上传：未执行或未完成；原因：{TrimLine(fileUploadInfo ?? "未知", 80)}");
+            sb.AppendLine(fileUploaded ? $"文件上传：已上传为{fileUploadInfo}" : "文件上传：未执行或未完成；详细错误已记录到插件日志。");
         }
 
         return sb.ToString().TrimEnd();

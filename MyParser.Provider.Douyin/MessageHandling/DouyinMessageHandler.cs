@@ -56,7 +56,8 @@ internal sealed partial class DouyinMessageHandler : ProviderMessageHandlerBase
             if (media.ProviderPayload is not DouyinParseResult result)
             {
                 await TryReactToSourceMessageAsync(message, "9");
-                await _context.Message.ReplyAsync(message, $"{media.ProviderName} 已识别，但该平台发送流程尚未接入。");
+                await ReportFailureAsync(message, ProviderFailureKind.Unexpected,
+                    diagnosticContext: $"provider-result-type-mismatch; actual={media.ProviderId}");
                 return;
             }
 
@@ -68,7 +69,9 @@ internal sealed partial class DouyinMessageHandler : ProviderMessageHandlerBase
 
             LogDouyinQualityInfo(result);
             _ = StartSendCommentsMessageAsync(message, result, cancellationToken);
-            var shouldDownloadVideo = _config.SendVideoSegment && result.IsVideo && !result.IsGallery;
+            var shouldDownloadVideo = _config.IsVideoDeliveryEnabled() && result.IsVideo && !result.IsGallery;
+            if (!result.IsGallery && _config.IsCoverEnabled("douyin"))
+                _ = StartSendCoverMessageAsync(message, result, cancellationToken);
             var videoSent = false;
             var fileUploaded = false;
             string? videoSendError = null;
@@ -78,8 +81,6 @@ internal sealed partial class DouyinMessageHandler : ProviderMessageHandlerBase
             {
                 try
                 {
-                    if (_config.IsCoverEnabled("douyin"))
-                        _ = StartSendCoverMessageAsync(message, result, cancellationToken);
                     var videoSegment = await BuildVideoSegmentAsync(result);
                     cancellationToken.ThrowIfCancellationRequested();
                     if (videoSegment is null)
@@ -92,7 +93,7 @@ internal sealed partial class DouyinMessageHandler : ProviderMessageHandlerBase
                     await SendVideoMessageAsync(message, result, videoSegment);
                     videoSent = true;
 
-                    if (_config.UploadVideoAsFile && !_config.UploadVideoAsFileOnlyOnVideoSendFailure && !string.IsNullOrWhiteSpace(result.LocalVideoPath))
+                    if (_config.IsVideoFileUploadEnabled() && !_config.UploadVideoAsFileOnlyOnVideoSendFailure && !string.IsNullOrWhiteSpace(result.LocalVideoPath))
                     {
                         try
                         {
@@ -106,7 +107,7 @@ internal sealed partial class DouyinMessageHandler : ProviderMessageHandlerBase
                         }
                         catch (Exception uploadEx)
                         {
-                            fileUploadInfo = uploadEx.Message;
+                            fileUploadInfo = "上传未完成";
                             BotLog.Warning($"MyParser 文件上传失败: aweme_id={result.AwemeId}, error={uploadEx.Message}");
                         }
                     }
@@ -128,7 +129,7 @@ internal sealed partial class DouyinMessageHandler : ProviderMessageHandlerBase
                 catch (Exception ex)
                 {
                     BotLog.Warning($"MyParser 视频消息发送失败：{ex.Message}");
-                    if (_config.UploadVideoAsFile && !string.IsNullOrWhiteSpace(result.LocalVideoPath))
+                    if (_config.IsVideoFileUploadEnabled() && !string.IsNullOrWhiteSpace(result.LocalVideoPath))
                     {
                         try
                         {
@@ -153,13 +154,15 @@ internal sealed partial class DouyinMessageHandler : ProviderMessageHandlerBase
                         {
                             BotLog.Warning($"MyParser VideoSegment 失败后文件上传也失败: aweme_id={result.AwemeId}, error={uploadEx.Message}");
                             await TryReactToSourceMessageAsync(message, "9");
-                            await _context.Message.ReplyAsync(message, "视频发送失败，文件上传也失败：" + uploadEx.Message);
+                            await ReportFailureAsync(message, ProviderFailureKind.MediaDelivery, uploadEx,
+                                $"aweme_id={result.AwemeId}; stage=video-and-file-upload");
                             return;
                         }
                     }
 
                     await TryReactToSourceMessageAsync(message, "9");
-                    await _context.Message.ReplyAsync(message, "视频发送失败：" + ex.Message);
+                    await ReportFailureAsync(message, ProviderFailureKind.MediaDelivery, ex,
+                        $"aweme_id={result.AwemeId}; stage=video-send");
                     return;
                 }
             }
@@ -198,21 +201,25 @@ internal sealed partial class DouyinMessageHandler : ProviderMessageHandlerBase
         {
             throw;
         }
+        catch (DouyinUnsupportedWorkTypeException ex)
+        {
+            await TryReactToSourceMessageAsync(message, "9");
+            await ReportFailureAsync(message, ProviderFailureKind.UnsupportedContent, ex);
+        }
         catch (DouyinParseException ex)
         {
             await TryReactToSourceMessageAsync(message, "9");
-            await _context.Message.ReplyAsync(message, "解析失败：" + ex.Message);
+            await ReportFailureAsync(message, ProviderFailureKind.Parse, ex);
         }
-        catch (TaskCanceledException)
+        catch (TaskCanceledException ex)
         {
             await TryReactToSourceMessageAsync(message, "9");
-            await _context.Message.ReplyAsync(message, "解析超时，请稍后重试。若经常失败，请配置有效 DouyinCookie。");
+            await ReportFailureAsync(message, ProviderFailureKind.Timeout, ex);
         }
         catch (Exception ex)
         {
             await TryReactToSourceMessageAsync(message, "9");
-            BotLog.Error($"MyParser 解析异常：{ex}");
-            await _context.Message.ReplyAsync(message, "解析异常：" + ex.Message);
+            await ReportFailureAsync(message, ProviderFailureKind.Unexpected, ex);
         }
     }
 

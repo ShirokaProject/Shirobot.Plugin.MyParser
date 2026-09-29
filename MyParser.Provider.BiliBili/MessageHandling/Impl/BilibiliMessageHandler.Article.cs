@@ -95,7 +95,7 @@ private async Task SendArticleForwardAsync(IncomingMessage message, BilibiliArti
         }
 
         var segment = new ImageOutgoingSegment(cardUri);
-        await context.Message.ReplyAsync(message, segment);
+        await SendImageAsync(message, segment);
     }
 
     private async Task<string> BuildArticleDocumentCardUriAsync(BilibiliArticleParseResult result)

@@ -18,7 +18,7 @@ internal sealed partial class DouyinMessageHandler
 {
 private async Task<VideoOutgoingSegment?> BuildVideoSegmentAsync(DouyinParseResult result)
     {
-        if (!_config.SendVideoSegment || _douyinProvider is null || result.IsGallery || !result.IsVideo)
+        if (!_config.IsVideoDeliveryEnabled() || _douyinProvider is null || result.IsGallery || !result.IsVideo)
         {
             return null;
         }
@@ -162,7 +162,7 @@ private async Task<VideoOutgoingSegment?> BuildVideoSegmentAsync(DouyinParseResu
         var uriMode = _hostServices.GetUriMode(videoSegment.Uri);
         BotLog.Info($"MyParser VideoSegment 发送开始: aweme_id={result.AwemeId}, scene={GetMessageScene(message)}, uri_mode={uriMode}, segments={segments.Length}, uri_preview={_hostServices.PreviewUri(videoSegment.Uri)}");
 
-        var response = await _context.Message.ReplyAsync(message, segments);
+        var response = await SendSegmentsAsync(message, segments);
         var scene = GetMessageScene(message);
         BotLog.Info($"MyParser VideoSegment 发送接口完成: aweme_id={result.AwemeId}, scene={scene}, message_id={response.MessageId}, time={response.Timestamp}, elapsed={stopwatch.Elapsed:mm\\:ss}");
         EnsureVideoSendAccepted(response.MessageId, scene);

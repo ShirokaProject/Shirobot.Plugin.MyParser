@@ -24,7 +24,8 @@ internal sealed class WeixinChannelsMessageHandler(ProviderMessageHandlerContext
             cancellationToken.ThrowIfCancellationRequested();
             if (media.ProviderPayload is not WeixinChannelsParseResult result)
             {
-                await ReplyAsync(message, "微信视频号链接已识别，但解析结果类型异常。").ConfigureAwait(false);
+                await ReportFailureAsync(message, ProviderFailureKind.Unexpected,
+                    diagnosticContext: "provider-result-type-mismatch").ConfigureAwait(false);
                 await ReactAsync(message, "9", WeixinChannelsConstants.DisplayName).ConfigureAwait(false);
                 return;
             }
@@ -41,14 +42,14 @@ internal sealed class WeixinChannelsMessageHandler(ProviderMessageHandlerContext
             string? fileUploadInfo = null;
             try
             {
-                if (Config.SendVideoSegment)
+                if (Config.IsVideoDeliveryEnabled())
                 {
                     var videoSegment = await BuildVideoSegmentAsync(result).ConfigureAwait(false);
                     await SendVideoMessageAsync(message, result, videoSegment).ConfigureAwait(false);
                     videoSent = true;
                 }
 
-                if (Config.UploadVideoAsFile && !Config.UploadVideoAsFileOnlyOnVideoSendFailure && !string.IsNullOrWhiteSpace(result.LocalVideoPath))
+                if (Config.IsVideoFileUploadEnabled() && !Config.UploadVideoAsFileOnlyOnVideoSendFailure && !string.IsNullOrWhiteSpace(result.LocalVideoPath))
                 {
                     fileUploadInfo = await UploadVideoFileAsync(message, result).ConfigureAwait(false);
                     fileUploaded = true;
@@ -65,9 +66,9 @@ internal sealed class WeixinChannelsMessageHandler(ProviderMessageHandlerContext
             }
             catch (Exception ex)
             {
-                videoSendError = ex.Message;
+                videoSendError = "发送未完成";
                 BotLog.Warning($"MyParser 微信视频号 VideoSegment 发送未完成: sph_id={result.SphId}, detail={ex.Message}");
-                if (Config.UploadVideoAsFile && !string.IsNullOrWhiteSpace(result.LocalVideoPath))
+                if (Config.IsVideoFileUploadEnabled() && !string.IsNullOrWhiteSpace(result.LocalVideoPath))
                 {
                     try
                     {
@@ -83,7 +84,7 @@ internal sealed class WeixinChannelsMessageHandler(ProviderMessageHandlerContext
                     }
                     catch (Exception uploadEx)
                     {
-                        fileUploadInfo = uploadEx.Message;
+                        fileUploadInfo = "上传未完成";
                         BotLog.Warning($"MyParser 微信视频号文件上传失败: sph_id={result.SphId}, detail={uploadEx.Message}");
                     }
                 }
@@ -98,14 +99,12 @@ internal sealed class WeixinChannelsMessageHandler(ProviderMessageHandlerContext
         }
         catch (WeixinChannelsParseException ex)
         {
-            BotLog.Warning($"MyParser 微信视频号解析失败：{ex.Message}");
-            await ReplyAsync(message, "微信视频号解析失败：" + ex.Message).ConfigureAwait(false);
+            await ReportFailureAsync(message, ProviderFailureKind.Parse, ex).ConfigureAwait(false);
             await ReactAsync(message, "9", WeixinChannelsConstants.DisplayName).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            BotLog.Warning($"MyParser 微信视频号解析异常：{ex}");
-            await ReplyAsync(message, "微信视频号解析异常：" + ex.Message).ConfigureAwait(false);
+            await ReportFailureAsync(message, ProviderFailureKind.Unexpected, ex).ConfigureAwait(false);
             await ReactAsync(message, "9", WeixinChannelsConstants.DisplayName).ConfigureAwait(false);
         }
     }
@@ -122,7 +121,7 @@ internal sealed class WeixinChannelsMessageHandler(ProviderMessageHandlerContext
         var segment = new ImageOutgoingSegment(uri);
         var stopwatch = Stopwatch.StartNew();
         BotLog.Info($"MyParser 微信视频号卡片 ImageSegment 发送开始: sph_id={result.SphId}, scene={GetMessageScene(message)}, uri_preview={HostServices.PreviewUri(uri)}");
-        var response = await BotContext.Message.ReplyAsync(message, segment).ConfigureAwait(false);
+        var response = await SendImageAsync(message, segment).ConfigureAwait(false);
         BotLog.Info($"MyParser 微信视频号卡片 ImageSegment 发送接口完成: sph_id={result.SphId}, scene={GetMessageScene(message)}, message_id={response.MessageId}, elapsed={stopwatch.Elapsed:mm\\:ss}");
     }
 
@@ -227,7 +226,7 @@ internal sealed class WeixinChannelsMessageHandler(ProviderMessageHandlerContext
         var segments = new OutgoingSegment[] { videoSegment };
         var stopwatch = Stopwatch.StartNew();
         BotLog.Info($"MyParser 微信视频号 VideoSegment 发送开始: sph_id={result.SphId}, scene={GetMessageScene(message)}, uri_mode={HostServices.GetUriMode(videoSegment.Uri)}, uri_preview={HostServices.PreviewUri(videoSegment.Uri)}");
-        var response = await BotContext.Message.ReplyAsync(message, segments).ConfigureAwait(false);
+        var response = await SendSegmentsAsync(message, segments).ConfigureAwait(false);
         BotLog.Info($"MyParser 微信视频号 VideoSegment 发送接口完成: sph_id={result.SphId}, scene={GetMessageScene(message)}, message_id={response.MessageId}, elapsed={stopwatch.Elapsed:mm\\:ss}");
     }
 
@@ -254,10 +253,10 @@ internal sealed class WeixinChannelsMessageHandler(ProviderMessageHandlerContext
         builder.AppendLine($"标题：{ProviderTextUtilities.TrimLine(result.Title ?? result.Description ?? "微信视频号", 80)}");
         builder.AppendLine($"作者：{result.AuthorName ?? "未知"}");
         builder.AppendLine($"链接：{result.ShareUrl}");
-        builder.AppendLine(videoSent ? "视频：已发送" : "视频：未发送" + (string.IsNullOrWhiteSpace(videoSendError) ? string.Empty : "，" + videoSendError));
+        builder.AppendLine(videoSent ? "视频：已发送" : "视频：未发送；详细错误已记录到插件日志。");
         if (fileUploaded || !string.IsNullOrWhiteSpace(fileUploadInfo))
         {
-            builder.AppendLine("文件：" + (fileUploaded ? fileUploadInfo : "上传失败：" + fileUploadInfo));
+            builder.AppendLine(fileUploaded ? "文件：已上传" : "文件：上传未完成；详细错误已记录到插件日志。");
         }
 
         return builder.ToString().TrimEnd();

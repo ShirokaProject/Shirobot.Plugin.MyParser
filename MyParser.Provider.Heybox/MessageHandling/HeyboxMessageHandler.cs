@@ -34,7 +34,8 @@ internal sealed class HeyboxMessageHandler(ProviderMessageHandlerContext context
             cancellationToken.ThrowIfCancellationRequested();
             if (media.ProviderPayload is not HeyboxParseResult result)
             {
-                await ReplyAsync(message, "小黑盒链接已识别，但解析结果类型异常。");
+                await ReportFailureAsync(message, ProviderFailureKind.Unexpected,
+                    diagnosticContext: "provider-result-type-mismatch");
                 await ReactAsync(message, "9", "小黑盒");
                 return;
             }
@@ -51,14 +52,12 @@ internal sealed class HeyboxMessageHandler(ProviderMessageHandlerContext context
         }
         catch (HeyboxParseException ex)
         {
-            BotLog.Warning($"MyParser 小黑盒解析失败：{ex.Message}");
-            await ReplyAsync(message, "小黑盒解析失败：" + ex.Message);
+            await ReportFailureAsync(message, ProviderFailureKind.Parse, ex);
             await ReactAsync(message, "9", "小黑盒");
         }
         catch (Exception ex)
         {
-            BotLog.Warning($"MyParser 小黑盒解析异常：{ex}");
-            await ReplyAsync(message, "小黑盒解析异常：" + ex.Message);
+            await ReportFailureAsync(message, ProviderFailureKind.Unexpected, ex);
             await ReactAsync(message, "9", "小黑盒");
         }
     }
@@ -74,7 +73,7 @@ internal sealed class HeyboxMessageHandler(ProviderMessageHandlerContext context
         var segment = new ImageOutgoingSegment(uri);
         var stopwatch = Stopwatch.StartNew();
         BotLog.Info($"MyParser 小黑盒信息卡片 ImageSegment 发送开始: link_id={result.LinkId}, scene={GetMessageScene(message)}, uri_preview={HostServices.PreviewUri(uri)}");
-        var response = await BotContext.Message.ReplyAsync(message, segment);
+        var response = await SendImageAsync(message, segment);
         BotLog.Info($"MyParser 小黑盒信息卡片 ImageSegment 发送接口完成: link_id={result.LinkId}, scene={GetMessageScene(message)}, message_id={response.MessageId}, elapsed={stopwatch.Elapsed:mm\\:ss}");
     }
 
@@ -218,7 +217,7 @@ internal sealed class HeyboxMessageHandler(ProviderMessageHandlerContext context
         var segment = new ImageOutgoingSegment(cardUri);
         var stopwatch = Stopwatch.StartNew();
         BotLog.Info($"MyParser 小黑盒完整文档卡片 ImageSegment 发送开始: link_id={result.LinkId}, scene={GetMessageScene(message)}, uri_preview={HostServices.PreviewUri(cardUri)}");
-        var response = await BotContext.Message.ReplyAsync(message, segment);
+        var response = await SendImageAsync(message, segment);
         BotLog.Info($"MyParser 小黑盒完整文档卡片 ImageSegment 发送接口完成: link_id={result.LinkId}, scene={GetMessageScene(message)}, message_id={response.MessageId}, elapsed={stopwatch.Elapsed:mm\\:ss}");
     }
 

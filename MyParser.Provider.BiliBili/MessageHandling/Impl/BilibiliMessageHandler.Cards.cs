@@ -14,11 +14,16 @@ internal sealed partial class BilibiliMessageHandler
 private async Task SendCoverMessageAsync(IncomingMessage message, BilibiliParseResult result)
     {
         var coverUri = await BuildCoverCardUriAsync(result);
+        if (string.IsNullOrWhiteSpace(coverUri))
+        {
+            BotLog.Warning($"MyParser Bilibili 封面图片不可用，跳过发送: bvid={result.Bvid}");
+            return;
+        }
+
         var segment = new ImageOutgoingSegment(coverUri);
         var stopwatch = Stopwatch.StartNew();
         BotLog.Info($"MyParser Bilibili 封面卡片 ImageSegment 发送开始: bvid={result.Bvid}, scene={GetMessageScene(message)}, uri_preview={_hostServices.PreviewUri(coverUri)}");
-
-        var response = await context.Message.ReplyAsync(message, segment);
+        var response = await SendImageAsync(message, segment);
         BotLog.Info($"MyParser Bilibili 封面卡片 ImageSegment 发送接口完成: bvid={result.Bvid}, scene={GetMessageScene(message)}, message_id={response.MessageId}, elapsed={stopwatch.Elapsed:mm\\:ss}");
     }
 
@@ -32,7 +37,7 @@ private async Task SendCoverMessageAsync(IncomingMessage message, BilibiliParseR
         var coverUri = coverImage.Uri;
         if (context.Render is null)
         {
-            BotLog.Warning($"MyParser Bilibili Avalonia 渲染服务不可用，直接发送原始封面: bvid={result.Bvid}");
+            BotLog.Warning($"MyParser Bilibili Avalonia 渲染服务不可用，直接发送封面: bvid={result.Bvid}");
             return coverUri;
         }
 
@@ -68,12 +73,12 @@ private async Task SendCoverMessageAsync(IncomingMessage message, BilibiliParseR
         }
         catch (Exception ex)
         {
-            BotLog.Warning($"MyParser Bilibili 封面卡片渲染失败，直接发送原始封面: bvid={result.Bvid}, cover_url={result.CoverUrl}, error={ex.Message}");
+            BotLog.Warning($"MyParser Bilibili 封面卡片渲染失败，直接发送封面: bvid={result.Bvid}, cover_url={result.CoverUrl}, error={ex.Message}");
             return coverUri;
         }
     }
 
-    private Task<ProviderImageBuildResult> BuildRemoteImageAsync(string? imageUrl, string? referer, string filePrefix)
+    private Task<ProviderImageBuildResult> BuildRemoteImageAsync(string? imageUrl, string? referer, string filePrefix, bool persistLocalFile = false)
     {
         return _hostServices.BuildProviderImageAsync(new ProviderImageBuildRequest(
             "Bilibili",
@@ -89,7 +94,8 @@ private async Task SendCoverMessageAsync(IncomingMessage message, BilibiliParseR
                 {
                     request.Headers.TryAddWithoutValidation("Cookie", MyParserRuntime.BilibiliCookie);
                 }
-            }));
+            },
+            PersistLocalFile: persistLocalFile));
     }
 
 }
