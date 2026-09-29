@@ -3,7 +3,6 @@ using System.Globalization;
 using System.Net;
 using System.Text;
 using Shirobot.Plugin.MyParser.Parsing;
-using Shirobot.Plugin.MyParser.Utility;
 using ShiroBot.SDK.Abstractions;
 
 namespace Shirobot.Plugin.MyParser.Services;
