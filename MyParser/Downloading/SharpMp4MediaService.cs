@@ -3,7 +3,7 @@ using SharpMP4.Builders;
 using SharpMP4.Readers;
 using SharpMP4.Tracks;
 
-namespace Shirobot.Plugin.MyParser.Services;
+namespace Shirobot.Plugin.MyParser.Downloading;
 
 internal static class SharpMp4MediaService
 {

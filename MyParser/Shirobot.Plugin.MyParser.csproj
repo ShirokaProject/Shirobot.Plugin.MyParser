@@ -21,6 +21,7 @@
         <PackageReference Include="VideoLibrary" />
         <PackageReference Include="ShiroBot.SDK" Condition="'$(UseShiroBotSource)' != 'true'" />
         <PackageReference Include="SilkCodec.NET" />
+        <PackageReference Include="LightDl" />
     </ItemGroup>
 
     <ItemGroup>

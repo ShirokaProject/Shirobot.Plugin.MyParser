@@ -2,6 +2,7 @@ using Avalonia.Media.Imaging;
 using Shirobot.Plugin.MyParser.MessageHandling;
 using Shirobot.Plugin.MyParser.Parsing;
 using Shirobot.Plugin.MyParser.Services;
+using Shirobot.Plugin.MyParser.Downloading;
 using Shirobot.Plugin.MyParser.Media;
 using Shirobot.Plugin.MyParser.CardRendering;
 using ShiroBot.SDK.Models;

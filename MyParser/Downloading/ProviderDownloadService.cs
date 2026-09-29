@@ -4,7 +4,7 @@ using SilkCodec.NET;
 using Shirobot.Plugin.MyParser.Parsing;
 using ShiroBot.SDK.Abstractions;
 
-namespace Shirobot.Plugin.MyParser.Services;
+namespace Shirobot.Plugin.MyParser.Downloading;
 
 internal sealed class ProviderDownloadService
 {
@@ -582,6 +582,10 @@ internal sealed class ProviderDownloadService
     {
         TryDelete(path);
         TryDelete(path + ".download");
+        TryDelete(path + ".lightdl");
+        TryDelete(path + ".lightdl.meta");
+        TryDelete(path + ".lightdl.meta.tmp");
+        TryDelete(Path.Combine(Path.GetDirectoryName(path) ?? string.Empty, "." + Path.GetFileName(path) + ".lightdl.meta"));
     }
 
     private static async Task MuxAsync(PluginConfig config, string videoPath, string audioPath, string outputPath, CancellationToken cancellationToken)

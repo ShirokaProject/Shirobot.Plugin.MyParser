@@ -5,7 +5,7 @@ using System.Text;
 using Shirobot.Plugin.MyParser.Parsing;
 using ShiroBot.SDK.Abstractions;
 
-namespace Shirobot.Plugin.MyParser.Services;
+namespace Shirobot.Plugin.MyParser.Downloading;
 
 internal sealed class LiveReplayClipDownloader(PluginConfig config, ProviderDownloadService hostServices)
 {

@@ -1,10 +1,11 @@
 using ShiroBot.SDK.Abstractions;
 
-namespace Shirobot.Plugin.MyParser.Services;
+namespace Shirobot.Plugin.MyParser.Downloading;
 
 internal sealed class DownloadProgressLogger(bool enabled, int intervalSeconds, string logPrefix = "MyParser", string identifierName = "media_id")
 {
     private readonly int _intervalSeconds = Math.Clamp(intervalSeconds, 1, 30);
+    public int IntervalMilliseconds => _intervalSeconds * 1000;
 
     public void LogStart(string mediaId, string path, long? totalBytes, string mode)
     {
