@@ -13,6 +13,25 @@ internal static partial class DouyinUrlParser
 
     public static string? ExtractAwemeId(string input)
     {
+        if (Uri.TryCreate(input.Trim(), UriKind.Absolute, out var uri))
+        {
+            if (uri.Scheme is not ("http" or "https") || !IsDouyinHost(uri.Host)) return null;
+
+            foreach (var pattern in AwemeIdPatterns())
+            {
+                var match = Regex.Match(uri.AbsolutePath, pattern, RegexOptions.IgnoreCase | RegexOptions.Singleline);
+                if (match.Success && match.Groups[1].Value.Length >= 15) return match.Groups[1].Value;
+            }
+
+            foreach (var key in new[] { "modal_id", "aweme_id", "itemId", "note_id" })
+            {
+                var value = GetQueryValue(uri.Query, key);
+                if (value is not null && Regex.IsMatch(value, @"^\d{15,25}$")) return value;
+            }
+
+            return null;
+        }
+
         foreach (var pattern in AwemeIdPatterns())
         {
             var match = Regex.Match(input, pattern, RegexOptions.IgnoreCase | RegexOptions.Singleline);
@@ -20,6 +39,24 @@ internal static partial class DouyinUrlParser
             {
                 return match.Groups[1].Value;
             }
+        }
+
+        return null;
+    }
+
+    private static bool IsDouyinHost(string host) =>
+        string.Equals(host, "douyin.com", StringComparison.OrdinalIgnoreCase)
+        || host.EndsWith(".douyin.com", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(host, "iesdouyin.com", StringComparison.OrdinalIgnoreCase)
+        || host.EndsWith(".iesdouyin.com", StringComparison.OrdinalIgnoreCase);
+
+    private static string? GetQueryValue(string query, string key)
+    {
+        foreach (var part in query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var pair = part.Split('=', 2);
+            if (string.Equals(Uri.UnescapeDataString(pair[0]), key, StringComparison.OrdinalIgnoreCase))
+                return pair.Length == 2 ? Uri.UnescapeDataString(pair[1]) : null;
         }
 
         return null;

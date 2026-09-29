@@ -12,9 +12,7 @@ public sealed class BilibiliArticleParseProvider(BilibiliParser parser) : IProvi
 
     public bool CanHandle(string text)
     {
-        return Utilities.BilibiliUrlParser.ExtractCvid(text) is not null
-               || Utilities.BilibiliUrlParser.ExtractOpusId(text) is not null
-               || Utilities.BilibiliUrlParser.ExtractB23Url(text) is not null;
+        return Utilities.BilibiliUrlParser.ClassifyLink(text) == Utilities.BilibiliLinkKind.Article;
     }
 
     public string? TryNormalizeParseText(string text, ProviderParseTextContext context)

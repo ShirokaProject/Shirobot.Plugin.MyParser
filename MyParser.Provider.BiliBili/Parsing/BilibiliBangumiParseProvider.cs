@@ -15,8 +15,7 @@ public sealed class BilibiliBangumiParseProvider(BilibiliBangumiParser parser) :
 
     public bool CanHandle(string text)
     {
-        return BilibiliUrlParser.ExtractStrictBilibiliUrl(text) is not null
-               && BilibiliUrlParser.ExtractBangumiIds(text).HasAny;
+        return BilibiliUrlParser.ClassifyLink(text) == BilibiliLinkKind.Bangumi;
     }
 
     public string? TryNormalizeParseText(string text, ProviderParseTextContext context)

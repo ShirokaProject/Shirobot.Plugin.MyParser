@@ -14,9 +14,7 @@ public sealed class BilibiliLiveParseProvider(BilibiliLiveParser parser) : IProv
 
     public bool CanHandle(string text)
     {
-        return BilibiliUrlParser.ExtractStrictBilibiliUrl(text) is not null
-               && (BilibiliUrlParser.ExtractLiveRoomId(text) is not null
-                   || BilibiliUrlParser.ExtractB23Url(text) is not null);
+        return BilibiliUrlParser.ClassifyLink(text) == BilibiliLinkKind.Live;
     }
 
     public string? TryNormalizeParseText(string text, ProviderParseTextContext context)

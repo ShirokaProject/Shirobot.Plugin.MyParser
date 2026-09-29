@@ -2,6 +2,15 @@ using System.Text.RegularExpressions;
 
 namespace MyParser.Provider.BiliBili.Utilities;
 
+internal enum BilibiliLinkKind
+{
+    Unknown,
+    Video,
+    Article,
+    Bangumi,
+    Live,
+}
+
 internal static partial class BilibiliUrlParser
 {
     public static bool ContainsStrictBilibiliUrl(string text)
@@ -12,6 +21,65 @@ internal static partial class BilibiliUrlParser
     public static string? ExtractStrictBilibiliUrl(string text)
     {
         return BilibiliUrlMatcher.ExtractStrictBilibiliUrl(text);
+    }
+
+    public static BilibiliLinkKind ClassifyLink(string text)
+    {
+        var strictUrl = ExtractStrictBilibiliUrl(text);
+        if (strictUrl is not null && Uri.TryCreate(strictUrl, UriKind.Absolute, out var uri))
+        {
+            return ClassifyUri(uri);
+        }
+
+        var value = text.Trim();
+        var standalone = StandaloneBilibiliIdRegex().Match(value);
+        if (!standalone.Success) return BilibiliLinkKind.Unknown;
+        return standalone.Groups["prefix"].Value.ToLowerInvariant() switch
+        {
+            "bv" or "av" => BilibiliLinkKind.Video,
+            "cv" or "opus" => BilibiliLinkKind.Article,
+            "ep" or "ss" or "md" => BilibiliLinkKind.Bangumi,
+            _ => BilibiliLinkKind.Unknown,
+        };
+    }
+
+    private static BilibiliLinkKind ClassifyUri(Uri uri)
+    {
+        var host = uri.Host;
+        var path = uri.AbsolutePath;
+        if (string.Equals(host, "live.bilibili.com", StringComparison.OrdinalIgnoreCase)
+            && LiveRoomPathRegex().IsMatch(path))
+        {
+            return BilibiliLinkKind.Live;
+        }
+
+        if (!IsBilibiliWebHost(host)) return BilibiliLinkKind.Unknown;
+        if (VideoPathRegex().IsMatch(path)) return BilibiliLinkKind.Video;
+        if (ArticleOpusPathRegex().IsMatch(path) || ArticleCvidPathRegex().IsMatch(path)) return BilibiliLinkKind.Article;
+        if (BangumiEpisodePathRegex().IsMatch(path)
+            || BangumiSeasonPathRegex().IsMatch(path)
+            || BangumiMediaPathRegex().IsMatch(path))
+        {
+            return BilibiliLinkKind.Bangumi;
+        }
+
+        return BilibiliLinkKind.Unknown;
+    }
+
+    private static bool IsBilibiliWebHost(string host) =>
+        string.Equals(host, "bilibili.com", StringComparison.OrdinalIgnoreCase)
+        || host.EndsWith(".bilibili.com", StringComparison.OrdinalIgnoreCase);
+
+    private static string GetIdentitySearchText(string text)
+    {
+        var strictUrl = ExtractStrictBilibiliUrl(text);
+        if (strictUrl is not null && Uri.TryCreate(strictUrl, UriKind.Absolute, out var uri))
+        {
+            return IsBilibiliWebHost(uri.Host) ? uri.AbsolutePath : string.Empty;
+        }
+
+        if (text.Contains("://", StringComparison.Ordinal)) return string.Empty;
+        return text.Trim();
     }
 
     public static string? NormalizeStandaloneBilibiliId(string text)
@@ -72,7 +140,7 @@ internal static partial class BilibiliUrlParser
 
     public static bool ContainsBilibiliUrl(string text)
     {
-        return ExtractBvid(text) is not null || ExtractCvid(text) is not null || ExtractOpusId(text) is not null || ExtractLiveRoomId(text) is not null || ExtractBangumiIds(text).HasAny || ExtractB23Url(text) is not null;
+        return ClassifyLink(text) != BilibiliLinkKind.Unknown || ExtractB23Url(text) is not null;
     }
 
     public static string? ExtractBvid(string text)
@@ -82,8 +150,20 @@ internal static partial class BilibiliUrlParser
             return null;
         }
 
-        var match = BvidRegex().Match(text);
-        return match.Success ? match.Value : null;
+        var strictUrl = ExtractStrictBilibiliUrl(text);
+        if (strictUrl is not null && Uri.TryCreate(strictUrl, UriKind.Absolute, out var uri))
+        {
+            if (ClassifyUri(uri) != BilibiliLinkKind.Video) return null;
+            var routeMatch = VideoPathRegex().Match(uri.AbsolutePath);
+            return routeMatch.Success && routeMatch.Groups[1].Value.StartsWith("BV", StringComparison.OrdinalIgnoreCase)
+                ? routeMatch.Groups[1].Value
+                : null;
+        }
+
+        var standalone = StandaloneBilibiliIdRegex().Match(text.Trim());
+        return standalone.Success && string.Equals(standalone.Groups["prefix"].Value, "bv", StringComparison.OrdinalIgnoreCase)
+            ? "BV" + standalone.Groups["id"].Value
+            : null;
     }
 
     public static long? ExtractCvid(string text)
@@ -93,8 +173,16 @@ internal static partial class BilibiliUrlParser
             return null;
         }
 
-        var match = CvidRegex().Match(text);
-        return match.Success && long.TryParse(match.Groups[1].Value, out var cvid) ? cvid : null;
+        var strictUrl = ExtractStrictBilibiliUrl(text);
+        if (strictUrl is not null && Uri.TryCreate(strictUrl, UriKind.Absolute, out var uri))
+        {
+            if (ClassifyUri(uri) != BilibiliLinkKind.Article) return null;
+            var routeMatch = ArticleCvidPathRegex().Match(uri.AbsolutePath);
+            return routeMatch.Success && long.TryParse(routeMatch.Groups[1].Value, out var routeCvid) ? routeCvid : null;
+        }
+
+        var standalone = StandaloneCvidRegex().Match(text.Trim());
+        return standalone.Success && long.TryParse(standalone.Groups[1].Value, out var cvid) ? cvid : null;
     }
 
     public static string? ExtractOpusId(string text)
@@ -104,13 +192,16 @@ internal static partial class BilibiliUrlParser
             return null;
         }
 
-        var match = OpusRegex().Match(text);
-        if (!match.Success)
+        var strictUrl = ExtractStrictBilibiliUrl(text);
+        if (strictUrl is not null && Uri.TryCreate(strictUrl, UriKind.Absolute, out var uri))
         {
-            return null;
+            if (ClassifyUri(uri) != BilibiliLinkKind.Article) return null;
+            var routeMatch = ArticleOpusPathRegex().Match(uri.AbsolutePath);
+            return routeMatch.Success ? routeMatch.Groups[1].Value : null;
         }
 
-        return match.Groups[1].Success ? match.Groups[1].Value : match.Groups[2].Value;
+        var standalone = StandaloneOpusRegex().Match(text.Trim());
+        return standalone.Success ? standalone.Groups[1].Value : null;
     }
 
     public static string? ExtractLiveRoomId(string text)
@@ -120,7 +211,14 @@ internal static partial class BilibiliUrlParser
             return null;
         }
 
-        var match = LiveRoomRegex().Match(text);
+        var strictUrl = ExtractStrictBilibiliUrl(text);
+        if (strictUrl is null || !Uri.TryCreate(strictUrl, UriKind.Absolute, out var uri)
+            || ClassifyUri(uri) != BilibiliLinkKind.Live)
+        {
+            return null;
+        }
+
+        var match = LiveRoomPathRegex().Match(uri.AbsolutePath);
         return match.Success ? match.Groups[1].Value : null;
     }
 
@@ -131,12 +229,19 @@ internal static partial class BilibiliUrlParser
             return null;
         }
 
-        foreach (var match in VideoPageRegex().Matches(text).Cast<Match>())
+        var strictUrl = ExtractStrictBilibiliUrl(text);
+        if (strictUrl is null || !Uri.TryCreate(strictUrl, UriKind.Absolute, out var uri)
+            || ClassifyUri(uri) != BilibiliLinkKind.Video)
         {
-            if (int.TryParse(match.Groups[1].Value, out var page) && page > 0)
-            {
+            return null;
+        }
+
+        foreach (var part in uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var pair = part.Split('=', 2);
+            if (pair.Length == 2 && string.Equals(Uri.UnescapeDataString(pair[0]), "p", StringComparison.OrdinalIgnoreCase)
+                && int.TryParse(Uri.UnescapeDataString(pair[1]), out var page) && page > 0)
                 return page;
-            }
         }
 
         return null;
@@ -149,9 +254,24 @@ internal static partial class BilibiliUrlParser
             return new BilibiliBangumiIds(null, null, null);
         }
 
-        var ep = BangumiEpRegex().Match(text);
-        var ss = BangumiSeasonRegex().Match(text);
-        var md = BangumiMediaRegex().Match(text);
+        var strictUrl = ExtractStrictBilibiliUrl(text);
+        if (strictUrl is not null && Uri.TryCreate(strictUrl, UriKind.Absolute, out var uri))
+        {
+            if (ClassifyUri(uri) != BilibiliLinkKind.Bangumi) return new BilibiliBangumiIds(null, null, null);
+            var path = uri.AbsolutePath;
+            var epPath = BangumiEpisodePathRegex().Match(path);
+            var ssPath = BangumiSeasonPathRegex().Match(path);
+            var mdPath = BangumiMediaPathRegex().Match(path);
+            return new BilibiliBangumiIds(
+                epPath.Success && long.TryParse(epPath.Groups[1].Value, out var routeEp) ? routeEp : null,
+                ssPath.Success && long.TryParse(ssPath.Groups[1].Value, out var routeSs) ? routeSs : null,
+                mdPath.Success && long.TryParse(mdPath.Groups[1].Value, out var routeMd) ? routeMd : null);
+        }
+
+        var value = text.Trim();
+        var ep = StandaloneBangumiEpRegex().Match(value);
+        var ss = StandaloneBangumiSeasonRegex().Match(value);
+        var md = StandaloneBangumiMediaRegex().Match(value);
         return new BilibiliBangumiIds(
             ep.Success && long.TryParse(ep.Groups[1].Value, out var epId) ? epId : null,
             ss.Success && long.TryParse(ss.Groups[1].Value, out var seasonId) ? seasonId : null,
@@ -193,8 +313,20 @@ internal static partial class BilibiliUrlParser
             return null;
         }
 
-        var match = AidRegex().Match(text);
-        return match.Success && long.TryParse(match.Groups[1].Value, out var aid) ? aid : null;
+        var strictUrl = ExtractStrictBilibiliUrl(text);
+        if (strictUrl is not null && Uri.TryCreate(strictUrl, UriKind.Absolute, out var uri))
+        {
+            if (ClassifyUri(uri) != BilibiliLinkKind.Video) return null;
+            var routeMatch = VideoPathRegex().Match(uri.AbsolutePath);
+            var routeId = routeMatch.Success ? routeMatch.Groups[1].Value : string.Empty;
+            return routeId.StartsWith("av", StringComparison.OrdinalIgnoreCase)
+                   && long.TryParse(routeId[2..], out var routeAid)
+                ? routeAid
+                : null;
+        }
+
+        var standalone = StandaloneAidRegex().Match(text.Trim());
+        return standalone.Success && long.TryParse(standalone.Groups[1].Value, out var aid) ? aid : null;
     }
 
     private static string? NormalizeStandaloneId(string text, string[] allowedPrefixes)
@@ -221,32 +353,44 @@ internal static partial class BilibiliUrlParser
     [GeneratedRegex(@"^BV[0-9A-Za-z]{10}$", RegexOptions.IgnoreCase)]
     private static partial Regex StandaloneBvidRegex();
 
-    [GeneratedRegex("BV[0-9A-Za-z]{10}", RegexOptions.IgnoreCase)]
-    private static partial Regex BvidRegex();
+    [GeneratedRegex(@"^av(\d+)$", RegexOptions.IgnoreCase)]
+    private static partial Regex StandaloneAidRegex();
 
-    [GeneratedRegex(@"(?:/video/)?av(\d+)\b", RegexOptions.IgnoreCase)]
-    private static partial Regex AidRegex();
+    [GeneratedRegex(@"^cv(\d+)$", RegexOptions.IgnoreCase)]
+    private static partial Regex StandaloneCvidRegex();
 
-    [GeneratedRegex(@"(?:cv|/read/cv)(\d+)", RegexOptions.IgnoreCase)]
-    private static partial Regex CvidRegex();
+    [GeneratedRegex(@"^opus(\d+)$", RegexOptions.IgnoreCase)]
+    private static partial Regex StandaloneOpusRegex();
 
-    [GeneratedRegex(@"/opus/(\d+)|\bopus(\d+)\b", RegexOptions.IgnoreCase)]
-    private static partial Regex OpusRegex();
+    [GeneratedRegex(@"^ep(\d+)$", RegexOptions.IgnoreCase)]
+    private static partial Regex StandaloneBangumiEpRegex();
 
-    [GeneratedRegex(@"live\.bilibili\.com/(?:blanc/)?(\d+)", RegexOptions.IgnoreCase)]
-    private static partial Regex LiveRoomRegex();
+    [GeneratedRegex(@"^ss(\d+)$", RegexOptions.IgnoreCase)]
+    private static partial Regex StandaloneBangumiSeasonRegex();
 
-    [GeneratedRegex(@"[?&]p=(\d+)", RegexOptions.IgnoreCase)]
-    private static partial Regex VideoPageRegex();
+    [GeneratedRegex(@"^md(\d+)$", RegexOptions.IgnoreCase)]
+    private static partial Regex StandaloneBangumiMediaRegex();
 
-    [GeneratedRegex(@"(?:/bangumi/play/)?ep(\d+)\b", RegexOptions.IgnoreCase)]
-    private static partial Regex BangumiEpRegex();
+    [GeneratedRegex(@"^/video/(BV[0-9A-Za-z]{10}|av\d+)(?:/|$)", RegexOptions.IgnoreCase)]
+    private static partial Regex VideoPathRegex();
 
-    [GeneratedRegex(@"(?:/bangumi/play/)?ss(\d+)\b", RegexOptions.IgnoreCase)]
-    private static partial Regex BangumiSeasonRegex();
+    [GeneratedRegex(@"^/read/cv(\d+)(?:/|$)", RegexOptions.IgnoreCase)]
+    private static partial Regex ArticleCvidPathRegex();
 
-    [GeneratedRegex(@"(?:/bangumi/media/)?md(\d+)\b", RegexOptions.IgnoreCase)]
-    private static partial Regex BangumiMediaRegex();
+    [GeneratedRegex(@"^/opus/(\d+)(?:/|$)", RegexOptions.IgnoreCase)]
+    private static partial Regex ArticleOpusPathRegex();
+
+    [GeneratedRegex(@"^/(?:blanc/)?(\d+)(?:/|$)", RegexOptions.IgnoreCase)]
+    private static partial Regex LiveRoomPathRegex();
+
+    [GeneratedRegex(@"^/bangumi/play/ep(\d+)(?:/|$)", RegexOptions.IgnoreCase)]
+    private static partial Regex BangumiEpisodePathRegex();
+
+    [GeneratedRegex(@"^/bangumi/play/ss(\d+)(?:/|$)", RegexOptions.IgnoreCase)]
+    private static partial Regex BangumiSeasonPathRegex();
+
+    [GeneratedRegex(@"^/bangumi/media/md(\d+)(?:/|$)", RegexOptions.IgnoreCase)]
+    private static partial Regex BangumiMediaPathRegex();
 }
 
 public sealed record BilibiliBangumiIds(long? EpId, long? SeasonId, long? MediaId)

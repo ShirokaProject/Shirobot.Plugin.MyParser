@@ -16,16 +16,14 @@ public sealed class BilibiliParseProvider(BilibiliParser parser) : IIncomingMess
 
     public bool CanHandle(string text)
     {
-        return BilibiliUrlParser.ExtractBvid(text) is not null
-               || BilibiliUrlParser.ExtractAid(text) is not null
-               || BilibiliUrlParser.ExtractB23Url(text) is not null;
+        return BilibiliUrlParser.ClassifyLink(text) == BilibiliLinkKind.Video;
     }
 
     public string? TryNormalizeParseText(string text, ProviderParseTextContext context)
     {
         if (context.IsUrlLike)
         {
-            return BilibiliUrlParser.ExtractStrictBilibiliUrl(text) ?? BilibiliUrlParser.ExtractB23Url(text);
+            return BilibiliUrlParser.ExtractStrictBilibiliUrl(text);
         }
 
         return context.IsAutoParse

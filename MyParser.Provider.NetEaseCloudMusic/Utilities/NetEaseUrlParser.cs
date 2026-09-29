@@ -101,6 +101,6 @@ internal static partial class NetEaseUrlParser
     [GeneratedRegex(@"netease://pick\?index=(\d+)&ids=([\d,]+)", RegexOptions.IgnoreCase)]
     private static partial Regex InternalPickRegex();
 
-    [GeneratedRegex(@"(?:^|[?&#])id=(\d+)", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"^id=(\d+)$", RegexOptions.IgnoreCase)]
     private static partial Regex SongIdRegex();
 }

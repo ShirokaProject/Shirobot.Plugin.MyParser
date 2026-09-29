@@ -9,7 +9,7 @@ using MyParser.Provider.BiliBili.Utilities;
 
 namespace MyParser.Provider.BiliBili.Services;
 
-public sealed partial class BilibiliArticleParser(HttpClient http, PluginConfig config)
+public sealed partial class BilibiliArticleParser(HttpClient http)
 {
     public async Task<BilibiliArticleParseResult> ParseAsync(string text, CancellationToken cancellationToken = default)
     {
@@ -19,17 +19,6 @@ public sealed partial class BilibiliArticleParser(HttpClient http, PluginConfig 
         }
 
         var cvid = BilibiliUrlParser.ExtractCvid(text);
-        if (cvid is null && BilibiliUrlParser.ExtractB23Url(text) is { } shortUrl)
-        {
-            var resolved = await ResolveArticleIdFromShortUrlAsync(shortUrl, cancellationToken);
-            if (resolved.OpusId is not null)
-            {
-                return await ParseOpusAsync(resolved.OpusId, cancellationToken);
-            }
-
-            cvid = resolved.Cvid;
-        }
-
         if (cvid is null)
         {
             throw new BilibiliParseException("无法从输入中提取专栏 cv 号或 opus 图文 ID。");
@@ -371,19 +360,6 @@ public sealed partial class BilibiliArticleParser(HttpClient http, PluginConfig 
     }
 
     private sealed record OpusTextInfo(string Text, int HeadingLevel, bool IsBold, string? Color);
-
-    private async Task<(long? Cvid, string? OpusId)> ResolveArticleIdFromShortUrlAsync(string shortUrl, CancellationToken cancellationToken)
-    {
-        var finalUrl = await new BilibiliParser(config, http).ResolveBilibiliRedirectUrlAsync(shortUrl, cancellationToken);
-        var cvid = BilibiliUrlParser.ExtractCvid(finalUrl);
-        var opusId = BilibiliUrlParser.ExtractOpusId(finalUrl);
-        if (cvid is not null || opusId is not null)
-        {
-            return (cvid, opusId);
-        }
-
-        return (null, null);
-    }
 
     private static string? TrimText(string? value, int maxLength)
     {

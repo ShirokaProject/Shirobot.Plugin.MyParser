@@ -38,7 +38,7 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
     };
 
     private readonly HttpClient _http;
-    private readonly HttpClientHandler? _handler;
+    private readonly HttpMessageHandler? _handler;
     private readonly bool _ownsHttpClient;
     private readonly PluginConfig _config;
     private readonly BilibiliArticleParser _articleParser;
@@ -61,7 +61,7 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
             _http = httpClient;
         }
 
-        _articleParser = new BilibiliArticleParser(_http, config);
+        _articleParser = new BilibiliArticleParser(_http);
     }
 
     public Task<object> ParseMediaAsync(string text, CancellationToken cancellationToken = default)
@@ -237,46 +237,7 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
             return view.GetStringOrDefault("bvid") ?? throw new BilibiliParseException("B站 view 接口未返回 bvid。");
         }
 
-        var shortUrl = BilibiliUrlParser.ExtractB23Url(text)
-                       ?? throw new BilibiliParseException("无法从输入中提取 BV/AV 号或 b23.tv 短链接。");
-        var finalUrl = await ResolveBilibiliRedirectUrlAsync(shortUrl, cancellationToken);
-        bvid = BilibiliUrlParser.ExtractBvid(finalUrl);
-        if (bvid is not null)
-        {
-            return bvid;
-        }
-
-        if (BilibiliUrlParser.ExtractCvid(finalUrl) is not null || BilibiliUrlParser.ExtractOpusId(finalUrl) is not null)
-        {
-            throw new BilibiliParseException($"b23.tv 短链接跳转到专栏/图文动态，不是视频：{finalUrl}");
-        }
-
-        if (BilibiliUrlParser.ExtractLiveRoomId(finalUrl) is not null)
-        {
-            throw new BilibiliParseException($"b23.tv 短链接跳转到直播间，不是视频：{finalUrl}");
-        }
-
-        throw new BilibiliParseException($"b23.tv 短链接跳转后未找到 BV 号：{finalUrl}");
-    }
-
-    internal async Task<string> ResolveBilibiliRedirectUrlAsync(string url, CancellationToken cancellationToken)
-    {
-        using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        request.Headers.TryAddWithoutValidation("User-Agent", BilibiliConstants.UserAgent);
-        request.Headers.TryAddWithoutValidation("Referer", BilibiliConstants.Origin + "/");
-        request.Headers.TryAddWithoutValidation("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
-        if (!string.IsNullOrWhiteSpace(MyParserRuntime.BilibiliCookie))
-        {
-            request.Headers.TryAddWithoutValidation("Cookie", MyParserRuntime.BilibiliCookie);
-        }
-
-        using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-        if (response.RequestMessage?.RequestUri is { } requestUri)
-        {
-            return requestUri.ToString();
-        }
-
-        return response.Headers.Location?.ToString() ?? url;
+        throw new BilibiliParseException("无法从已展开的 Bilibili 链接中提取 BV/AV 号。");
     }
 
     private async Task<JsonElement> GetViewAsync(string bvid, CancellationToken cancellationToken)

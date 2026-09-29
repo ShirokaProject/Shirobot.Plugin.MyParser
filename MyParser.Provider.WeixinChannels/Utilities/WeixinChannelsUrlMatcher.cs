@@ -14,14 +14,21 @@ internal static partial class WeixinChannelsUrlMatcher
             return false;
         }
 
-        var match = SphUrlRegex().Match(text);
-        if (!match.Success)
+        foreach (Match match in SphUrlRegex().Matches(text))
         {
-            return false;
+            var candidate = NormalizeUrl(match.Value);
+            if (!Uri.TryCreate(candidate, UriKind.Absolute, out var uri)
+                || !string.Equals(uri.Host, "weixin.qq.com", StringComparison.OrdinalIgnoreCase)
+                || !SphPathRegex().IsMatch(uri.AbsolutePath))
+            {
+                continue;
+            }
+
+            shareUrl = uri.ToString();
+            return true;
         }
 
-        shareUrl = NormalizeUrl(match.Value);
-        return true;
+        return false;
     }
 
     private static string NormalizeUrl(string url)
@@ -35,6 +42,9 @@ internal static partial class WeixinChannelsUrlMatcher
         return url;
     }
 
-    [GeneratedRegex(@"(?:https?://)?weixin\.qq\.com/sph/[A-Za-z0-9_-]+", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"(?:https?://)?(?<![A-Za-z0-9.-])weixin\.qq\.com/sph/[A-Za-z0-9_-]+", RegexOptions.IgnoreCase)]
     private static partial Regex SphUrlRegex();
+
+    [GeneratedRegex(@"^/sph/[A-Za-z0-9_-]+/?$", RegexOptions.IgnoreCase)]
+    private static partial Regex SphPathRegex();
 }

@@ -28,6 +28,11 @@ internal static partial class HeyboxUrlParser
 
             if (Uri.TryCreate(value, UriKind.Absolute, out var uri))
             {
+                if (!HeyboxUrlMatcher.IsSupportedHeyboxUri(uri))
+                {
+                    continue;
+                }
+
                 var linkId = TryGetQueryValue(uri.Query, "link_id") ?? TryGetQueryValue(uri.Query, "linkid");
                 if (!string.IsNullOrWhiteSpace(linkId))
                 {
@@ -39,6 +44,8 @@ internal static partial class HeyboxUrlParser
                 {
                     return pathMatch.Groups[1].Value;
                 }
+
+                continue;
             }
 
             var decoded = Uri.UnescapeDataString(value);
