@@ -1,5 +1,8 @@
 # 通用设置
 
+# 启用开发模式时只解析并发送文本/卡片，不下载或发送视频。
+development_mode = false
+
 # 是否发送各平台封面图片和封面卡片，不影响正文图片。
 send_cover_images = true
 
@@ -26,6 +29,18 @@ request_timeout_seconds = 15
 
 # 回复解析结果时是否引用原消息。
 quote_reply = false
+
+# 是否向聊天发送统一处理后的 Provider 错误提示。关闭后错误只写入插件日志。
+send_provider_failure_messages = true
+
+# 通用错误提示模板，支持 {provider} 占位符。
+provider_failure_message_template = "{provider}处理失败，请稍后重试。"
+
+# 是否向聊天发送统一处理后的 Provider 错误提示。关闭后错误只写入插件日志。
+send_provider_failure_messages = true
+
+# 通用错误提示文案，支持 {provider} 占位符。
+provider_failure_message_template = "{provider}处理失败，请稍后重试。"
 
 # 是否下载并发送 VideoSegment。关闭后只发送解析文本或卡片。
 send_video_segment = true

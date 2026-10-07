@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using Shirobot.Plugin.MyParser.Parsing;
 
 namespace MyParser.Provider.NetEaseCloudMusic.Infrastructure;
 
@@ -12,14 +13,11 @@ internal sealed class NetEaseHttp : IDisposable
 
     public NetEaseHttp(TimeSpan timeout)
     {
-        var handler = new SocketsHttpHandler
-        {
-            AllowAutoRedirect = true,
-            AutomaticDecompression = DecompressionMethods.All,
-            UseCookies = false,
-            PooledConnectionLifetime = TimeSpan.FromMinutes(2),
-            PooledConnectionIdleTimeout = TimeSpan.FromSeconds(30),
-        };
+        var socketsHandler = SafeHttpTransport.CreateSocketsHandler();
+        socketsHandler.UseCookies = false;
+        socketsHandler.PooledConnectionLifetime = TimeSpan.FromMinutes(2);
+        socketsHandler.PooledConnectionIdleTimeout = TimeSpan.FromSeconds(30);
+        var handler = SafeHttpTransport.CreateRedirectHandler(socketsHandler);
         Client = new HttpClient(handler) { Timeout = timeout };
         Client.DefaultRequestVersion = HttpVersion.Version11;
         Client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
@@ -43,14 +41,6 @@ internal sealed class NetEaseHttp : IDisposable
         using var response = await SendWithRetryAsync(request, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-    }
-
-    public async Task<string> ResolveRedirectUrlAsync(string url, CancellationToken cancellationToken)
-    {
-        using var request = CreateRequest(HttpMethod.Get, url, string.Empty);
-        using var response = await SendWithRetryAsync(request, cancellationToken).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
-        return response.RequestMessage?.RequestUri?.ToString() ?? url;
     }
 
     private async Task<HttpResponseMessage> SendWithRetryAsync(HttpRequestMessage request, CancellationToken cancellationToken)

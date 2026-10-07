@@ -1,18 +1,13 @@
 using System.Net;
+using Shirobot.Plugin.MyParser.Parsing;
 
 namespace MyParser.Provider.BiliBili.Infrastructure;
 
 public static class BilibiliHttpClientFactory
 {
-    public static HttpClientHandler CreateHandler()
+    public static HttpMessageHandler CreateHandler()
     {
-        return new HttpClientHandler
-        {
-            AutomaticDecompression = DecompressionMethods.All,
-            AllowAutoRedirect = true,
-            UseCookies = true,
-            CookieContainer = new CookieContainer(),
-        };
+        return SafeHttpTransport.CreateHandler(cookieContainer: new CookieContainer());
     }
 
     public static TimeSpan GetTimeout(PluginConfig config)

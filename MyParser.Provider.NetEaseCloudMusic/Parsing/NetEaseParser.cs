@@ -3,7 +3,7 @@ using System.Text.Json;
 using MyParser.Provider.NetEaseCloudMusic.Infrastructure;
 using ShiroBot.SDK.Abstractions;
 using MyParser.Provider.NetEaseCloudMusic.Models;
-using MyParser.Provider.NetEaseCloudMusic.Utilities;
+using MyParser.Provider.NetEaseCloudMusic.Parsing;
 
 namespace MyParser.Provider.NetEaseCloudMusic.Parsing;
 
@@ -68,30 +68,8 @@ public sealed class NetEaseParser : IParserHttpClientAccessor, IDisposable
             return await ParseFirstAvailableAsync(songIds, startIndex, cancellationToken).ConfigureAwait(false);
         }
 
-        text = await ResolveShortUrlIfNeededAsync(text, cancellationToken).ConfigureAwait(false);
         var songId = NetEaseUrlParser.ExtractSongId(text) ?? throw new NetEaseParseException("无法从输入中提取网易云歌曲 ID。");
         return await ParseSongByIdAsync(songId, cancellationToken).ConfigureAwait(false);
-    }
-
-    private async Task<string> ResolveShortUrlIfNeededAsync(string text, CancellationToken cancellationToken)
-    {
-        var shortUrl = NetEaseUrlParser.ExtractShortUrl(text);
-        if (string.IsNullOrWhiteSpace(shortUrl))
-        {
-            return text;
-        }
-
-        try
-        {
-            var resolved = await _http.ResolveRedirectUrlAsync(shortUrl, cancellationToken).ConfigureAwait(false);
-            BotLog.Info($"MyParser 网易云音乐短链展开: {shortUrl} -> {resolved}");
-            return string.IsNullOrWhiteSpace(resolved) ? text : resolved;
-        }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
-        {
-            BotLog.Warning($"MyParser 网易云音乐短链展开失败: {shortUrl}, error={ex.Message}");
-            return text;
-        }
     }
 
     private async Task<NetEaseParseResult> ParseFirstAvailableAsync(IReadOnlyList<long> songIds, int startIndex, CancellationToken cancellationToken)

@@ -2,73 +2,102 @@ using Avalonia.Media.Imaging;
 using Shirobot.Plugin.MyParser.MessageHandling;
 using Shirobot.Plugin.MyParser.Parsing;
 using Shirobot.Plugin.MyParser.Services;
-using Shirobot.Plugin.MyParser.Utility;
+using Shirobot.Plugin.MyParser.Downloading;
+using Shirobot.Plugin.MyParser.Media;
+using Shirobot.Plugin.MyParser.CardRendering;
 using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Abstractions;
 using ShiroBot.SDK.Plugin;
 
 namespace Shirobot.Plugin.MyParser;
 
-internal sealed class ProviderHostServices(IBotContext context, PluginConfig pluginConfig) : IProviderHostServices, IDisposable
+internal sealed class ProviderHostServices : IProviderHostServices, IDisposable
 {
+    private readonly IBotContext context;
+    private readonly PluginConfig pluginConfig;
+    private readonly ProviderMessageSender _messageSender;
+    private readonly ProviderReactionService _reactionService;
+    private readonly ProviderFailureReporter _failureReporter;
+    private readonly ProviderLocalFileService _localFiles;
     private LocalVideoHttpServer? _localVideoHttpServer;
+
+    public ProviderHostServices(IBotContext context, PluginConfig pluginConfig)
+    {
+        this.context = context;
+        this.pluginConfig = pluginConfig;
+        _messageSender = new ProviderMessageSender(context);
+        _reactionService = new ProviderReactionService(context);
+        _failureReporter = new ProviderFailureReporter(_messageSender);
+        _localFiles = new ProviderLocalFileService(context);
+    }
 
     public Task ReactAsync(IncomingMessage message, string faceId, string platformName)
     {
-        return ProviderMessageUtilities.ReactAsync(context, message, faceId, platformName);
+        return _reactionService.AddAsync(message, faceId, platformName);
     }
 
     public Task RemoveReactionAsync(IncomingMessage message, string faceId, string platformName)
     {
-        return ProviderMessageUtilities.RemoveReactionAsync(context, message, faceId, platformName);
+        return _reactionService.RemoveAsync(message, faceId, platformName);
     }
 
     public Task<SendMessageResult> ReplyTextAsync(PluginConfig config, IncomingMessage message, string text)
     {
-        return ProviderMessageUtilities.ReplyTextAsync(context, config, message, text);
+        return _messageSender.ReplyTextAsync(config, message, text);
     }
 
-    public Task SendImageAsync(IncomingMessage message, ImageOutgoingSegment segment)
+    public Task ReportFailureAsync(PluginConfig config, IncomingMessage message, string providerName,
+        ProviderFailureKind kind, Exception? exception = null, string? diagnosticContext = null)
     {
-        return ProviderMessageUtilities.SendImageAsync(context, message, segment);
+        return _failureReporter.ReportAsync(config, message, providerName, kind, exception, diagnosticContext);
+    }
+
+    public Task<SendMessageResult> SendImageAsync(IncomingMessage message, ImageOutgoingSegment segment)
+    {
+        return _messageSender.SendImageAsync(message, segment);
+    }
+
+    public Task<SendMessageResult> SendSegmentsAsync(IncomingMessage message, IReadOnlyList<OutgoingSegment> segments)
+    {
+        return _messageSender.SendSegmentsAsync(message, segments);
     }
 
     public Task RunLoggedBackgroundAsync(string description, Func<Task> action)
     {
-        return ProviderMessageUtilities.RunLoggedBackgroundAsync(description, action);
+        return _localFiles.RunLoggedBackgroundAsync(description, action);
     }
 
     public string ResolveCookiePath(string fileName)
     {
-        return ProviderMessageUtilities.ResolveCookiePath(context, fileName);
+        return _localFiles.ResolveCookiePath(fileName);
     }
 
     public Task<string> UploadLocalVideoFileAsync(PluginConfig config, IncomingMessage message, string? localVideoPath, string platformName, string mediaId)
     {
-        return ProviderMessageUtilities.UploadLocalVideoFileAsync(context, config, message, localVideoPath, platformName, mediaId);
+        return _localFiles.UploadLocalVideoFileAsync(config, message, localVideoPath, platformName, mediaId);
     }
 
     public Task<string> UploadLocalFileAsync(PluginConfig config, IncomingMessage message, string? localPath, string platformName, string mediaId, bool preferBase64 = false)
     {
-        return ProviderMessageUtilities.UploadLocalFileAsync(context, config, message, localPath, platformName, mediaId, preferBase64);
+        return _localFiles.UploadLocalFileAsync(config, message, localPath, platformName, mediaId, preferBase64);
     }
 
-    public string GetMessageScene(IncomingMessage message) => ProviderMessageUtilities.GetMessageScene(message);
+    public string GetMessageScene(IncomingMessage message) => _localFiles.GetMessageScene(message);
 
-    public string GetUriMode(string uri) => MediaUriUtilities.GetUriMode(uri);
+    public string GetUriMode(string uri) => MediaUriFormatter.GetUriMode(uri);
 
-    public string PreviewUri(string? uri, int maxLength = 180) => MediaUriUtilities.PreviewUri(uri, maxLength);
+    public string PreviewUri(string? uri, int maxLength = 180) => MediaUriFormatter.PreviewUri(uri, maxLength);
 
     public void UnregisterLocalVideoFile(string? path) => _localVideoHttpServer?.UnregisterFile(path);
 
     public void DeleteLocalVideoIfConfigured(PluginConfig config, string? localPath, string provider)
     {
-        LocalMediaCleanup.DeleteLocalVideoIfConfigured(config, localPath, provider);
+        TemporaryMediaCleanupService.DeleteLocalVideoIfConfigured(config, localPath, provider);
     }
 
     public void CleanupStartupResidues(PluginConfig config)
     {
-        LocalMediaCleanup.CleanupStartupResidues(config);
+        TemporaryMediaCleanupService.CleanupStartupResidues(config);
     }
 
     public async Task<ProviderImageBuildResult> BuildProviderImageAsync(
@@ -203,9 +232,9 @@ internal sealed class ProviderHostServices(IBotContext context, PluginConfig plu
         return MessageFetchConcurrency.SelectParallelOrderedAsync(source, maxConcurrency, selector);
     }
 
-    public Bitmap? DecodeBase64ImageForRender(string uri) => RenderBitmapUtilities.DecodeBase64ImageForRender(uri);
+    public Bitmap? DecodeBase64ImageForRender(string uri) => MediaBitmapDecoder.DecodeBase64ImageForRender(uri);
 
-    public Bitmap? DecodeImageFileForRender(string path) => RenderBitmapUtilities.DecodeImageFileForRender(path);
+    public Bitmap? DecodeImageFileForRender(string path) => MediaBitmapDecoder.DecodeImageFileForRender(path);
 
     public Task<long> DownloadAsync(
         HttpRangeDownloadRequest request,

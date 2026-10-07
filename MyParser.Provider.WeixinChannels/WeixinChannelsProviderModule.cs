@@ -1,5 +1,4 @@
 using MyParser.Provider.WeixinChannels.Infrastructure;
-using MyParser.Provider.WeixinChannels.MessageHandling;
 using MyParser.Provider.WeixinChannels.Parsing;
 using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Plugin;
@@ -7,11 +6,13 @@ using ShiroBot.SDK.Plugin;
 namespace MyParser.Provider.WeixinChannels;
 
 [MyParserProvider("weixinchannels")]
-public sealed class WeixinChannelsProviderModule : MyParserProviderModuleBase, IProviderMessageHandlerFactory, ICookieValidator, IProviderCookieStore, IProviderAutoParsePolicy, IProviderResultMessageClassifier
+public sealed class WeixinChannelsProviderModule : MyParserProviderModuleBase, ICookieValidator, IProviderCookieStore, IProviderAutoParsePolicy, IProviderResultMessageClassifier, IProviderMediaCardRendererFactory
 {
     public override string Id => WeixinChannelsConstants.ProviderId;
 
     public override string DisplayName => WeixinChannelsConstants.DisplayName;
+
+    public IProviderMediaCardRenderer CreateMediaCardRenderer(ProviderCardRenderContext context) => new WeixinChannelsMediaCardRenderer(context);
 
     public IReadOnlyList<ProviderCookieDescriptor> CookieDescriptors =>
     [
@@ -28,11 +29,6 @@ public sealed class WeixinChannelsProviderModule : MyParserProviderModuleBase, I
     public override IReadOnlyList<IParseProvider> CreateProviders(PluginConfig config)
     {
         return [new WeixinChannelsParseProvider(new WeixinChannelsParser(config))];
-    }
-
-    public IProviderMessageHandler? CreateMessageHandler(ProviderMessageHandlerContext context)
-    {
-        return new WeixinChannelsMessageHandler(context);
     }
 
     public bool LooksLikeCookie(string cookie) => WeixinChannelsParser.LooksLikeYuanbaoCookie(cookie);

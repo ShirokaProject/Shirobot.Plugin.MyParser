@@ -1,0 +1,22 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Shirobot.Plugin.MyParser.Views"
+             x:Class="Shirobot.Plugin.MyParser.Views.MediaCard"
+             x:DataType="vm:MediaCardViewModel"
+             Width="420">
+    <Border Padding="14" CornerRadius="14" Background="#151923" BorderBrush="#343B4B" BorderThickness="1">
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnDefinitions="120,*" ColumnSpacing="14" RowSpacing="9">
+            <Border Grid.Row="0" Grid.RowSpan="5" Width="120" Height="160" CornerRadius="10" ClipToBounds="True" Background="#252B38" VerticalAlignment="Top">
+                <Image Source="{Binding Cover}" Stretch="UniformToFill" />
+            </Border>
+            <TextBlock Grid.Column="1" FontSize="12" Foreground="#8DB8FF" Text="{Binding ProviderName}" />
+            <TextBlock Grid.Row="1" Grid.Column="1" FontSize="11" Foreground="#A5ADC0" Text="{Binding KindName}" />
+            <TextBlock Grid.Row="2" Grid.Column="1" FontSize="18" FontWeight="Bold" Foreground="White" Text="{Binding Title}" TextWrapping="Wrap" MaxHeight="50" />
+            <TextBlock Grid.Row="3" Grid.Column="1" FontSize="13" Foreground="#D4D9E3" Text="{Binding Author}" TextWrapping="Wrap" />
+            <StackPanel Grid.Row="4" Grid.Column="1" Spacing="5">
+                <TextBlock FontSize="12" Foreground="#A5ADC0" Text="{Binding Description}" TextWrapping="Wrap" MaxHeight="38" />
+                <TextBlock FontSize="11" Foreground="#8E99AE" Text="{Binding Metadata}" TextWrapping="Wrap" MaxHeight="44" />
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>

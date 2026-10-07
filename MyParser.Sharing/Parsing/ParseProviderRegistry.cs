@@ -66,50 +66,10 @@ public sealed class ParseProviderRegistry(IEnumerable<IParseProvider> providers)
         return value.Length <= 220 ? value : value[..220] + "...";
     }
 
-    public async Task<MediaParseResult> ParseAsync(string text, CancellationToken cancellationToken = default)
-    {
-        var context = new ProviderParseTextContext(IsAutoParse: false, IsUrlLike: IsUrlLike(text));
-        var candidates = _providers
-            .Select(provider => new
-            {
-                Provider = provider,
-                ParseText = provider is IProviderParseTextMatcher matcher
-                    ? matcher.TryNormalizeParseText(text, context)
-                    : context.IsUrlLike ? text : null,
-            })
-            .Where(item => !string.IsNullOrWhiteSpace(item.ParseText) && item.Provider.CanHandle(item.ParseText))
-            .ToArray();
-        if (candidates.Length == 0)
-        {
-            throw new InvalidOperationException("未找到可处理该链接的解析提供商。");
-        }
-
-        Exception? lastError = null;
-        foreach (var provider in candidates)
-        {
-            try
-            {
-                return await provider.Provider.ParseAsync(provider.ParseText!, cancellationToken);
-            }
-            catch (Exception ex) when (candidates.Length > 1 && IsProviderMismatch(ex))
-            {
-                lastError = ex;
-            }
-        }
-
-        if (lastError is not null)
-        {
-            throw lastError;
-        }
-
-        throw new InvalidOperationException("未找到可处理该链接的解析提供商。");
-    }
-
-    private static bool IsProviderMismatch(Exception ex)
+    public static bool IsProviderMismatch(Exception ex)
     {
         var message = ex.Message;
-        return message.Contains("短链接跳转后未找到", StringComparison.OrdinalIgnoreCase)
-               || message.Contains("无法从输入中提取", StringComparison.OrdinalIgnoreCase)
+        return message.Contains("无法从输入中提取", StringComparison.OrdinalIgnoreCase)
                || message.Contains("不是视频", StringComparison.OrdinalIgnoreCase)
                || message.Contains("不是专栏", StringComparison.OrdinalIgnoreCase)
                || message.Contains("不是图文", StringComparison.OrdinalIgnoreCase)

@@ -1,16 +1,17 @@
 using Shirobot.Plugin.MyParser.Parsing;
 using MyParser.Provider.Douyin.Parsing;
-using MyParser.Provider.Douyin.MessageHandling;
 using ShiroBot.SDK.Models;
 
 namespace MyParser.Provider.Douyin;
 
 [MyParserProvider("douyin")]
-public sealed class DouyinProviderModule : MyParserProviderModuleBase, IProviderMessageHandlerFactory, ICookieValidator, IProviderCookieStore, IProviderAutoParsePolicy, IProviderResultMessageClassifier
+public sealed class DouyinProviderModule : MyParserProviderModuleBase, ICookieValidator, IProviderCookieStore, IProviderAutoParsePolicy, IProviderResultMessageClassifier, IProviderMediaCardRendererFactory
 {
     public override string Id => "douyin";
 
     public override string DisplayName => "抖音";
+
+    public IProviderMediaCardRenderer CreateMediaCardRenderer(ProviderCardRenderContext context) => new DouyinMediaCardRenderer(context);
 
     public IReadOnlyList<ProviderCookieDescriptor> CookieDescriptors =>
     [
@@ -27,11 +28,6 @@ public sealed class DouyinProviderModule : MyParserProviderModuleBase, IProvider
     public override IReadOnlyList<IParseProvider> CreateProviders(PluginConfig config)
     {
         return [new DouyinParseProvider(new DouyinParser(config))];
-    }
-
-    public IProviderMessageHandler? CreateMessageHandler(ProviderMessageHandlerContext context)
-    {
-        return new DouyinMessageHandler(context.BotContext, context.Config, context.ProviderRegistry, context.PrimaryProvider, context.HostServices);
     }
 
     public bool LooksLikeCookie(string cookie)

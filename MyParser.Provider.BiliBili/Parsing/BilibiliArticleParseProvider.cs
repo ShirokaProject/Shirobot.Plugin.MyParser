@@ -1,4 +1,5 @@
 using Shirobot.Plugin.MyParser.Parsing;
+using MyParser.Provider.BiliBili.Models;
 
 namespace MyParser.Provider.BiliBili.Parsing;
 
@@ -12,25 +13,23 @@ public sealed class BilibiliArticleParseProvider(BilibiliParser parser) : IProvi
 
     public bool CanHandle(string text)
     {
-        return Utilities.BilibiliUrlParser.ExtractCvid(text) is not null
-               || Utilities.BilibiliUrlParser.ExtractOpusId(text) is not null
-               || Utilities.BilibiliUrlParser.ExtractB23Url(text) is not null;
+        return BilibiliUrlParser.ClassifyLink(text) == BilibiliLinkKind.Article;
     }
 
     public string? TryNormalizeParseText(string text, ProviderParseTextContext context)
     {
         if (context.IsUrlLike)
         {
-            return Utilities.BilibiliUrlParser.ExtractStrictBilibiliUrl(text);
+            return BilibiliUrlParser.ExtractStrictBilibiliUrl(text);
         }
 
-        return context.IsAutoParse ? null : Utilities.BilibiliUrlParser.NormalizeStandaloneArticleId(text);
+        return context.IsAutoParse ? null : BilibiliUrlParser.NormalizeStandaloneArticleId(text);
     }
 
-    public async Task<MediaParseResult> ParseAsync(string text, CancellationToken cancellationToken = default)
+    public async Task<ParsedMedia> ParseAsync(string text, CancellationToken cancellationToken = default)
     {
         var result = await Parser.ParseArticleAsync(text, cancellationToken);
-        return new MediaParseResult
+        return new ParsedMedia
         {
             ProviderId = Id,
             ProviderName = Name,
@@ -40,11 +39,28 @@ public sealed class BilibiliArticleParseProvider(BilibiliParser parser) : IProvi
             AuthorName = result.AuthorName,
             AuthorId = result.AuthorId,
             CoverUrl = result.BannerUrl,
-            MusicUrl = null,
+            Description = result.Summary,
             Tags = result.Categories,
-            IsGallery = false,
-            IsVideo = false,
-            ProviderPayload = result,
+            Kind = ParsedMediaKind.Article,
+            Assets = result.ImageUrls.Select(url => new MediaAsset
+            {
+                Kind = MediaAssetKind.Image, Url = url, Referer = result.SourceUrl,
+            }).ToArray(),
+            Content = result.Blocks.Select(block => new MediaContentBlock
+            {
+                Kind = block.Type == BilibiliArticleBlockType.Image ? MediaContentKind.Image
+                    : block.TextStyle == BilibiliArticleTextStyle.Heading ? MediaContentKind.Heading
+                    : block.TextStyle == BilibiliArticleTextStyle.Quote ? MediaContentKind.Quote
+                    : MediaContentKind.Text,
+                Text = block.Text, Url = block.Url, Caption = block.Caption, Level = block.HeadingLevel,
+            }).ToArray(),
+            Attributes = new Dictionary<string, string>
+            {
+                ["cvid"] = result.Cvid.ToString(), ["opus_id"] = result.OpusId ?? string.Empty,
+                ["views"] = result.ViewCount.ToString(), ["likes"] = result.LikeCount.ToString(),
+                ["words"] = result.Words.ToString(), ["publish_time"] = result.PublishTime?.ToString("O") ?? string.Empty,
+                ["author_avatar_url"] = result.AuthorAvatarUrl ?? string.Empty, ["author_fans"] = result.AuthorFans.ToString(),
+            },
         };
     }
 }

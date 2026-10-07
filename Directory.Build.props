@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup>
+    <ShiroBotSourceRoot Condition="'$(ShiroBotSourceRoot)' == '' and Exists('$(MSBuildThisFileDirectory)..\ShiroBot\SDK\ShiroBot.SDK.csproj')">$(MSBuildThisFileDirectory)..\ShiroBot</ShiroBotSourceRoot>
+    <UseShiroBotSource Condition="'$(UseShiroBotSource)' == '' and '$(ShiroBotSourceRoot)' != '' and Exists('$(ShiroBotSourceRoot)\SDK\ShiroBot.SDK.csproj')">true</UseShiroBotSource>
+    <UseShiroBotSource Condition="'$(UseShiroBotSource)' == ''">false</UseShiroBotSource>
+  </PropertyGroup>
+</Project>

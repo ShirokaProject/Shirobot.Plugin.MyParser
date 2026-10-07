@@ -1,14 +1,15 @@
-using MyParser.Provider.Heybox.MessageHandling;
 using MyParser.Provider.Heybox.Parsing;
 
 namespace MyParser.Provider.Heybox;
 
 [MyParserProvider("heybox")]
-public sealed class HeyboxProviderModule : MyParserProviderModuleBase, IProviderMessageHandlerFactory, ICookieValidator, IProviderCookieStore, IProviderAutoParsePolicy, IProviderResultMessageClassifier
+public sealed class HeyboxProviderModule : MyParserProviderModuleBase, ICookieValidator, IProviderCookieStore, IProviderAutoParsePolicy, IProviderAvailabilityPolicy, IProviderResultMessageClassifier, IProviderMediaCardRendererFactory
 {
     public override string Id => "heybox";
 
     public override string DisplayName => "小黑盒";
+
+    public IProviderMediaCardRenderer CreateMediaCardRenderer(ProviderCardRenderContext context) => new HeyboxMediaCardRenderer(context);
 
     public IReadOnlyList<ProviderCookieDescriptor> CookieDescriptors =>
     [
@@ -24,20 +25,12 @@ public sealed class HeyboxProviderModule : MyParserProviderModuleBase, IProvider
 
     public override IReadOnlyList<IParseProvider> CreateProviders(PluginConfig config)
     {
-        if (!config.EnableHeybox)
-        {
-            return [];
-        }
-
         return [new HeyboxParseProvider(new HeyboxParser(config))];
     }
 
-    public IProviderMessageHandler? CreateMessageHandler(ProviderMessageHandlerContext context)
-    {
-        return new HeyboxMessageHandler(context);
-    }
-
     public bool IsAutoParseEnabled(PluginConfig config) => config.EnableHeybox && config.AutoParseHeyboxLinks;
+
+    public bool IsProviderEnabled(PluginConfig config) => config.EnableHeybox;
 
     public bool LooksLikeCookie(string cookie) => HeyboxParser.LooksLikeCookie(cookie);
 

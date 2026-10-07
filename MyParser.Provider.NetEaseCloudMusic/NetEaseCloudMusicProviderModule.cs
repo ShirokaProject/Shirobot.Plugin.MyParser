@@ -1,19 +1,19 @@
 using System.Collections.Concurrent;
-using MyParser.Provider.NetEaseCloudMusic.MessageHandling;
 using MyParser.Provider.NetEaseCloudMusic.Parsing;
-using MyParser.Provider.NetEaseCloudMusic.Utilities;
 using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Plugin;
 
 namespace MyParser.Provider.NetEaseCloudMusic;
 
 [MyParserProvider("neteasecloudmusic")]
-public sealed class NetEaseCloudMusicProviderModule : MyParserProviderModuleBase, IProviderMessageHandlerFactory, IProviderTextNormalizer, IIncomingProviderTextNormalizer, ICookieValidator, IProviderCookieStore, IProviderAutoParsePolicy, IProviderResultMessageClassifier, IProviderCommandContributor, IProviderReplyParseTextBuilder
+public sealed class NetEaseCloudMusicProviderModule : MyParserProviderModuleBase, IProviderTextNormalizer, IIncomingProviderTextNormalizer, ICookieValidator, IProviderCookieStore, IProviderAutoParsePolicy, IProviderAvailabilityPolicy, IProviderResultMessageClassifier, IProviderCommandContributor, IProviderReplyParseTextBuilder, IProviderMediaCardRendererFactory
 {
     private static readonly ConcurrentDictionary<string, IReadOnlyList<long>> SearchReplySongIds = new(StringComparer.Ordinal);
 
     public override string Id => "neteasecloudmusic";
     public override string DisplayName => "网易云音乐";
+
+    public IProviderMediaCardRenderer CreateMediaCardRenderer(ProviderCardRenderContext context) => new NetEaseMediaCardRenderer(context);
 
     public IReadOnlyList<ProviderCookieDescriptor> CookieDescriptors =>
     [
@@ -37,8 +37,6 @@ public sealed class NetEaseCloudMusicProviderModule : MyParserProviderModuleBase
         return [new NetEaseParseProvider(new NetEaseParser(config))];
     }
 
-    public IProviderMessageHandler? CreateMessageHandler(ProviderMessageHandlerContext context) => new NetEaseMessageHandler(context);
-
     public string? NormalizeParseText(string text) => NetEaseUrlParser.NormalizeParseText(text);
 
     public string? NormalizeParseText(IncomingMessage message)
@@ -55,6 +53,8 @@ public sealed class NetEaseCloudMusicProviderModule : MyParserProviderModuleBase
     public bool LooksLikeCookie(string cookie) => NetEaseParser.LooksLikeCookie(cookie);
 
     public bool IsAutoParseEnabled(PluginConfig config) => config.EnableNetEaseCloudMusic && config.AutoParseNetEaseCloudMusicLinks;
+
+    public bool IsProviderEnabled(PluginConfig config) => config.EnableNetEaseCloudMusic;
 
     public bool IsPluginResultMessage(string text) => text.StartsWith("网易云音乐解析", StringComparison.OrdinalIgnoreCase);
 

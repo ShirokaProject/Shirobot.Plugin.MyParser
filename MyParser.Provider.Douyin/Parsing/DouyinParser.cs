@@ -4,7 +4,7 @@ using MyParser.Provider.Douyin.Abstractions;
 using MyParser.Provider.Douyin.Services;
 using MyParser.Provider.Douyin.WorkParsers;
 using MyParser.Provider.Douyin.Infrastructure;
-using MyParser.Provider.Douyin.Utilities;
+using MyParser.Provider.Douyin.Parsing;
 
 namespace MyParser.Provider.Douyin.Parsing;
 

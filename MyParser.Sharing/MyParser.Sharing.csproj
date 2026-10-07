@@ -8,8 +8,17 @@
         <RootNamespace>Shirobot.Plugin.MyParser</RootNamespace>
     </PropertyGroup>
 
+    <Import Project="$(ShiroBotSourceRoot)\SDK\buildTransitive\ShiroBot.SDK.props"
+            Condition="'$(UseShiroBotSource)' == 'true'" />
+
     <ItemGroup>
-        <PackageReference Include="ShiroBot.SDK" />
+        <ProjectReference Include="$(ShiroBotSourceRoot)\SDK\ShiroBot.SDK.csproj"
+                          Private="false"
+                          Condition="'$(UseShiroBotSource)' == 'true'" />
+        <PackageReference Include="ShiroBot.SDK" Condition="'$(UseShiroBotSource)' != 'true'" />
     </ItemGroup>
+
+    <Import Project="$(ShiroBotSourceRoot)\SDK\buildTransitive\ShiroBot.SDK.targets"
+            Condition="'$(UseShiroBotSource)' == 'true'" />
 
 </Project>

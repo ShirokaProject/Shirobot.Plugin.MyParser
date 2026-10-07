@@ -52,6 +52,34 @@ public interface IProviderAutoParsePolicy
     bool IsAutoParseEnabled(PluginConfig config);
 }
 
+public interface IProviderAvailabilityPolicy
+{
+    bool IsProviderEnabled(PluginConfig config);
+}
+
+public enum ProviderCardPurpose
+{
+    Main,
+    Lyrics,
+    Article,
+    Comments,
+}
+
+public interface IProviderMediaCardRenderer
+{
+    Task<string?> RenderAsync(ParsedMedia media, ProviderCardPurpose purpose, CancellationToken cancellationToken = default);
+}
+
+public interface IProviderMediaCardRendererFactory
+{
+    IProviderMediaCardRenderer CreateMediaCardRenderer(ProviderCardRenderContext context);
+}
+
+public sealed record ProviderCardRenderContext(
+    IBotContext BotContext,
+    PluginConfig Config,
+    IProviderHostServices HostServices);
+
 public interface IProviderResultMessageClassifier
 {
     bool IsPluginResultMessage(string text);
@@ -89,11 +117,6 @@ public sealed class MyParserProviderAttribute(string id) : Attribute
     public string Id { get; } = id;
 }
 
-public interface IProviderMessageHandlerFactory
-{
-    IProviderMessageHandler? CreateMessageHandler(ProviderMessageHandlerContext context);
-}
-
 public interface IProviderMessageHandler : IDisposable
 {
     string ProviderId { get; }
@@ -126,7 +149,15 @@ public interface IProviderHostServices
     Task ReactAsync(MessageEvent message, string faceId, string platformName);
     Task RemoveReactionAsync(MessageEvent message, string faceId, string platformName);
     Task<SentMessage> ReplyTextAsync(PluginConfig config, MessageEvent message, string text);
-    Task SendImageAsync(MessageEvent message, ImageSegment segment);
+    Task ReportFailureAsync(
+        PluginConfig config,
+        MessageEvent message,
+        string providerName,
+        ProviderFailureKind kind,
+        Exception? exception = null,
+        string? diagnosticContext = null);
+    Task<SentMessage> SendImageAsync(MessageEvent message, ImageSegment segment);
+    Task<SentMessage> SendSegmentsAsync(MessageEvent message, IReadOnlyList<MessageSegment> segments);
     Task RunLoggedBackgroundAsync(string description, Func<Task> action);
     string ResolveCookiePath(string fileName);
     Task<string> UploadLocalVideoFileAsync(PluginConfig config, MessageEvent message, string? localVideoPath, string platformName, string mediaId);
@@ -197,12 +228,27 @@ public interface IProviderHostServices
         CancellationToken cancellationToken = default);
 }
 
+public enum ProviderFailureKind
+{
+    Parse,
+    Timeout,
+    AuthenticationRequired,
+    UnsupportedContent,
+    MediaDelivery,
+    Unexpected,
+}
+
+public interface IProviderClassifiedException
+{
+    ProviderFailureKind FailureKind { get; }
+}
+
 public sealed record ProviderMessageHandlerContext(
     IBotContext BotContext,
     PluginConfig Config,
-    ParseProviderRegistry ProviderRegistry,
     IParseProvider PrimaryProvider,
-    IProviderHostServices HostServices);
+    IProviderHostServices HostServices,
+    IProviderMediaCardRenderer? CardRenderer = null);
 
 public sealed record ProviderRuntimeContext(
     IBotContext BotContext,

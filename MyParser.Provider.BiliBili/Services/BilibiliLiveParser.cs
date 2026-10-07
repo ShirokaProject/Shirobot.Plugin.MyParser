@@ -1,13 +1,12 @@
 using System.Net;
 using System.Text.Json;
-using MyParser.Provider.BiliBili.Parsing;
 using MyParser.Provider.BiliBili.Infrastructure;
 using MyParser.Provider.BiliBili.Models;
-using MyParser.Provider.BiliBili.Utilities;
+using MyParser.Provider.BiliBili.Parsing;
 
 namespace MyParser.Provider.BiliBili.Services;
 
-public sealed class BilibiliLiveParser(HttpClient http, PluginConfig config)
+public sealed class BilibiliLiveParser(HttpClient http)
 {
     private const string RoomInitApi = "https://api.live.bilibili.com/room/v1/Room/room_init";
     private const string RoomInfoApi = "https://api.live.bilibili.com/xlive/web-room/v1/index/getInfoByRoom";
@@ -16,12 +15,6 @@ public sealed class BilibiliLiveParser(HttpClient http, PluginConfig config)
     public async Task<BilibiliLiveParseResult> ParseAsync(string text, CancellationToken cancellationToken = default)
     {
         var roomId = BilibiliUrlParser.ExtractLiveRoomId(text);
-        if (roomId is null && BilibiliUrlParser.ExtractB23Url(text) is { } shortUrl)
-        {
-            var resolved = await new BilibiliParser(config, http).ResolveBilibiliRedirectUrlAsync(shortUrl, cancellationToken);
-            roomId = BilibiliUrlParser.ExtractLiveRoomId(resolved);
-        }
-
         if (string.IsNullOrWhiteSpace(roomId))
         {
             throw new BilibiliParseException("无法从输入中提取 Bilibili 直播间号。");
