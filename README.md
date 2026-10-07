@@ -1,5 +1,7 @@
 # Shirobot.Plugin.MyParser
 
+当前发布：`v0.6.0`。本版本使用 SDK `0.9.8`，需要宿主 `0.9.8` 的新 ABI；旧宿主不兼容。
+
 <p align="center"><img src="./Assets/icon.png" alt="MyParser" width="160" /></p>
 
 [ShiroBot](https://github.com/ShirokaProject/ShiroBot) 多平台内容解析插件，支持自动识别链接、卡片渲染、视频 / 音频发送和 Cookie 热重载。
