@@ -31,6 +31,21 @@ public sealed class DouyinParseProvider(DouyinParser parser) : IParseProviderWit
             };
         }
 
+        var attributes = new Dictionary<string, string>
+        {
+            ["duration_ms"] = result.DurationMilliseconds.ToString(), ["likes"] = result.LikeCount.ToString(),
+            ["comments"] = result.CommentCount.ToString(), ["shares"] = result.ShareCount.ToString(), ["plays"] = result.PlayCount.ToString(),
+            ["music_title"] = result.MusicTitle ?? string.Empty, ["music_author"] = result.MusicAuthor ?? string.Empty,
+            ["author_avatar_url"] = result.AuthorAvatarUrl ?? string.Empty,
+            ["author_followers"] = result.AuthorFollowerCount.ToString(), ["author_region"] = result.AuthorRegion ?? string.Empty,
+            ["create_time"] = result.CreateTimeUnixSeconds.ToString(), ["collects"] = result.CollectCount.ToString(),
+        };
+        for (var index = 0; index < result.Images.Count; index++)
+        {
+            if (!string.IsNullOrWhiteSpace(result.Images[index].LivePhotoUrl))
+                attributes[$"gallery_live_photo_{index}"] = result.Images[index].LivePhotoUrl!;
+        }
+
         return new ParsedMedia
         {
             ProviderId = Id,
@@ -46,13 +61,20 @@ public sealed class DouyinParseProvider(DouyinParser parser) : IParseProviderWit
             Kind = result.IsGallery ? ParsedMediaKind.Gallery : result.IsVideo ? ParsedMediaKind.Video : ParsedMediaKind.Other,
             Assets = result.Qualities.Select(quality => new MediaAsset
                 { Kind = MediaAssetKind.Video, Url = quality.Url, Label = quality.Label, Referer = result.SourceUrl, CacheKey = $"douyin:{result.AwemeId}:{quality.GearName}:{quality.Ratio}:{quality.Codec}", QualityId = quality.BitRate, Width = quality.Width, Height = quality.Height, FrameRate = quality.Fps, Codec = quality.Codec, FileNamePrefix = "douyin", DownloadDirectory = MyParserRuntime.DownloadDirectory, RequestHeaders = CreateMediaHeaders(result.SourceUrl) })
-                .Concat(result.Images.Select(image => new MediaAsset { Kind = MediaAssetKind.Image, Url = image.Url, Referer = result.SourceUrl }))
+                .Concat(result.Images.Select(image => new MediaAsset
+                {
+                    Kind = MediaAssetKind.Image,
+                    Url = image.Url,
+                    Referer = result.SourceUrl,
+                    RequestHeaders = CreateMediaHeaders(result.SourceUrl),
+                }))
                 .Concat(result.IsGallery && !string.IsNullOrWhiteSpace(result.MusicUrl)
                     ? [new MediaAsset
                     {
                         Kind = MediaAssetKind.Audio,
                         Url = result.MusicUrl,
                         Label = result.MusicTitle,
+                        FileExtension = "mp3",
                         CacheKey = $"douyin:{result.AwemeId}:gallery-music",
                         FileNamePrefix = "douyin-gallery-music",
                         DownloadDirectory = MyParserRuntime.DownloadDirectory,
@@ -60,15 +82,7 @@ public sealed class DouyinParseProvider(DouyinParser parser) : IParseProviderWit
                     }]
                     : [])
                 .ToArray(),
-            Attributes = new Dictionary<string, string>
-            {
-                ["duration_ms"] = result.DurationMilliseconds.ToString(), ["likes"] = result.LikeCount.ToString(),
-                ["comments"] = result.CommentCount.ToString(), ["shares"] = result.ShareCount.ToString(), ["plays"] = result.PlayCount.ToString(),
-                ["music_title"] = result.MusicTitle ?? string.Empty, ["music_author"] = result.MusicAuthor ?? string.Empty,
-                ["author_avatar_url"] = result.AuthorAvatarUrl ?? string.Empty,
-                ["author_followers"] = result.AuthorFollowerCount.ToString(), ["author_region"] = result.AuthorRegion ?? string.Empty,
-                ["create_time"] = result.CreateTimeUnixSeconds.ToString(), ["collects"] = result.CollectCount.ToString(),
-            },
+            Attributes = attributes,
             Content = result.Comments.Select(comment => new MediaContentBlock
             {
                 Kind = MediaContentKind.Text,

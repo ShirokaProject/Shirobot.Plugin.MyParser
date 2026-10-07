@@ -1,5 +1,6 @@
 using System.Net;
 using ShiroBot.SDK.Models;
+using ShiroBot.SDK.Plugin;
 using Shirobot.Plugin.MyParser.Parsing;
 
 namespace Shirobot.Plugin.MyParser.MessageHandling;
@@ -238,24 +239,36 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
         }
     }
 
-    private async Task<bool> SendTrackAsync(MessageEvent message, ParsedMedia media, CancellationToken cancellationToken)
+    private async Task<bool> SendTrackAsync(MessageEvent message, ParsedMedia media, CancellationToken cancellationToken, string? existingPath = null)
     {
         var audio = media.Assets.FirstOrDefault(asset => asset.Kind == MediaAssetKind.Audio);
         if (audio is null) return true;
 
-        string? localAudioPath = null;
+        string? localAudioPath = existingPath;
+        var ownsLocalAudioPath = existingPath is null;
         try
         {
-            var request = new ProviderAudioDownloadRequest(
-                media.ProviderId, media.ProviderName, media.MediaId,
-                audio.CacheKey ?? $"{media.ProviderId}:{media.MediaId}", audio.Url,
-                audio.DownloadDirectory, audio.FileNamePrefix ?? media.Title ?? media.MediaId,
-                audio.FileExtension, CreateRequestFactory(audio), "media_id");
-            var (_, localPath) = await HostServices.DownloadProviderAudioAsync(Config, request, cancellationToken).ConfigureAwait(false);
-            localAudioPath = localPath;
+            if (localAudioPath is null)
+            {
+                var request = new ProviderAudioDownloadRequest(
+                    media.ProviderId, media.ProviderName, media.MediaId,
+                    audio.CacheKey ?? $"{media.ProviderId}:{media.MediaId}", audio.Url,
+                    audio.DownloadDirectory, audio.FileNamePrefix ?? media.Title ?? media.MediaId,
+                    audio.FileExtension, CreateRequestFactory(audio), "media_id");
+                var (_, localPath) = await HostServices.DownloadProviderAudioAsync(Config, request, cancellationToken).ConfigureAwait(false);
+                localAudioPath = localPath;
+            }
+            if (!Config.EnableSilkEncoding)
+            {
+                var recordUri = await HostServices.BuildRecordUriAsync(localAudioPath ?? throw new InvalidOperationException("音频下载未生成本地文件。"), cancellationToken).ConfigureAwait(false);
+                var sent = await HostServices.SendSegmentsAsync(message, [new RecordOutgoingSegment(recordUri)]).ConfigureAwait(false);
+                if (string.IsNullOrWhiteSpace(sent.MessageId)) throw new InvalidOperationException("音频发送没有返回消息 ID。");
+                return true;
+            }
             var variants = await HostServices.BuildSilkRecordVariantsAsync(Config,
-                new ProviderRecordBuildRequest(media.ProviderId, media.ProviderName, media.MediaId, localPath,
-                    audio.FileNamePrefix ?? media.Title ?? media.MediaId, Config.SendNetEaseMobileBestRecord), cancellationToken).ConfigureAwait(false);
+                new ProviderRecordBuildRequest(media.ProviderId, media.ProviderName, media.MediaId, localAudioPath!,
+                    audio.FileNamePrefix ?? media.Title ?? media.MediaId,
+                    media.ProviderId != "douyin" && Config.SendNetEaseMobileBestRecord), cancellationToken).ConfigureAwait(false);
             foreach (var variant in variants)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -287,6 +300,11 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
             await ReportFailureAsync(message, ProviderFailureKind.MediaDelivery, ex, $"media_id={media.MediaId}").ConfigureAwait(false);
             await ReactAsync(message, "9", ReactionPlatformName).ConfigureAwait(false);
             return false;
+        }
+        finally
+        {
+            if (ownsLocalAudioPath)
+                HostServices.DeleteLocalVideoIfConfigured(Config, localAudioPath, media.ProviderId);
         }
     }
 
@@ -333,15 +351,150 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
 
     private async Task SendGalleryAsync(MessageEvent message, ParsedMedia media, CancellationToken cancellationToken)
     {
-        foreach (var image in media.Assets.Where(asset => asset.Kind == MediaAssetKind.Image))
+        var images = media.Assets.Where(asset => asset.Kind == MediaAssetKind.Image).ToArray();
+        var galleryMessages = new List<OutgoingForwardedMessage>();
+        var senderId = message.Sender.Id;
+        var senderName = string.IsNullOrWhiteSpace(media.AuthorName) ? "抖音图文" : media.AuthorName!;
+        var audio = media.ProviderId == "douyin"
+            ? media.Assets.FirstOrDefault(asset => asset.Kind == MediaAssetKind.Audio)
+            : null;
+        var pendingGalleryCleanup = new List<(string? VideoPath, string? SourcePath, string? ImagePath, bool Registered)>();
+        string? musicPath = null;
+        var musicMerged = false;
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            await SendRemoteImageAsync(message, image.Url, image.Label, media, cancellationToken).ConfigureAwait(false);
-        }
+            if (Config.SendVideoSegment && audio is not null)
+            {
+                try
+                {
+                    var request = new ProviderAudioDownloadRequest(media.ProviderId, media.ProviderName, media.MediaId,
+                        audio.CacheKey ?? $"{media.ProviderId}:{media.MediaId}", audio.Url, audio.DownloadDirectory,
+                        audio.FileNamePrefix ?? media.Title ?? media.MediaId, audio.FileExtension,
+                        CreateRequestFactory(audio), "aweme_id");
+                    (_, musicPath) = await HostServices.DownloadProviderAudioAsync(Config, request, cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+                catch (Exception ex) { BotLog.Warning($"MyParser 抖音图文音乐预下载失败: media_id={media.MediaId}, error={ex.Message}"); }
+            }
 
-        if (media.ProviderId == "douyin" && media.Assets.Any(asset => asset.Kind == MediaAssetKind.Audio))
+            for (var index = 0; index < images.Length; index++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var image = images[index];
+                var livePhotoUrl = media.Attributes.GetValueOrDefault($"gallery_live_photo_{index}");
+                var shouldPersistImage = Config.SendVideoSegment
+                    && (!string.IsNullOrWhiteSpace(livePhotoUrl) || !string.IsNullOrWhiteSpace(musicPath));
+                var imageResult = await HostServices.BuildProviderImageAsync(new ProviderImageBuildRequest(
+                    media.ProviderName, image.Url, media.SourceUrl, $"douyin_image_{media.MediaId}_{index + 1:D2}",
+                    request => ApplyHeaders(request, image.RequestHeaders), PersistLocalFile: shouldPersistImage), cancellationToken).ConfigureAwait(false);
+                if (string.IsNullOrWhiteSpace(imageResult.Uri)) continue;
+
+                if (shouldPersistImage && imageResult.LocalPath is not null)
+                {
+                    var sourceVideoPath = (string?)null;
+                    var outputVideoPath = (string?)null;
+                    var registeredToHttpServer = false;
+                    var keepFilesUntilSend = false;
+                    try
+                    {
+                        if (!string.IsNullOrWhiteSpace(livePhotoUrl))
+                        {
+                            try
+                            {
+                                var videoRequest = new ProviderVideoDownloadRequest("douyin", "抖音 Live Photo",
+                                    $"{media.MediaId}_{index + 1:D2}", $"douyin-live-photo:{media.MediaId}:{index}",
+                                    [livePhotoUrl], audio?.DownloadDirectory ?? Path.GetDirectoryName(imageResult.LocalPath)!,
+                                    "douyin_live_photo", "mp4", CreateRequestFactory(image),
+                                    ProviderVideoValidationKind.Mp4, "live_photo_id");
+                                (_, sourceVideoPath) = await HostServices.DownloadProviderVideoAsync(Config, videoRequest, cancellationToken).ConfigureAwait(false);
+                            }
+                            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+                            catch (Exception ex) { BotLog.Warning($"MyParser Live Photo 下载失败，尝试静图配乐: media_id={media.MediaId}, index={index}, error={ex.Message}"); }
+                        }
+
+                        if (musicPath is not null)
+                        {
+                            outputVideoPath = sourceVideoPath is null
+                                ? await HostServices.CreateStillImageVideoWithAudioAsync(Config, imageResult.LocalPath, musicPath, cancellationToken).ConfigureAwait(false)
+                                : await HostServices.MuxLoopingVideoWithAudioAsync(Config, sourceVideoPath, musicPath, cancellationToken).ConfigureAwait(false);
+                        }
+                        else
+                        {
+                            outputVideoPath = sourceVideoPath;
+                        }
+
+                        if (outputVideoPath is not null)
+                        {
+                            var videoSegment = await HostServices.BuildLocalVideoSegmentAsync(Config,
+                                new ProviderLocalVideoSegmentRequest("抖音图文视频", $"{media.MediaId}_{index + 1:D2}",
+                                    outputVideoPath, new Uri(outputVideoPath).AbsoluteUri,
+                                    new Uri(imageResult.LocalPath).AbsoluteUri, "live_photo_id"), cancellationToken).ConfigureAwait(false);
+                            registeredToHttpServer = videoSegment.RegisteredToHttpServer;
+                            galleryMessages.Add(new OutgoingForwardedMessage(senderId, senderName, [videoSegment.Segment]));
+                            pendingGalleryCleanup.Add((outputVideoPath, sourceVideoPath, imageResult.LocalPath, registeredToHttpServer));
+                            keepFilesUntilSend = true;
+                            if (musicPath is not null) musicMerged = true;
+                            continue;
+                        }
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+                    catch (Exception ex) { BotLog.Warning($"MyParser 图文媒体视频生成/发送失败，回退图片: media_id={media.MediaId}, index={index}, error={ex.Message}"); }
+                    finally
+                    {
+                        if (!keepFilesUntilSend)
+                        {
+                            if (registeredToHttpServer && Config.DeleteLocalVideoDelaySeconds <= 0)
+                                HostServices.UnregisterLocalVideoFile(outputVideoPath);
+                            if (outputVideoPath is not null && outputVideoPath != sourceVideoPath)
+                                HostServices.DeleteLocalVideoIfConfigured(Config, outputVideoPath, "douyin-gallery-video");
+                            if (sourceVideoPath is not null)
+                                HostServices.DeleteLocalVideoIfConfigured(Config, sourceVideoPath, "douyin-live-photo-source");
+                            try { File.Delete(imageResult.LocalPath); } catch { }
+                        }
+                    }
+                }
+
+                galleryMessages.Add(new OutgoingForwardedMessage(senderId, senderName, [new ImageSegment(imageResult.Uri)]));
+                if (!string.IsNullOrWhiteSpace(imageResult.LocalPath))
+                {
+                    try { File.Delete(imageResult.LocalPath); } catch { }
+                }
+            }
+
+            if (galleryMessages.Count == 1)
+            {
+                var sent = await HostServices.SendSegmentsAsync(message, galleryMessages[0].Segments).ConfigureAwait(false);
+                if (string.IsNullOrWhiteSpace(sent.MessageId)) throw new InvalidOperationException("图文媒体发送未返回消息 ID。");
+            }
+            else if (galleryMessages.Count > 1)
+            {
+                var title = string.IsNullOrWhiteSpace(media.Title) ? "抖音图文" : TextPreviewFormatter.TrimLine(media.Title, 48);
+                var preview = images.Take(4).Select((_, index) => $"图片 {index + 1}").ToArray();
+                var forward = new ForwardOutgoingSegment(galleryMessages, title, preview, $"共 {galleryMessages.Count} 张", "抖音图文");
+                var sent = await BotContext.Message.ReplyAsync(message, forward).ConfigureAwait(false);
+                if (string.IsNullOrWhiteSpace(sent.MessageId)) throw new InvalidOperationException("图文合并转发未返回消息 ID。");
+            }
+
+            if (audio is not null && !musicMerged)
+                await SendTrackAsync(message, media, cancellationToken, musicPath).ConfigureAwait(false);
+        }
+        finally
         {
-            await SendTrackAsync(message, media, cancellationToken).ConfigureAwait(false);
+            foreach (var cleanup in pendingGalleryCleanup)
+            {
+                if (cleanup.Registered && Config.DeleteLocalVideoDelaySeconds <= 0)
+                    HostServices.UnregisterLocalVideoFile(cleanup.VideoPath);
+                if (cleanup.VideoPath is not null && cleanup.VideoPath != cleanup.SourcePath)
+                    HostServices.DeleteLocalVideoIfConfigured(Config, cleanup.VideoPath, "douyin-gallery-video");
+                if (cleanup.SourcePath is not null)
+                    HostServices.DeleteLocalVideoIfConfigured(Config, cleanup.SourcePath, "douyin-live-photo-source");
+                if (cleanup.ImagePath is not null)
+                {
+                    try { File.Delete(cleanup.ImagePath); } catch { }
+                }
+            }
+            if (musicPath is not null)
+                HostServices.DeleteLocalVideoIfConfigured(Config, musicPath, "douyin-gallery-music");
         }
     }
 
