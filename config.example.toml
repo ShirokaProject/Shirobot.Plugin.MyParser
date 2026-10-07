@@ -3,13 +3,16 @@
 # 是否发送各平台封面图片和封面卡片，不影响正文图片。
 send_cover_images = true
 
+# HTTP/HTTPS 代理地址；留空使用系统网络设置。
+http_proxy = ""
+
 # VideoSegment 发送 URI 协议：0 = Base64，1 = File（默认），2 = Http。
 file_protocol = 1
 
 # 单个视频最大下载大小，单位 MB。
 max_video_download_megabytes = 1024
 
-# SharpMP4 不支持当前媒体时使用的 ffmpeg 回退路径。留空时自动从 PATH 或程序目录查找。
+# 静图视频编码及不支持的媒体回退所用 ffmpeg；同时需要同目录或 PATH 中有 ffprobe。
 ffmpeg_path = ""
 
 # 选择视频流时优先更高帧率。
@@ -48,8 +51,11 @@ log_selected_quality_info = true
 # 是否记录视频下载进度日志。
 log_download_progress = true
 
-# 并行下载线程数。
-parallel_download_threads = 16
+# 并行下载线程数：0 使用 LightDl 默认值，1–64 使用指定线程数。
+parallel_download_threads = 0
+
+# 是否将抖音图文音乐和网易云音乐编码为 Silk；关闭后直接尝试发送 MP3 语音。
+enable_silk_encoding = true
 
 # 抖音
 

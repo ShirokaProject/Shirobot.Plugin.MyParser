@@ -16,6 +16,7 @@ internal static class RemoteImageFetchService
         Action<HttpRequestMessage>? configureRequest = null,
         long maxBytes = DefaultMaxImageBytes,
         bool persistLocalFile = false,
+        string? httpProxy = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(imageUrl))
@@ -26,7 +27,7 @@ internal static class RemoteImageFetchService
         try
         {
             BotLog.Info($"MyParser {platformName} 图片下载开始: prefix={filePrefix}, source_url={imageUrl}, referer={referer}");
-            using var http = CreateImageHttpClient();
+            using var http = CreateImageHttpClient(httpProxy);
             using var request = new HttpRequestMessage(HttpMethod.Get, imageUrl);
             configureRequest?.Invoke(request);
 
@@ -117,12 +118,15 @@ internal static class RemoteImageFetchService
         };
     }
 
-    public static HttpClient CreateImageHttpClient()
+    public static HttpClient CreateImageHttpClient(string? httpProxy = null)
     {
+        var proxy = HttpProxySettings.Create(httpProxy);
         return new HttpClient(new HttpClientHandler
         {
             AutomaticDecompression = DecompressionMethods.All,
             AllowAutoRedirect = true,
+            Proxy = proxy,
+            UseProxy = proxy is not null || string.IsNullOrWhiteSpace(httpProxy),
         });
     }
 }

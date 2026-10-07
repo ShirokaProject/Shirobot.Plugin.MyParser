@@ -51,6 +51,18 @@ internal static class SharpMp4MediaService
         builder.FinalizeMedia();
     }
 
+    public static void MuxLoopingVideoWithAudio(
+        string videoPath,
+        string audioPath,
+        string outputPath,
+        CancellationToken cancellationToken = default)
+    {
+        using var videoStream = OpenRead(videoPath);
+        using var audioStream = OpenRead(audioPath);
+        using var outputStream = new BufferedStream(new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.Read));
+        LoopingVideoAudioMuxer.Mux(videoStream, audioStream, outputStream, cancellationToken);
+    }
+
     public static void Validate(string path)
     {
         using var stream = OpenRead(path);

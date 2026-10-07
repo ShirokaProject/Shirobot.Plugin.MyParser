@@ -75,6 +75,11 @@ internal sealed partial class BilibiliMessageHandler(
             }
 
             LogBilibiliQualityInfo(result);
+            BotLog.Info($"MyParser Bilibili 封面开关: bvid={result.Bvid}, global={config.SendCoverImages}, platform={config.SendBilibiliVideoCover}, has_cover={!string.IsNullOrWhiteSpace(result.CoverUrl)}");
+            if (config.IsCoverEnabled("bilibili"))
+            {
+                _ = StartSendCoverMessageAsync(message, result, cancellationToken);
+            }
             if (!config.SendVideoSegment || !result.IsVideo)
             {
                 await ReplyAsync(message, FormatBilibiliResult(result, videoDownloadAttempted: false));
@@ -89,10 +94,6 @@ internal sealed partial class BilibiliMessageHandler(
 
             try
             {
-                if (config.IsCoverEnabled("bilibili"))
-                {
-                    _ = StartSendCoverMessageAsync(message, result, cancellationToken);
-                }
                 var videoSegment = await BuildVideoSegmentAsync(result);
                 await SendVideoMessageAsync(message, result, videoSegment);
                 videoSent = true;
@@ -328,10 +329,10 @@ internal sealed partial class BilibiliMessageHandler(
         return text.Trim().Trim('"', '\'', '“', '”', '‘', '’', '「', '」', '『', '』').Trim();
     }
 
-    private void SubscribeBilibiliPageReply(BilibiliMultiPageParseResult result, string promptMessageId)
+    private void SubscribeBilibiliPageReply(BilibiliMultiPageParseResult result, MessageReference promptMessage)
     {
         IReplySubscription? subscription;
-        subscription = context.Message.SubscribeReply(promptMessageId, TimeSpan.FromMinutes(10), async reply =>
+        subscription = context.Message.SubscribeReply(promptMessage, TimeSpan.FromMinutes(10), async reply =>
         {
             var text = reply.GetPlainText();
 

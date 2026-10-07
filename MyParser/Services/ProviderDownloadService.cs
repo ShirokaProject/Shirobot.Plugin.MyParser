@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using SilkCodec.NET;
 using Shirobot.Plugin.MyParser.Parsing;
@@ -54,6 +55,201 @@ internal sealed class ProviderDownloadService
         CancellationToken cancellationToken = default)
     {
         return MyParserRuntime.GetOrAddVideoDownloadAsync(request.CacheKey, () => DownloadProviderAudioCoreAsync(config, request, cancellationToken));
+    }
+
+    public async Task<string> MuxLoopingVideoWithAudioAsync(
+        PluginConfig config,
+        string videoPath,
+        string audioPath,
+        CancellationToken cancellationToken = default)
+    {
+        return await CreateGalleryVideoWithAudioAsync(config, videoPath, audioPath, false, cancellationToken);
+    }
+
+    public Task<string> CreateStillImageVideoWithAudioAsync(
+        PluginConfig config,
+        string imagePath,
+        string audioPath,
+        CancellationToken cancellationToken = default)
+    {
+        return CreateGalleryVideoWithAudioAsync(config, imagePath, audioPath, true, cancellationToken);
+    }
+
+    private static async Task<string> CreateGalleryVideoWithAudioAsync(
+        PluginConfig config,
+        string visualPath,
+        string audioPath,
+        bool stillImage,
+        CancellationToken cancellationToken)
+    {
+        var outputPath = Path.Combine(
+            Path.GetDirectoryName(visualPath) ?? AppContext.BaseDirectory,
+            $"{Path.GetFileNameWithoutExtension(visualPath)}_music_{Guid.NewGuid():N}.mp4");
+        if (!stillImage)
+        {
+            try
+            {
+                await Task.Run(() => SharpMp4MediaService.MuxLoopingVideoWithAudio(visualPath, audioPath, outputPath, cancellationToken), cancellationToken);
+                await ValidateMuxedVideoAsync(outputPath, cancellationToken);
+                if (config.MaxVideoDownloadMegabytes > 0
+                    && new FileInfo(outputPath).Length > config.MaxVideoDownloadMegabytes * 1024L * 1024L)
+                    throw new InvalidOperationException($"Live Photo 音乐合成文件超过 {config.MaxVideoDownloadMegabytes}MB 限制。");
+                BotLog.Info($"MyParser SharpMP4 循环 Live Photo 并合成音乐完成: video={visualPath}, audio={audioPath}, output={outputPath}");
+                return outputPath;
+            }
+            catch (OperationCanceledException)
+            {
+                TryDelete(outputPath);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                TryDelete(outputPath);
+                BotLog.Warning($"MyParser SharpMP4 循环 Live Photo 失败，回退 ffmpeg: error={ex.Message}");
+            }
+        }
+
+        var ffmpeg = ResolveFfmpegPath(config)
+                     ?? throw new InvalidOperationException("图文合成音乐需要 ffmpeg；请配置 FfmpegPath 或将 ffmpeg 加入 PATH。");
+        var duration = await ProbeAudioDurationAsync(ffmpeg, audioPath, cancellationToken);
+        var psi = new ProcessStartInfo
+        {
+            FileName = ffmpeg,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        foreach (var argument in new[] { "-hide_banner", "-loglevel", "error", "-nostdin", "-y" })
+            psi.ArgumentList.Add(argument);
+        if (stillImage)
+        {
+            psi.ArgumentList.Add("-loop");
+            psi.ArgumentList.Add("1");
+            psi.ArgumentList.Add("-framerate");
+            psi.ArgumentList.Add("20");
+        }
+        else
+        {
+            psi.ArgumentList.Add("-stream_loop");
+            psi.ArgumentList.Add("-1");
+        }
+
+        psi.ArgumentList.Add("-i");
+        psi.ArgumentList.Add(visualPath);
+        foreach (var argument in new[] { "-i", audioPath, "-map", "0:v:0", "-map", "1:a:0" })
+            psi.ArgumentList.Add(argument);
+        if (stillImage)
+        {
+            foreach (var argument in new[]
+                     {
+                         "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+                     })
+                psi.ArgumentList.Add(argument);
+        }
+        else
+        {
+            psi.ArgumentList.Add("-c:v");
+            psi.ArgumentList.Add("copy");
+        }
+
+        foreach (var argument in new[] { "-c:a", "aac", "-b:a", "128k", "-t", duration.ToString("0.###", CultureInfo.InvariantCulture), "-movflags", "+faststart", outputPath })
+            psi.ArgumentList.Add(argument);
+
+        using var process = Process.Start(psi) ?? throw new InvalidOperationException("ffmpeg 启动失败。");
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromMinutes(5));
+        var stderrTask = process.StandardError.ReadToEndAsync();
+        var completed = false;
+        try
+        {
+            try
+            {
+                await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                throw new TimeoutException("图文音乐合成超过 5 分钟。");
+            }
+
+            var stderr = await stderrTask.ConfigureAwait(false);
+            if (process.ExitCode != 0)
+            {
+                throw new InvalidOperationException("ffmpeg 合成图文音乐失败：" + stderr[^Math.Min(stderr.Length, 2000)..]);
+            }
+
+            await ValidateMuxedVideoAsync(outputPath, cancellationToken).ConfigureAwait(false);
+            if (config.MaxVideoDownloadMegabytes > 0
+                && new FileInfo(outputPath).Length > config.MaxVideoDownloadMegabytes * 1024L * 1024L)
+            {
+                throw new InvalidOperationException($"图文音乐合成文件超过 {config.MaxVideoDownloadMegabytes}MB 限制。");
+            }
+
+            completed = true;
+            BotLog.Info($"MyParser 图文合成音乐完成: visual={visualPath}, still_image={stillImage}, audio={audioPath}, output={outputPath}");
+            return outputPath;
+        }
+        finally
+        {
+            if (!process.HasExited)
+            {
+                try
+                {
+                    process.Kill(entireProcessTree: true);
+                    await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (InvalidOperationException)
+                {
+                }
+            }
+
+            if (!completed) TryDelete(outputPath);
+        }
+    }
+
+    private static async Task<double> ProbeAudioDurationAsync(string ffmpeg, string audioPath, CancellationToken cancellationToken)
+    {
+        var probeName = OperatingSystem.IsWindows() ? "ffprobe.exe" : "ffprobe";
+        var ffprobe = Path.Combine(Path.GetDirectoryName(ffmpeg) ?? "", probeName);
+        if (!File.Exists(ffprobe)) ffprobe = FindOnPath(probeName) ?? "";
+        if (string.IsNullOrWhiteSpace(ffprobe))
+            throw new InvalidOperationException("图文音乐合成需要 ffprobe；请将 ffprobe 与 ffmpeg 放在同一目录或加入 PATH。");
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = ffprobe,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        foreach (var argument in new[] { "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", audioPath })
+            psi.ArgumentList.Add(argument);
+
+        using var process = Process.Start(psi) ?? throw new InvalidOperationException("ffprobe 启动失败。");
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(20));
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
+        try
+        {
+            await process.WaitForExitAsync(timeout.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new TimeoutException("探测图文音乐时长超时。");
+        }
+        finally
+        {
+            if (!process.HasExited) process.Kill(entireProcessTree: true);
+        }
+
+        var stdout = await stdoutTask;
+        var stderr = await stderrTask;
+        if (process.ExitCode != 0
+            || !double.TryParse(stdout.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var duration)
+            || !double.IsFinite(duration) || duration <= 0)
+            throw new InvalidDataException("无法获取图文音乐时长：" + stderr[^Math.Min(stderr.Length, 500)..]);
+        return duration;
     }
 
     public async Task<IReadOnlyList<ProviderRecordVariant>> BuildSilkRecordVariantsAsync(
@@ -124,7 +320,7 @@ internal sealed class ProviderDownloadService
         string identifierName,
         CancellationToken cancellationToken = default)
     {
-        var downloader = new Downloader(new HttpClient(), new DownloadProgressLogger(logProgress, intervalSeconds, logPrefix, identifierName));
+        var downloader = new Downloader(new DownloadProgressLogger(logProgress, intervalSeconds, logPrefix, identifierName));
         return downloader.DownloadAsync(request, cancellationToken);
     }
 
@@ -136,7 +332,7 @@ internal sealed class ProviderDownloadService
         string identifierName,
         CancellationToken cancellationToken = default)
     {
-        var downloader = new Downloader(new HttpClient(), new DownloadProgressLogger(logProgress, intervalSeconds, logPrefix, identifierName));
+        var downloader = new Downloader(new DownloadProgressLogger(logProgress, intervalSeconds, logPrefix, identifierName));
         return downloader.ProbeAsync(request, cancellationToken);
     }
 
@@ -149,10 +345,21 @@ internal sealed class ProviderDownloadService
         var audios = request.AudioStreams.Count > 0 ? request.AudioStreams : throw new InvalidOperationException($"{request.PlatformDisplayName} 没有可下载的音频流。");
         var maxBytes = GetMaxBytes(config);
         MuxedStreamProbe? firstVideoProbe = null;
+        Exception? lastVideoError = null;
         var audioProbe = await SelectMuxedAudioProbeAsync(config, request, audios, maxBytes, cancellationToken);
-        foreach (var video in config.AutoFallbackQualityBySize ? videos : videos.Take(1))
+        foreach (var video in videos)
         {
-            var videoProbe = await ProbeMuxedStreamAsync(config, request, video, "视频流", maxBytes, cancellationToken);
+            MuxedStreamProbe videoProbe;
+            try
+            {
+                videoProbe = await ProbeMuxedStreamAsync(config, request, video, "视频流", maxBytes, cancellationToken);
+            }
+            catch (InvalidOperationException ex)
+            {
+                lastVideoError = ex;
+                BotLog.Warning($"MyParser {request.PlatformDisplayName} 视频流不可用，尝试下一条: stream={video.StreamId}, error={ex.Message}");
+                continue;
+            }
             firstVideoProbe ??= videoProbe;
             var estimated = EstimateTotalBytes(videoProbe.EstimatedBytes, audioProbe.EstimatedBytes);
             if (IsWithinLimit(videoProbe.EstimatedBytes, maxBytes)
@@ -173,7 +380,7 @@ internal sealed class ProviderDownloadService
             }
         }
 
-        var fallbackVideo = firstVideoProbe ?? throw new InvalidOperationException($"{request.PlatformDisplayName} 没有可下载的视频流。");
+        var fallbackVideo = firstVideoProbe ?? throw new InvalidOperationException($"{request.PlatformDisplayName} 没有可下载的视频流：{lastVideoError?.Message ?? "所有地址均不可用"}");
         ThrowMuxedTooLarge(request, fallbackVideo, audioProbe, EstimateTotalBytes(fallbackVideo.EstimatedBytes, audioProbe.EstimatedBytes), maxBytes);
         throw new UnreachableException();
     }
@@ -186,9 +393,20 @@ internal sealed class ProviderDownloadService
         CancellationToken cancellationToken)
     {
         MuxedStreamProbe? firstProbe = null;
-        foreach (var audio in config.AutoFallbackQualityBySize ? audios : audios.Take(1))
+        Exception? lastAudioError = null;
+        foreach (var audio in audios)
         {
-            var probe = await ProbeMuxedStreamAsync(config, request, audio, "音频流", maxBytes, cancellationToken);
+            MuxedStreamProbe probe;
+            try
+            {
+                probe = await ProbeMuxedStreamAsync(config, request, audio, "音频流", maxBytes, cancellationToken);
+            }
+            catch (InvalidOperationException ex)
+            {
+                lastAudioError = ex;
+                BotLog.Warning($"MyParser {request.PlatformDisplayName} 音频流不可用，尝试下一条: stream={audio.StreamId}, error={ex.Message}");
+                continue;
+            }
             firstProbe ??= probe;
             if (IsWithinLimit(probe.EstimatedBytes, maxBytes))
             {
@@ -201,7 +419,7 @@ internal sealed class ProviderDownloadService
             }
         }
 
-        return firstProbe ?? throw new InvalidOperationException($"{request.PlatformDisplayName} 没有可下载的音频流。");
+        return firstProbe ?? throw new InvalidOperationException($"{request.PlatformDisplayName} 没有可下载的音频流：{lastAudioError?.Message ?? "所有地址均不可用"}");
     }
 
     private async Task<MuxedStreamProbe> ProbeMuxedStreamAsync(
@@ -354,7 +572,7 @@ internal sealed class ProviderDownloadService
             maxBytes,
             true,
             1,
-            Math.Clamp(config.ParallelDownloadThreads, 1, 64),
+            Math.Clamp(config.ParallelDownloadThreads, 0, 64),
             (method, range) => request.CreateRequest(method, url, range),
             statusCode => new InvalidOperationException($"{request.PlatformDisplayName} {label}下载 HTTP {(int)statusCode}"),
             bytes => new InvalidOperationException($"{request.PlatformDisplayName} {label}文件过大：{bytes / 1024 / 1024}MB > {config.MaxVideoDownloadMegabytes}MB"),
@@ -363,7 +581,9 @@ internal sealed class ProviderDownloadService
             (index, contentRange) => new InvalidOperationException($"{request.PlatformDisplayName} {label}分片 {index} Content-Range 不匹配：{contentRange}"),
             (index, copied, expected) => new InvalidOperationException($"{request.PlatformDisplayName} {label}分片 {index} 大小不匹配：{copied} != {expected}"),
             (total, expected) => new InvalidOperationException($"{request.PlatformDisplayName} {label}分片合并大小不一致：{total} != {expected}"),
-            ex => BotLog.Warning($"MyParser {request.PlatformDisplayName} {label}并发下载失败，回退普通下载: {request.IdentifierName}={request.MediaId}, quality={stream.QualityName}, error={ex.Message}"));
+            ex => BotLog.Warning($"MyParser {request.PlatformDisplayName} {label}并发下载失败，回退普通下载: {request.IdentifierName}={request.MediaId}, quality={stream.QualityName}, error={ex.Message}"),
+            config.HttpProxy,
+            request.PlatformId.Equals("youtube", StringComparison.OrdinalIgnoreCase));
     }
 
     private async Task<(string FileUri, string LocalPath)> DownloadProviderAudioCoreAsync(
@@ -398,7 +618,8 @@ internal sealed class ProviderDownloadService
             (index, statusCode) => new InvalidOperationException($"{request.PlatformDisplayName} 音频分片 {index} 不支持 Range：HTTP {(int)statusCode}"),
             (index, contentRange) => new InvalidOperationException($"{request.PlatformDisplayName} 音频分片 {index} Content-Range 不匹配：{contentRange}"),
             (index, copied, expected) => new InvalidOperationException($"{request.PlatformDisplayName} 音频分片 {index} 大小不匹配：{copied} != {expected}"),
-            (total, expected) => new InvalidOperationException($"{request.PlatformDisplayName} 音频分片合并大小不一致：{total} != {expected}"));
+            (total, expected) => new InvalidOperationException($"{request.PlatformDisplayName} 音频分片合并大小不一致：{total} != {expected}"),
+            HttpProxy: config.HttpProxy);
 
         var total = await DownloadAsync(downloadRequest, config.LogDownloadProgress, 2, $"MyParser {request.PlatformDisplayName}", request.IdentifierName, cancellationToken).ConfigureAwait(false);
         if (total <= 0)
@@ -464,7 +685,7 @@ internal sealed class ProviderDownloadService
         Directory.CreateDirectory(dir);
         var extension = string.IsNullOrWhiteSpace(request.FileExtension) ? "mp4" : request.FileExtension.Trim('.');
         var path = Path.Combine(dir, $"{request.FileNamePrefix}_{SanitizeFileName(request.MediaId)}_{DateTimeOffset.UtcNow:yyyyMMddHHmmss}.{extension}");
-        var segmentCount = Math.Clamp(config.ParallelDownloadThreads, 1, 64);
+        var segmentCount = Math.Clamp(config.ParallelDownloadThreads, 0, 64);
         var downloadRequest = new HttpRangeDownloadRequest(
             url,
             path,
@@ -481,7 +702,8 @@ internal sealed class ProviderDownloadService
             (index, contentRange) => new InvalidOperationException($"分片 {index} Content-Range 不匹配：{contentRange}"),
             (index, copied, expected) => new InvalidOperationException($"分片 {index} 大小不匹配：{copied} != {expected}"),
             (total, expected) => new InvalidOperationException($"分片合并大小不一致：{total} != {expected}"),
-            ex => BotLog.Warning($"MyParser {request.PlatformDisplayName} 下载进度: {request.IdentifierName}={request.MediaId}, 并发下载失败，回退普通下载：{ex.Message}"));
+            ex => BotLog.Warning($"MyParser {request.PlatformDisplayName} 下载进度: {request.IdentifierName}={request.MediaId}, 并发下载失败，回退普通下载：{ex.Message}"),
+            config.HttpProxy);
 
         var total = await DownloadAsync(downloadRequest, config.LogDownloadProgress, 2, "MyParser", request.IdentifierName, cancellationToken);
         if (total == 0)

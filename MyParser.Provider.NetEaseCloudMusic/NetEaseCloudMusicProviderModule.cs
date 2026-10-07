@@ -79,7 +79,7 @@ public sealed class NetEaseCloudMusicProviderModule : MyParserProviderModuleBase
         if (reply is null) return null;
         var repliedText = reply.GetPlainText().Trim();
         var ids = TryPickDeferredSongIds(repliedText, index)
-                  ?? TryGetCachedSearchReplySongIds(message, reply.MessageSeq.ToString(), index);
+                  ?? TryGetCachedSearchReplySongIds(message, reply.MessageId, index);
         return ids is null ? null : NetEaseUrlParser.BuildInternalPickUri(ids, index - 1);
     }
 

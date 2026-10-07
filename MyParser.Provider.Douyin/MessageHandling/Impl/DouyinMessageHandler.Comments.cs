@@ -42,7 +42,7 @@ internal sealed partial class DouyinMessageHandler
 
         try
         {
-            var senderId = long.TryParse(message.Sender.Id, out var parsedSenderId) ? parsedSenderId : 10000;
+            var senderId = message.Sender.Id;
             var senderName = string.IsNullOrWhiteSpace(message.Sender.Name) ? "抖音评论" : message.Sender.Name;
             var nodes = await BuildCommentForwardMessagesAsync(result, senderId, senderName);
             if (nodes.Count == 0) return;
@@ -59,7 +59,7 @@ internal sealed partial class DouyinMessageHandler
 
     private async Task<List<OutgoingForwardedMessage>> BuildCommentForwardMessagesAsync(
         DouyinParseResult result,
-        long fallbackSenderId,
+        string fallbackSenderId,
         string fallbackSenderName)
     {
         var assets = new List<CommentRenderAsset>(result.Comments.Count);
@@ -80,9 +80,8 @@ internal sealed partial class DouyinMessageHandler
             foreach (var asset in assets)
             {
                 var comment = asset.Comment;
-                var senderId = long.TryParse(comment.UserId, out var parsedUserId) && parsedUserId > 0
-                    ? parsedUserId
-                    : fallbackSenderId;
+                // 合并转发节点的 user_id 是 QQ 号，不能填入抖音的 64 位 UID。
+                var senderId = fallbackSenderId;
                 var senderName = string.IsNullOrWhiteSpace(comment.UserName) ? fallbackSenderName : comment.UserName;
                 var segments = new List<OutgoingSegment>
                 {

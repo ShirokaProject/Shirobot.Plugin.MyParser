@@ -69,6 +69,10 @@ internal sealed partial class DouyinMessageHandler : ProviderMessageHandlerBase
             LogDouyinQualityInfo(result);
             _ = StartSendCommentsMessageAsync(message, result, cancellationToken);
             var shouldDownloadVideo = _config.SendVideoSegment && result.IsVideo && !result.IsGallery;
+            if (!result.IsGallery && _config.IsCoverEnabled("douyin"))
+            {
+                _ = StartSendCoverMessageAsync(message, result, cancellationToken);
+            }
             var videoSent = false;
             var fileUploaded = false;
             string? videoSendError = null;
@@ -78,8 +82,6 @@ internal sealed partial class DouyinMessageHandler : ProviderMessageHandlerBase
             {
                 try
                 {
-                    if (_config.IsCoverEnabled("douyin"))
-                        _ = StartSendCoverMessageAsync(message, result, cancellationToken);
                     var videoSegment = await BuildVideoSegmentAsync(result);
                     cancellationToken.ThrowIfCancellationRequested();
                     if (videoSegment is null)
@@ -173,11 +175,6 @@ internal sealed partial class DouyinMessageHandler : ProviderMessageHandlerBase
 
                 cancellationToken.ThrowIfCancellationRequested();
                 await SendGalleryMessageAsync(message, result, cancellationToken);
-                cancellationToken.ThrowIfCancellationRequested();
-                if (!string.IsNullOrWhiteSpace(result.MusicUrl))
-                {
-                    await SendMusicMessageAsync(message, result);
-                }
 
                 await TryReactToSourceMessageAsync(message, "426");
                 return;

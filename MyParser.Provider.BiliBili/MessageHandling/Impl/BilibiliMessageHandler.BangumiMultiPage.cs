@@ -100,6 +100,15 @@ private async Task SendBangumiForwardAsync(IncomingMessage message, BilibiliBang
         if (!string.IsNullOrWhiteSpace(headerCover.Uri))
         {
             headerSegments.Add(new ImageOutgoingSegment(headerCover.Uri));
+            try
+            {
+                var coverResponse = await context.Message.ReplyAsync(message, new ImageOutgoingSegment(headerCover.Uri));
+                ShiroBot.SDK.Abstractions.BotLog.Info($"MyParser Bilibili 分P封面单独发送完成: bvid={result.Bvid}, message_id={coverResponse.MessageId}");
+            }
+            catch (Exception ex)
+            {
+                ShiroBot.SDK.Abstractions.BotLog.Warning($"MyParser Bilibili 分P封面单独发送失败，继续发送分P列表: bvid={result.Bvid}, error={ex.Message}");
+            }
         }
 
         headerSegments.Add(new TextOutgoingSegment(BuildMultiPageHeaderText(result)));
@@ -139,10 +148,11 @@ private async Task SendBangumiForwardAsync(IncomingMessage message, BilibiliBang
         var summary = $"分P视频 · {result.PageCount}P";
         var forward = new ForwardOutgoingSegment(forwarded, title, preview, summary, "Bilibili 分P");
 
+        ShiroBot.SDK.Abstractions.BotLog.Info($"MyParser Bilibili 分P封面: bvid={result.Bvid}, global={config.SendCoverImages}, platform={config.SendBilibiliVideoCover}, header_cover={!string.IsNullOrWhiteSpace(headerCover.Uri)}, page_covers={coverByPage.Count}");
         await context.Message.ReplyAsync(message, forward);
 
         var prompt = await SendReplyAsync(message, "已默认解析 P1；如需解析其它分P，请在10min内用数字回复此消息。");
-        SubscribeBilibiliPageReply(result, prompt.MessageId);
+        SubscribeBilibiliPageReply(result, prompt.Reference ?? message.Reference with { MessageId = prompt.MessageId });
         await ParseAndReplyAsync(message, $"https://www.bilibili.com/video/{result.Bvid}/?p=1");
     }
 

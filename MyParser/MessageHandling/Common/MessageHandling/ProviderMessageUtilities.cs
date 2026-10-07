@@ -126,9 +126,10 @@ internal static class ProviderMessageUtilities
 
         var fileApi = context.GetAdapterExtension<IQFileApi>()
                       ?? throw new NotSupportedException("当前适配器不支持 QQ 文件上传扩展。");
-        if (!long.TryParse(message.Channel.Id, out var peerId))
+        var peerId = message.Channel.Id;
+        if (string.IsNullOrWhiteSpace(peerId))
         {
-            throw new NotSupportedException("当前渠道 ID 不是 QQ 数字 ID，无法上传文件。");
+            throw new NotSupportedException("当前渠道 ID 为空，无法上传文件。");
         }
 
         var localPath = Path.GetFullPath(localFilePath);
@@ -174,18 +175,21 @@ internal static class ProviderMessageUtilities
         IBotContext context,
         IncomingMessage message,
         out IQGroupApi groupApi,
-        out long groupId,
-        out long messageSeq)
+        out string groupId,
+        out string messageSeq)
     {
         groupApi = null!;
-        groupId = 0;
-        messageSeq = 0;
+        groupId = string.Empty;
+        messageSeq = string.Empty;
         if (message.Channel.Type != ChannelType.Group
-            || !long.TryParse(message.Channel.Id, out groupId)
-            || !long.TryParse(message.MessageId, out messageSeq))
+            || string.IsNullOrWhiteSpace(message.Channel.Id)
+            || string.IsNullOrWhiteSpace(message.MessageId))
         {
             return false;
         }
+
+        groupId = message.Channel.Id;
+        messageSeq = message.MessageId;
 
         groupApi = context.GetAdapterExtension<IQGroupApi>()!;
         return groupApi is not null;

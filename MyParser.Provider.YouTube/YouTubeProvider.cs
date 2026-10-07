@@ -1,7 +1,9 @@
 using System.Net.Http.Headers;
+using System.Net;
 using System.Text.RegularExpressions;
 using Shirobot.Plugin.MyParser;
 using Shirobot.Plugin.MyParser.Parsing;
+using Shirobot.Plugin.MyParser.Utility;
 using ShiroBot.SDK.Models;
 using VideoLibrary;
 
@@ -39,7 +41,9 @@ internal sealed partial class YouTubeParseProvider(PluginConfig config) : IParse
         if (!match.Success) throw new InvalidOperationException("未找到 YouTube 视频链接。");
         var id = match.Groups["id"].Value;
         var url = $"https://www.youtube.com/watch?v={id}";
-        var streams = (await VideoLibrary.YouTube.Default.GetAllVideosAsync(url)
+        var youtube = string.IsNullOrWhiteSpace(config.HttpProxy)
+            ? VideoLibrary.YouTube.Default : new ProxiedYouTube(config.HttpProxy);
+        var streams = (await youtube.GetAllVideosAsync(url)
             .WaitAsync(TimeSpan.FromSeconds(Math.Clamp(config.RequestTimeoutSeconds, 5, 300)), cancellationToken)).ToList();
         var videos = streams.Where(v => v is { Format: VideoFormat.Mp4, AdaptiveKind: AdaptiveKind.Video, Resolution: > 0, FormatCode: >= 394 and <= 402 })
             .OrderByDescending(v => v.Resolution).ToArray();
@@ -62,8 +66,25 @@ internal sealed partial class YouTubeParseProvider(PluginConfig config) : IParse
             0, audio ? 0 : video.Resolution, 0, audio ? "AAC" : "AV1", audio);
 }
 
+internal sealed class ProxiedYouTube(string proxyAddress) : VideoLibrary.YouTube
+{
+    protected override HttpMessageHandler MakeHandler()
+    {
+        var cookies = new CookieContainer();
+        cookies.Add(new Uri(VideoLibrary.YouTube.YoutubeUrl), new Cookie("CONSENT", "YES+cb", "/", ".youtube.com"));
+        return new HttpClientHandler
+        {
+            Proxy = HttpProxySettings.Create(proxyAddress),
+            UseProxy = true,
+            CookieContainer = cookies,
+            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
+        };
+    }
+}
+
 internal sealed class YouTubeMessageHandler(ProviderMessageHandlerContext context) : ProviderMessageHandlerBase(context)
 {
+    private const string DownloadUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
     public override string ProviderId => "youtube";
     public override async Task ParseAndReplyAsync(MessageEvent message, string text, bool silentProviderMismatch = false, CancellationToken cancellationToken = default)
     {
@@ -130,7 +151,7 @@ internal sealed class YouTubeMessageHandler(ProviderMessageHandlerContext contex
     private static HttpRequestMessage CreateRequest(HttpMethod method, string url, string? range)
     {
         var request = new HttpRequestMessage(method, url);
-        request.Headers.UserAgent.ParseAdd("Mozilla/5.0");
+        request.Headers.UserAgent.ParseAdd(DownloadUserAgent);
         if (!string.IsNullOrWhiteSpace(range)) request.Headers.Range = RangeHeaderValue.Parse(range);
         return request;
     }

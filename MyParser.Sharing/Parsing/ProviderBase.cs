@@ -59,7 +59,7 @@ public abstract class ProviderMessageHandlerBase(ProviderMessageHandlerContext c
         return HostServices.GetMessageScene(message);
     }
 
-    protected static long GetBotOrSenderId(MessageEvent message)
+    protected static string GetBotOrSenderId(MessageEvent message)
     {
         return ProviderTextUtilities.GetBotOrSenderId(message);
     }
@@ -71,9 +71,9 @@ public abstract class ProviderMessageHandlerBase(ProviderMessageHandlerContext c
 
 public static class ProviderTextUtilities
 {
-    public static long GetBotOrSenderId(MessageEvent message)
+    public static string GetBotOrSenderId(MessageEvent message)
     {
-        return long.TryParse(message.Sender.Id, out var senderId) ? senderId : 0;
+        return message.Sender.Id;
     }
 
     public static string TrimLine(string value, int maxLength)

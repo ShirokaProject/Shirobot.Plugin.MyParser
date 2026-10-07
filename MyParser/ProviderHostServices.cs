@@ -86,6 +86,7 @@ internal sealed class ProviderHostServices(IBotContext context, PluginConfig plu
             request.ConfigureRequest,
             request.MaxBytes,
             request.PersistLocalFile,
+            pluginConfig.HttpProxy,
             cancellationToken).ConfigureAwait(false);
         return new ProviderImageBuildResult(uri, localPath);
     }
@@ -161,6 +162,24 @@ internal sealed class ProviderHostServices(IBotContext context, PluginConfig plu
         CancellationToken cancellationToken = default)
     {
         return _downloadService.DownloadProviderAudioAsync(config, request, cancellationToken);
+    }
+
+    public Task<string> MuxLoopingVideoWithAudioAsync(
+        PluginConfig config,
+        string videoPath,
+        string audioPath,
+        CancellationToken cancellationToken = default)
+    {
+        return _downloadService.MuxLoopingVideoWithAudioAsync(config, videoPath, audioPath, cancellationToken);
+    }
+
+    public Task<string> CreateStillImageVideoWithAudioAsync(
+        PluginConfig config,
+        string imagePath,
+        string audioPath,
+        CancellationToken cancellationToken = default)
+    {
+        return _downloadService.CreateStillImageVideoWithAudioAsync(config, imagePath, audioPath, cancellationToken);
     }
 
     public Task<IReadOnlyList<ProviderRecordVariant>> BuildSilkRecordVariantsAsync(

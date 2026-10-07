@@ -358,7 +358,8 @@ internal sealed class LiveReplayClipDownloader(PluginConfig config, ProviderDown
             (index, statusCode) => new InvalidOperationException($"直播分片 {index} 不支持 Range：HTTP {(int)statusCode}"),
             (index, contentRange) => new InvalidOperationException($"直播分片 {index} Content-Range 不匹配：{contentRange}"),
             (index, copied, expected) => new InvalidOperationException($"直播分片 {index} 大小不匹配：{copied} != {expected}"),
-            (actual, expected) => new InvalidOperationException($"直播分片合并大小不匹配：{actual} != {expected}"));
+            (actual, expected) => new InvalidOperationException($"直播分片合并大小不匹配：{actual} != {expected}"),
+            HttpProxy: config.HttpProxy);
 
         var total = await hostServices.DownloadAsync(downloadRequest, config.LogDownloadProgress, 2, $"MyParser {request.PlatformDisplayName} 直播", "segment", cancellationToken);
         if (total <= 0)

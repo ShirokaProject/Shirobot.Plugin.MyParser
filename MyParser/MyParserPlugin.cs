@@ -10,7 +10,7 @@ using ShiroBot.SDK.Core;
 using ShiroBot.SDK.Plugin;
 using ShiroBot.Model.QQ;
 
-[assembly: ShiroBotApiCompatibility("0.8", "0.8")]
+[assembly: ShiroBotApiCompatibility("0.9.2", "0.9.2")]
 
 namespace Shirobot.Plugin.MyParser;
 

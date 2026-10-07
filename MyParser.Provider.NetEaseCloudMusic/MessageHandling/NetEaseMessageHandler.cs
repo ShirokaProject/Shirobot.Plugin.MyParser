@@ -334,6 +334,14 @@ internal sealed partial class NetEaseMessageHandler(ProviderMessageHandlerContex
         var stopwatch = Stopwatch.StartNew();
         try
         {
+            if (!Config.EnableSilkEncoding)
+            {
+                var recordUri = await HostServices.BuildRecordUriAsync(localPath).ConfigureAwait(false);
+                await SendRecordSegmentAsync(message, new RecordOutgoingSegment(recordUri), result.SongId, "mp3", stopwatch).ConfigureAwait(false);
+                BotLog.Info($"MyParser 网易云音乐 MP3 RecordSegment 发送完成: song_id={result.SongId}, elapsed={stopwatch.Elapsed:mm\\:ss}");
+                return;
+            }
+
             var variants = await HostServices.BuildSilkRecordVariantsAsync(Config, new ProviderRecordBuildRequest(
                 "neteasecloudmusic",
                 "网易云音乐",
@@ -354,7 +362,7 @@ internal sealed partial class NetEaseMessageHandler(ProviderMessageHandlerContex
         }
         catch (Exception ex)
         {
-            BotLog.Warning($"MyParser 网易云音乐 SILK RecordSegment 发送失败，回退 MyParser 文件上传: song_id={result.SongId}, error={ex}");
+            BotLog.Warning($"MyParser 网易云音乐语音发送失败，回退 MyParser 文件上传: song_id={result.SongId}, error={ex}");
             try
             {
                 var uploadInfo = await HostServices.UploadLocalFileAsync(Config, message, localPath, "网易云音乐", result.SongId.ToString(), preferBase64: true).ConfigureAwait(false);
@@ -373,7 +381,7 @@ internal sealed partial class NetEaseMessageHandler(ProviderMessageHandlerContex
     {
         var response = await BotContext.Message.ReplyAsync(message, segment);
         var scene = GetMessageScene(message);
-        BotLog.Info($"MyParser 网易云音乐 SILK AudioSegment 发送接口完成: song_id={songId}, variant={variantName}, scene={scene}, message_id={response.MessageId}, time={response.Timestamp}, elapsed={stopwatch.Elapsed:mm\\:ss}");
+        BotLog.Info($"MyParser 网易云音乐 AudioSegment 发送接口完成: song_id={songId}, variant={variantName}, scene={scene}, message_id={response.MessageId}, time={response.Timestamp}, elapsed={stopwatch.Elapsed:mm\\:ss}");
         EnsureRecordSendAccepted(response.MessageId, scene);
     }
 

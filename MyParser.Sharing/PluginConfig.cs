@@ -8,13 +8,16 @@ public sealed class PluginConfig
     [ConfigField("是否发送各平台封面图片和封面卡片，不影响正文图片。", Label = "【通用设置】发送封面（总开关）")]
     public bool SendCoverImages { get; set; } = true;
 
+    [ConfigField("可选 HTTP/HTTPS 代理地址，例如 http://127.0.0.1:7890；留空使用系统网络设置。", Label = "HTTP 代理", Placeholder = "http://127.0.0.1:7890")]
+    public string HttpProxy { get; set; } = string.Empty;
+
     [ConfigField("VideoSegment 发送 URI 协议：0 = Base64，1 = File（默认），2 = Http。", Label = "VideoSegment 协议", Min = 0, Max = 2)]
     public int FileProtocol { get; set; } = 1;
 
     [ConfigField("单个视频最大下载大小，单位 MB。", Label = "最大视频下载 MB", Min = 1, Max = 51200)]
     public int MaxVideoDownloadMegabytes { get; set; } = 1024;
 
-    [ConfigField("SharpMP4 不支持当前媒体时使用的 ffmpeg 回退路径。留空时自动从 PATH 或程序目录查找。", Label = "ffmpeg 回退路径", Placeholder = "ffmpeg")]
+    [ConfigField("静图视频编码及不支持的媒体回退所用 ffmpeg；同时需要同目录或 PATH 中有 ffprobe。留空自动查找。", Label = "ffmpeg 路径", Placeholder = "ffmpeg")]
     public string FfmpegPath { get; set; } = string.Empty;
 
     [ConfigField("选择视频流时优先更高帧率。", Label = "优先高帧率")]
@@ -53,8 +56,11 @@ public sealed class PluginConfig
     [ConfigField("是否记录视频下载进度日志。", Label = "记录下载进度")]
     public bool LogDownloadProgress { get; set; } = true;
 
-    [ConfigField("并行下载线程数。", Label = "并行下载线程数", Min = 1, Max = 64)]
-    public int ParallelDownloadThreads { get; set; } = 16;
+    [ConfigField("并行下载线程数：0 使用 LightDl 默认值，1–64 使用指定线程数。", Label = "并行下载线程数", Min = 0, Max = 64)]
+    public int ParallelDownloadThreads { get; set; } = 0;
+
+    [ConfigField("是否将抖音图文音乐和网易云音乐编码为 Silk 语音；关闭后直接尝试发送 MP3 语音。", Label = "启用 Silk 编码")]
+    public bool EnableSilkEncoding { get; set; } = true;
 
     // 抖音
     [ConfigField("是否自动解析聊天中的抖音链接。", Label = "【抖音】自动解析抖音链接")]

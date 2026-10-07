@@ -165,7 +165,8 @@ internal sealed class DouyinCommentService(
     private static DouyinCommentInfo? ParseComment(JsonElement item, string? authorId)
     {
         var text = GetString(item, "text")?.Trim();
-        if (string.IsNullOrWhiteSpace(text))
+        var imageUrls = ExtractCommentImageUrls(item);
+        if (string.IsNullOrWhiteSpace(text) && imageUrls.Count == 0)
         {
             return null;
         }
@@ -182,7 +183,7 @@ internal sealed class DouyinCommentService(
         return new DouyinCommentInfo
         {
             CommentId = GetString(item, "cid") ?? string.Empty,
-            Text = text,
+            Text = string.IsNullOrWhiteSpace(text) ? "[图片]" : text,
             UserName = user.ValueKind == JsonValueKind.Object
                 ? GetString(user, "nickname") ?? "未知用户"
                 : "未知用户",
@@ -191,7 +192,7 @@ internal sealed class DouyinCommentService(
                 ? GetString(user, "unique_id") ?? GetString(user, "short_id") ?? GetString(user, "uid")
                 : null,
             UserAvatarUrl = avatarUrl,
-            ImageUrls = ExtractCommentImageUrls(item),
+            ImageUrls = imageUrls,
             IpLabel = GetString(item, "ip_label"),
             LikeCount = GetLong(item, "digg_count"),
             ReplyCount = GetLong(item, "reply_comment_total"),
@@ -211,22 +212,19 @@ internal sealed class DouyinCommentService(
 
         foreach (var image in images.EnumerateArray())
         {
+            string? selectedUrl = null;
             foreach (var propertyName in new[]
                      {
                          "origin_url", "medium_url", "label_large", "download_url", "image_url", "url_default",
                      })
             {
                 if (!TryGetProperty(image, propertyName, out var resource)) continue;
-                foreach (var url in EnumerateCommentImageUrls(resource))
-                {
-                    urls.Add(url);
-                }
+                selectedUrl = EnumerateCommentImageUrls(resource).FirstOrDefault();
+                if (selectedUrl is not null) break;
             }
 
-            foreach (var url in EnumerateCommentImageUrls(image))
-            {
-                urls.Add(url);
-            }
+            selectedUrl ??= EnumerateCommentImageUrls(image).FirstOrDefault();
+            if (selectedUrl is not null) urls.Add(selectedUrl);
         }
 
         var result = urls.Distinct(StringComparer.Ordinal).ToList();

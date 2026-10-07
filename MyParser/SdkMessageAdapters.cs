@@ -5,7 +5,7 @@ namespace Shirobot.Plugin.MyParser.Sdk
 {
 
 public sealed record OutgoingForwardedMessage(
-    long SenderId,
+    string SenderId,
     string SenderName,
     IReadOnlyList<MessageSegment> Segments);
 
@@ -37,9 +37,9 @@ internal static class ForwardMessageMapper
     private static QOutgoingSegment ToQqOutgoing(MessageSegment segment) => segment switch
     {
         TextSegment text => new QOutgoingText(text.Text),
-        MentionSegment mention when long.TryParse(mention.UserId, out var userId) => new QOutgoingMention(userId),
+        MentionSegment mention => new QOutgoingMention(mention.UserId),
         MentionAllSegment => new QOutgoingMentionAll(),
-        QuoteSegment quote when long.TryParse(quote.MessageId, out var messageId) => new QOutgoingReply(messageId),
+        QuoteSegment quote => new QOutgoingReply(quote.MessageId),
         EmojiSegment emoji => new QOutgoingFace(emoji.Id),
         ImageSegment image => new QOutgoingImage(image.Uri) { Summary = image.Summary },
         AudioSegment audio => new QOutgoingRecord(audio.Uri),

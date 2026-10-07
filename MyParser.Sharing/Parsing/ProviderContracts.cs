@@ -160,6 +160,16 @@ public interface IProviderHostServices
         PluginConfig config,
         ProviderAudioDownloadRequest request,
         CancellationToken cancellationToken = default);
+    Task<string> MuxLoopingVideoWithAudioAsync(
+        PluginConfig config,
+        string videoPath,
+        string audioPath,
+        CancellationToken cancellationToken = default);
+    Task<string> CreateStillImageVideoWithAudioAsync(
+        PluginConfig config,
+        string imagePath,
+        string audioPath,
+        CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ProviderRecordVariant>> BuildSilkRecordVariantsAsync(
         PluginConfig config,
         ProviderRecordBuildRequest request,
@@ -355,4 +365,6 @@ public sealed record HttpRangeDownloadRequest(
     Func<int, string, Exception> CreateContentRangeMismatchException,
     Func<int, long, long, Exception> CreatePartSizeMismatchException,
     Func<long, long, Exception> CreateMergedSizeMismatchException,
-    Action<Exception>? OnParallelDownloadFailed = null);
+    Action<Exception>? OnParallelDownloadFailed = null,
+    string? HttpProxy = null,
+    bool RetryForbiddenWithLowerConcurrency = false);
