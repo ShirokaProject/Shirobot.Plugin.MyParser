@@ -1,3 +1,4 @@
+using ShiroBot.SDK.Config;
 using Shirobot.Plugin.MyParser.Parsing;
 using Shirobot.Plugin.MyParser.Services;
 using ShiroBot.Model.QQ;
@@ -12,7 +13,7 @@ namespace Shirobot.Plugin.MyParser;
 
 [BotPlugin(id: "MyParser",
     Name = "MyParser",
-    Version = "0.6.0",
+    Version = "0.6.1",
     Author = "PVPGood",
     Category = PluginCategory.Utility,
     Description = "面向 Shirobot 的学习型内容消息处理插件。",
@@ -20,7 +21,7 @@ namespace Shirobot.Plugin.MyParser;
     IsPluginSingleFile = true,
     SharedAssemblies = "ShiroBot.Model.QQ")
 ]
-public sealed class MyParserPlugin : PluginBase
+public sealed class MyParserPlugin : PluginBase, IConfigurableComponent<PluginConfig>
 {
     private PluginConfig _config = new();
     private ProviderHostServices? _hostServices;
@@ -30,6 +31,25 @@ public sealed class MyParserPlugin : PluginBase
     private MessageParseCoordinator? _messageCoordinator;
 
     public override string Name => "MyParser";
+
+    PluginConfig IConfigurableComponent<PluginConfig>.CurrentConfigValue => _config;
+
+    Task IConfigurableComponent<PluginConfig>.OnConfigLoadedAsync(PluginConfig config, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        _config = config;
+        return Task.CompletedTask;
+    }
+
+    Task IConfigurableComponent<PluginConfig>.OnConfigChangedAsync(
+        PluginConfig previous, PluginConfig current, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        foreach (var property in typeof(PluginConfig).GetProperties())
+            if (property.CanRead && property.CanWrite) property.SetValue(_config, property.GetValue(current));
+        BotLog.Info("MyParser 配置已热重载。");
+        return Task.CompletedTask;
+    }
 
     protected override void ConfigureRoutes()
     {
@@ -46,7 +66,6 @@ public sealed class MyParserPlugin : PluginBase
         MyParserRuntime.ResetForLoad();
         ProviderReactionService.ClearCache();
 
-        _config = Context.Config.Load<PluginConfig>();
         _hostServices = new ProviderHostServices(Context, _config);
         _settingsMonitor = new ProviderSettingsMonitor(Context, _config);
         _providerCatalog = new ProviderCatalog(Context, _config, _hostServices);

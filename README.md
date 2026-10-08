@@ -1,6 +1,6 @@
 # Shirobot.Plugin.MyParser
 
-当前发布：`v0.6.0`。本版本使用 SDK `0.9.8`，需要宿主 `0.9.8` 的新 ABI；旧宿主不兼容。
+当前发布：`v0.6.1`。本版本使用 SDK `0.9.8`，需要宿主 `0.9.8` 的新 ABI；旧宿主不兼容。
 
 <p align="center"><img src="./Assets/icon.png" alt="MyParser" width="160" /></p>
 
@@ -54,3 +54,5 @@ dotnet publish MyParser/Shirobot.Plugin.MyParser.csproj -c Release -p:CopyPlugin
 本项目主要用于个人学习和实验，随缘维护；第三方平台接口和风控变化可能导致解析失效。请仅处理自己拥有权利或已获授权的内容，遵守平台规则及适用法律，不用于侵权、绕过访问限制或公开代下服务。
 
 本项目与第三方平台无隶属或背书关系。许可证：[Apache License 2.0](./LICENSE)。
+
+配置通过宿主统一接口应用；保存后等待应用完成。修改 config.toml 也由宿主监听并应用，无需重新加载插件。

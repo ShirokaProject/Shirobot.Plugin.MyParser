@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Text;
 using ShiroBot.SDK.Plugin;
 using Shirobot.Plugin.MyParser.Parsing;
@@ -10,9 +9,7 @@ internal sealed class ProviderSettingsMonitor(IBotContext context, PluginConfig 
 {
     private const string CookieDirectoryName = "cookies";
     private readonly Lock _reloadLock = new();
-    private FileSystemWatcher? _configWatcher;
     private FileSystemWatcher? _cookieWatcher;
-    private CancellationTokenSource? _configReloadDebounce;
     private CancellationTokenSource? _cookieReloadDebounce;
     private IReadOnlyList<ProviderCookieDescriptor> _cookieDescriptors = [];
     private bool _disposed;
@@ -55,31 +52,7 @@ internal sealed class ProviderSettingsMonitor(IBotContext context, PluginConfig 
 
     public void StartWatchers()
     {
-        StartConfigWatcher();
         StartCookieWatcher();
-    }
-
-    private void StartConfigWatcher()
-    {
-        var configPath = context.Config.ConfigPath;
-        if (string.IsNullOrWhiteSpace(configPath)) return;
-
-        var fullPath = Path.GetFullPath(configPath);
-        var directory = Path.GetDirectoryName(fullPath);
-        var fileName = Path.GetFileName(fullPath);
-        if (string.IsNullOrWhiteSpace(directory) || string.IsNullOrWhiteSpace(fileName)) return;
-
-        Directory.CreateDirectory(directory);
-        _configWatcher = new FileSystemWatcher(directory, fileName)
-        {
-            NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.CreationTime | NotifyFilters.FileName,
-            IncludeSubdirectories = false,
-            EnableRaisingEvents = true,
-        };
-        _configWatcher.Changed += (_, _) => ScheduleConfigReload();
-        _configWatcher.Created += (_, _) => ScheduleConfigReload();
-        _configWatcher.Renamed += (_, _) => ScheduleConfigReload();
-        BotLog.Info($"MyParser 配置热重载已启用：{fullPath}");
     }
 
     private void StartCookieWatcher()
@@ -99,7 +72,6 @@ internal sealed class ProviderSettingsMonitor(IBotContext context, PluginConfig 
         BotLog.Info($"MyParser Cookie 热重载已启用：{directory}");
     }
 
-    private void ScheduleConfigReload() => ScheduleDebouncedReload(ref _configReloadDebounce, ReloadConfig, "配置");
 
     private void ScheduleCookieReload() => ScheduleDebouncedReload(ref _cookieReloadDebounce, ReloadCookies, "Cookie");
 
@@ -129,17 +101,6 @@ internal sealed class ProviderSettingsMonitor(IBotContext context, PluginConfig 
                 }
             }, CancellationToken.None);
         }
-    }
-
-    private void ReloadConfig()
-    {
-        var updated = context.Config.Load<PluginConfig>();
-        foreach (var property in typeof(PluginConfig).GetProperties(BindingFlags.Instance | BindingFlags.Public))
-        {
-            if (property.CanRead && property.CanWrite) property.SetValue(config, property.GetValue(updated));
-        }
-
-        BotLog.Info("MyParser 配置已热重载。");
     }
 
     private void ReloadCookies()
@@ -187,14 +148,9 @@ internal sealed class ProviderSettingsMonitor(IBotContext context, PluginConfig 
         {
             if (_disposed) return;
             _disposed = true;
-            _configReloadDebounce?.Cancel();
-            _configReloadDebounce?.Dispose();
-            _configReloadDebounce = null;
             _cookieReloadDebounce?.Cancel();
             _cookieReloadDebounce?.Dispose();
             _cookieReloadDebounce = null;
-            _configWatcher?.Dispose();
-            _configWatcher = null;
             _cookieWatcher?.Dispose();
             _cookieWatcher = null;
         }
