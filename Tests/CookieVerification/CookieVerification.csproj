@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../MyParser.Sharing/MyParser.Sharing.csproj" />
+    <Compile Include="../../MyParser/Runtime/CookieConfiguration.cs" Link="CookieConfiguration.cs" />
+  </ItemGroup>
+</Project>

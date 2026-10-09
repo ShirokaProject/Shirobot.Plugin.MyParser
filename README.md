@@ -35,7 +35,21 @@
 抖音动态图片会用 SharpMP4 循环并合成配乐；静图生成视频以及不支持的媒体回退需要本机安装 `ffmpeg` 和 `ffprobe`。
 多张图文会优先使用 QQ 合并转发，其他平台会按图片顺序作为普通消息发送；包含动态图片时发送 Live Photo 视频，配乐合成失败则单独发送音乐。
 
-解析视频需要现在cookies/xxx.txt中配置好cookie。然后通过 ShiroBot 配置界面或 `config.toml` 调整自动解析、视频大小上限、请求超时和媒体发送策略等参数，修改后自动重载。
+通过 ShiroBot 配置界面的 **Cookie** 分组填写各平台请求头 `Cookie:` 后面的完整值，保存后立即生效。也可以编辑 `config.toml`：
+
+```toml
+bilibili_cookie = ""
+douyin_cookie = ""
+net_ease_cloud_music_cookie = ""
+heybox_cookie = ""
+weixin_channels_yuanbao_cookie = ""
+```
+
+网页默认隐藏 Cookie；配置文件中仍为明文，请勿公开或分享。首次启动会将旧 `cookies/*.txt` 中的非空值迁入对应的空配置项，保留原文件。之后只读取 TOML；主动清空 Cookie 后不会重新导入旧文件。迁移标记保存在 `data/.cookie-toml-imported-v1`，不要删除。
+
+**从旧版更新时，先升级包含 Cookie 文件保护修复的宿主，再更新插件。** 旧宿主可能按旧安装清单删除 Cookie 文件；仅取消发布空文件无法修复已安装的旧版。已经被覆盖为空的 Cookie 需要从备份恢复或重新获取。
+
+自动解析、视频大小上限、请求超时和媒体发送策略等参数同样在配置界面或 `config.toml` 中调整，修改后自动重载。
 
 ## 构建
 

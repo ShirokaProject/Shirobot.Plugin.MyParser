@@ -17,7 +17,26 @@ namespace MyParser.Provider.Douyin.Services;
 public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWorkParser> workParsers, PluginConfig config)
 {
     private readonly DouyinMsTokenProvider _msTokenProvider = new(http);
-    private readonly DouyinGuestSession _guestSession = new(MyParserRuntime.DouyinCookie);
+    private readonly Lock _cookieLock = new();
+    private string _sessionCookie = MyParserRuntime.DouyinCookie;
+    private DouyinGuestSession _session = new(MyParserRuntime.DouyinCookie);
+
+    private DouyinGuestSession _guestSession
+    {
+        get
+        {
+            lock (_cookieLock)
+            {
+                var cookie = MyParserRuntime.DouyinCookie;
+                if (!string.Equals(_sessionCookie, cookie, StringComparison.Ordinal))
+                {
+                    _sessionCookie = cookie;
+                    _session = new DouyinGuestSession(cookie);
+                }
+                return _session;
+            }
+        }
+    }
     public async Task<DouyinParseResult> ParseAsync(string text, CancellationToken cancellationToken = default)
     {
         var entryStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -653,14 +672,15 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
         ApplyDefaultHeaders(request, referer);
-        var requestCookie = _guestSession.BuildCookieHeader();
+        var session = _guestSession;
+        var requestCookie = session.BuildCookieHeader();
         if (!string.IsNullOrWhiteSpace(requestCookie))
         {
             request.Headers.TryAddWithoutValidation("Cookie", requestCookie);
         }
 
         using var response = await http.SendAsync(request, cancellationToken);
-        _guestSession.Capture(response);
+        session.Capture(response);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         if (!response.IsSuccessStatusCode)
         {

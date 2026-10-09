@@ -19,8 +19,8 @@ public sealed class HeyboxProviderModule : MyParserProviderModuleBase, ICookieVa
             "heybox.txt",
             cookie => MyParserRuntime.HeyboxCookie = cookie,
             LooksLikeCookie,
-            EmptyHint: "可编辑 cookies/heybox.txt 后重启或等待热重载；未配置 Cookie 时会以游客态解析。",
-            InvalidHint: "请确保文件内容是小黑盒网页或接口请求头 Cookie: 后面的完整值。")
+            EmptyHint: "可在插件配置的 Cookie 分组填写小黑盒 Cookie，保存后自动重载；未配置 Cookie 时会以游客态解析。",
+            InvalidHint: "请确保配置内容是小黑盒网页或接口请求头 Cookie: 后面的完整值。")
     ];
 
     public override IReadOnlyList<IParseProvider> CreateProviders(PluginConfig config)

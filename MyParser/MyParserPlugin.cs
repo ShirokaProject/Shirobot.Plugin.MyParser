@@ -47,6 +47,7 @@ public sealed class MyParserPlugin : PluginBase, IConfigurableComponent<PluginCo
         cancellationToken.ThrowIfCancellationRequested();
         foreach (var property in typeof(PluginConfig).GetProperties())
             if (property.CanRead && property.CanWrite) property.SetValue(_config, property.GetValue(current));
+        _settingsMonitor?.ReloadCookies();
         BotLog.Info("MyParser 配置已热重载。");
         return Task.CompletedTask;
     }
@@ -93,14 +94,12 @@ public sealed class MyParserPlugin : PluginBase, IConfigurableComponent<PluginCo
         DirectCommands.MapWhen(_messageCoordinator.ShouldAutoParse, _messageCoordinator.HandleAutoParseAsync);
         GroupCommands.MapWhen(_messageCoordinator.ShouldAutoParse, _messageCoordinator.HandleAutoParseAsync);
 
-        _settingsMonitor.StartWatchers();
         BotLog.Info("MyParser 已加载：自动检测平台链接，搜索命令：#wyy <歌名/歌手>。");
         return Task.CompletedTask;
     }
 
     protected override async Task OnUnloadAsync()
     {
-        _settingsMonitor?.Dispose();
         _settingsMonitor = null;
 
         if (_messageCoordinator is not null)

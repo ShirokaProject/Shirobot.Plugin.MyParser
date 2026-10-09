@@ -39,7 +39,7 @@ public sealed class WeixinChannelsParser : IDisposable
         var yuanbaoCookie = GetYuanbaoCookie();
         if (string.IsNullOrWhiteSpace(yuanbaoCookie))
         {
-            throw new WeixinChannelsParseException("未配置腾讯元宝 Cookie。请编辑 cookies/weixinchannels-yuanbao.txt，保存后自动重载。");
+            throw new WeixinChannelsParseException("未配置腾讯元宝 Cookie。请在插件配置的 Cookie 分组填写腾讯元宝 Cookie，保存后自动重载。");
         }
 
         var sphId = WeixinChannelsUrlParser.ExtractSphId(shareUrl);

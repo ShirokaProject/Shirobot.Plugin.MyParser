@@ -40,16 +40,14 @@ jobs:
       - name: Publish plugin
         run: dotnet publish MyParser/Shirobot.Plugin.MyParser.csproj --configuration Release --no-restore -p:CopyPluginToHost=false --output release/Shirobot.Plugin.MyParser -v:minimal
 
+      - name: Verify Cookie migration and merged plugin hot reload
+        run: dotnet run --project Tests/CookieVerification --configuration Release -p:CopyPluginToHost=false -- release/Shirobot.Plugin.MyParser/Shirobot.Plugin.MyParser.dll
+
       - name: Collect release package
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           $packageRoot = Join-Path $PWD "release/Shirobot.Plugin.MyParser"
-
-          New-Item -ItemType Directory -Force -Path (Join-Path $packageRoot "cookies") | Out-Null
-          foreach ($cookie in @("bilibili.txt", "douyin.txt", "netease.txt", "heybox.txt", "weixinchannels-yuanbao.txt")) {
-            New-Item -ItemType File -Force -Path (Join-Path $packageRoot "cookies/$cookie") | Out-Null
-          }
 
           $required = @(
             (Join-Path $packageRoot "Shirobot.Plugin.MyParser.dll")

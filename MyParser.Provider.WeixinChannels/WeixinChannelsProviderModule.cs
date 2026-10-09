@@ -22,7 +22,7 @@ public sealed class WeixinChannelsProviderModule : MyParserProviderModuleBase, I
             "weixinchannels-yuanbao.txt",
             cookie => MyParserRuntime.WeixinChannelsYuanbaoCookie = cookie,
             LooksLikeCookie,
-            EmptyHint: "请编辑 cookies/weixinchannels-yuanbao.txt，填入腾讯元宝 Cookie；保存后自动重载。",
+            EmptyHint: "请在插件配置的 Cookie 分组填入腾讯元宝 Cookie；保存后自动重载。",
             InvalidHint: "请填入 yuanbao.tencent.com 请求头 Cookie: 后面的完整值。")
     ];
 

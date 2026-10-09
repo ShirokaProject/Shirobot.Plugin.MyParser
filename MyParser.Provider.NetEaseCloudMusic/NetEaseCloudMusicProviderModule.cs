@@ -23,7 +23,7 @@ public sealed class NetEaseCloudMusicProviderModule : MyParserProviderModuleBase
             "netease.txt",
             cookie => MyParserRuntime.NetEaseCloudMusicCookie = cookie,
             LooksLikeCookie,
-            EmptyHint: "请编辑 cookies/netease.txt，保存后自动重载；无 Cookie 仍可搜索，VIP/高音质通常不可用。",
+            EmptyHint: "请在插件配置的 Cookie 分组填写网易云音乐 Cookie，保存后自动重载；无 Cookie 仍可搜索，VIP/高音质通常不可用。",
             InvalidHint: "请填入网易云网页请求中的完整 Cookie，建议包含 MUSIC_U/__csrf/NMTID。")
     ];
 

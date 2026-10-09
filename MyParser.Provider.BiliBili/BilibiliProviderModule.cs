@@ -24,8 +24,8 @@ public sealed class BilibiliProviderModule : MyParserProviderModuleBase, IProvid
             "bilibili.txt",
             cookie => MyParserRuntime.BilibiliCookie = cookie,
             LooksLikeCookie,
-            EmptyHint: "请编辑 cookies/bilibili.txt，保存后自动重载。",
-            InvalidHint: "请确保文件内容包含 SESSDATA/bili_jct 等 Cookie。")
+            EmptyHint: "请在插件配置的 Cookie 分组填写哔哩哔哩 Cookie，保存后自动重载。",
+            InvalidHint: "请确保配置内容包含 SESSDATA/bili_jct 等 Cookie。")
     ];
 
     public override IReadOnlyList<IParseProvider> CreateProviders(PluginConfig config)

@@ -218,7 +218,7 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
     {
         if (!LooksLikeBilibiliCookie(MyParserRuntime.BilibiliCookie))
         {
-            throw new BilibiliLoginRequiredException("解析 Bilibili 视频需要登录态。请在插件目录 cookies/bilibili.txt 填入网页 Cookie，保存后自动重载。");
+            throw new BilibiliLoginRequiredException("解析 Bilibili 视频需要登录态。请在插件配置的 Cookie 分组填入哔哩哔哩网页 Cookie，保存后自动重载。");
         }
     }
 

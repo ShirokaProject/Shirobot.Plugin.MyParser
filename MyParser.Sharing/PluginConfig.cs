@@ -4,6 +4,21 @@ namespace Shirobot.Plugin.MyParser;
 
 public sealed class PluginConfig
 {
+    [ConfigField("填入请求头 Cookie: 后面的完整值；留空表示不使用。保存后立即生效。Cookie 以明文保存在 config.toml，请勿分享配置文件。", Label = "哔哩哔哩 Cookie", Type = "password", Group = "cookies", GroupLabel = "Cookie", GroupDescription = "各平台登录凭据；网页默认隐藏，保存后自动重载。")]
+    public string BilibiliCookie { get; set; } = string.Empty;
+
+    [ConfigField("填入请求头 Cookie: 后面的完整值；留空表示不使用。保存后立即生效。Cookie 以明文保存在 config.toml，请勿分享配置文件。", Label = "抖音 Cookie", Type = "password", Group = "cookies", GroupLabel = "Cookie", GroupDescription = "各平台登录凭据；网页默认隐藏，保存后自动重载。")]
+    public string DouyinCookie { get; set; } = string.Empty;
+
+    [ConfigField("填入请求头 Cookie: 后面的完整值；留空表示不使用。保存后立即生效。Cookie 以明文保存在 config.toml，请勿分享配置文件。", Label = "网易云音乐 Cookie", Type = "password", Group = "cookies", GroupLabel = "Cookie", GroupDescription = "各平台登录凭据；网页默认隐藏，保存后自动重载。")]
+    public string NetEaseCloudMusicCookie { get; set; } = string.Empty;
+
+    [ConfigField("填入请求头 Cookie: 后面的完整值；留空表示不使用。保存后立即生效。Cookie 以明文保存在 config.toml，请勿分享配置文件。", Label = "小黑盒 Cookie", Type = "password", Group = "cookies", GroupLabel = "Cookie", GroupDescription = "各平台登录凭据；网页默认隐藏，保存后自动重载。")]
+    public string HeyboxCookie { get; set; } = string.Empty;
+
+    [ConfigField("填入请求头 Cookie: 后面的完整值；留空表示不使用。保存后立即生效。Cookie 以明文保存在 config.toml，请勿分享配置文件。", Label = "腾讯元宝（视频号） Cookie", Type = "password", Group = "cookies", GroupLabel = "Cookie", GroupDescription = "各平台登录凭据；网页默认隐藏，保存后自动重载。")]
+    public string WeixinChannelsYuanbaoCookie { get; set; } = string.Empty;
+
     // 通用设置
     [ConfigField("启用开发模式时只解析并发送文本/卡片，不下载或发送视频。", Label = "【通用设置】开发模式")]
     public bool DevelopmentMode { get; set; } = false;
