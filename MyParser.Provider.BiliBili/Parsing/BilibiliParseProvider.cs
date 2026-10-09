@@ -102,6 +102,7 @@ public sealed class BilibiliParseProvider(BilibiliParser parser) : IIncomingMess
                     .ToArray(),
                 Attributes = new Dictionary<string, string>
                 {
+                    ["author_avatar_url"] = video.AuthorAvatarUrl ?? string.Empty,
                     ["duration_seconds"] = video.DurationSeconds.ToString(), ["views"] = video.ViewCount.ToString(),
                     ["likes"] = video.LikeCount.ToString(), ["coins"] = video.CoinCount.ToString(),
                     ["favorites"] = video.FavoriteCount.ToString(), ["shares"] = video.ShareCount.ToString(),

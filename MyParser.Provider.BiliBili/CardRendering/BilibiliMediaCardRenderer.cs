@@ -23,6 +23,7 @@ internal sealed class BilibiliMediaCardRenderer(ProviderCardRenderContext contex
         if (purpose != ProviderCardPurpose.Main || media.Kind != ParsedMediaKind.Video) return null;
 
         Bitmap? cover = null;
+        Bitmap? avatar = null;
         try
         {
             if (!string.IsNullOrWhiteSpace(media.CoverUrl))
@@ -34,11 +35,25 @@ internal sealed class BilibiliMediaCardRenderer(ProviderCardRenderContext contex
                     : context.HostServices.DecodeBase64ImageForRender(image.Uri);
             }
 
+            try
+            {
+                avatar = await LoadImageAsync(Value(media, "author_avatar_url"), media, "video_avatar", cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                BotLog.Warning($"MyParser Bilibili 视频头像加载失败: media_id={media.MediaId}, error={ex.GetType().Name}");
+            }
+
             var stream = media.Assets.FirstOrDefault(asset => asset.Kind == MediaAssetKind.Video);
             var duration = ParseDuration(media.Attributes.GetValueOrDefault("duration_seconds"));
             var viewModel = new BiliCardViewModel
             {
                 Cover = cover,
+                Avatar = avatar,
                 Title = media.Title ?? "Bilibili 视频",
                 Description = media.Description ?? string.Empty,
                 AuthorName = media.AuthorName ?? "未知 UP",
@@ -57,6 +72,7 @@ internal sealed class BilibiliMediaCardRenderer(ProviderCardRenderContext contex
         finally
         {
             cover?.Dispose();
+            avatar?.Dispose();
         }
     }
 

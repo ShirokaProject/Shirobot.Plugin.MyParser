@@ -53,7 +53,7 @@ public sealed class BilibiliBangumiParseProvider(BilibiliBangumiParser parser, B
                     .Concat(episode.Video.AudioStreams.Select(stream => new MediaAsset
                     { Kind = MediaAssetKind.Audio, Url = stream.Url, Label = stream.QualityName, BackupUrls = stream.BackupUrls, Referer = episode.Video.SourceUrl, QualityId = stream.QualityId, Codec = stream.CodecName, FileNamePrefix = "bilibili", DownloadDirectory = MyParserRuntime.BilibiliDownloadDirectory, RequestHeaders = CreateMediaHeaders(episode.Video.SourceUrl) }))
                     .ToArray(),
-                Attributes = new Dictionary<string, string> { ["episode_title"] = episode.Bangumi.Title ?? string.Empty, ["duration_seconds"] = episode.Video.DurationSeconds.ToString() },
+                Attributes = new Dictionary<string, string> { ["author_avatar_url"] = episode.Video.AuthorAvatarUrl ?? string.Empty, ["episode_title"] = episode.Bangumi.Title ?? string.Empty, ["duration_seconds"] = episode.Video.DurationSeconds.ToString() },
             },
             BilibiliParseResult video => new ParsedMedia
             {
@@ -73,7 +73,7 @@ public sealed class BilibiliBangumiParseProvider(BilibiliBangumiParser parser, B
                     .Concat(video.AudioStreams.Select(stream => new MediaAsset
                     { Kind = MediaAssetKind.Audio, Url = stream.Url, Label = stream.QualityName, BackupUrls = stream.BackupUrls, Referer = video.SourceUrl, QualityId = stream.QualityId, Codec = stream.CodecName, FileNamePrefix = "bilibili", DownloadDirectory = MyParserRuntime.BilibiliDownloadDirectory, RequestHeaders = CreateMediaHeaders(video.SourceUrl) }))
                     .ToArray(),
-                Attributes = new Dictionary<string, string> { ["duration_seconds"] = video.DurationSeconds.ToString(), ["views"] = video.ViewCount.ToString(), ["likes"] = video.LikeCount.ToString() },
+                Attributes = new Dictionary<string, string> { ["author_avatar_url"] = video.AuthorAvatarUrl ?? string.Empty, ["duration_seconds"] = video.DurationSeconds.ToString(), ["views"] = video.ViewCount.ToString(), ["likes"] = video.LikeCount.ToString() },
             },
             BilibiliBangumiParseResult bangumi => new ParsedMedia
             {
