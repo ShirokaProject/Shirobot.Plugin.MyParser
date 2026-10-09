@@ -70,6 +70,9 @@ jobs:
             throw "Host shared assemblies must not be released: $($sharedAssets.Name -join ', ')"
           }
 
+          # Symbols are useful locally but are not part of the installed plugin package.
+          Get-ChildItem $packageRoot -Recurse -File | Where-Object { $_.Extension -eq '.pdb' } | Remove-Item -Force
+
           Compress-Archive -Path $packageRoot -DestinationPath "release/Shirobot.Plugin.MyParser.zip" -Force
           Get-ChildItem release -Recurse -File | Select-Object FullName, Length
 
