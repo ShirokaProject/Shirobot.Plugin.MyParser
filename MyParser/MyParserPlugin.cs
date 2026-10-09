@@ -13,7 +13,7 @@ namespace Shirobot.Plugin.MyParser;
 
 [BotPlugin(id: "MyParser",
     Name = "MyParser",
-    Version = "0.6.1",
+    Version = "0.6.2",
     Author = "PVPGood",
     Category = PluginCategory.Utility,
     Description = "面向 Shirobot 的学习型内容消息处理插件。",

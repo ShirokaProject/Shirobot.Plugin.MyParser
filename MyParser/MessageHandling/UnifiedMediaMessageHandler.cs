@@ -16,8 +16,6 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
         bool silentProviderMismatch,
         CancellationToken cancellationToken)
     {
-        await ReplyAsync(message, FormatSummary(media)).ConfigureAwait(false);
-
         if (Config.IsCoverEnabled(media.ProviderId))
         {
             await SendCoverAsync(message, media, cancellationToken).ConfigureAwait(false);
@@ -603,27 +601,6 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
         {
             BotLog.Warning($"MyParser {media.ProviderName} 正文图片发送失败: media_id={media.MediaId}, error={ex.Message}");
         }
-    }
-
-    private static string FormatSummary(ParsedMedia media)
-    {
-        var lines = new List<string> { $"{media.ProviderName}解析完成" };
-        if (!string.IsNullOrWhiteSpace(media.Title)) lines.Add($"标题：{media.Title}");
-        if (!string.IsNullOrWhiteSpace(media.AuthorName)) lines.Add($"作者：{media.AuthorName}");
-        if (!string.IsNullOrWhiteSpace(media.Description)) lines.Add($"简介：{TextPreviewFormatter.TrimLine(media.Description, 240)}");
-        foreach (var (key, value) in media.Attributes)
-        {
-            if (!string.IsNullOrWhiteSpace(value)
-                && key is not ("lyrics" or "translated_lyrics")
-                && !key.Contains("url", StringComparison.OrdinalIgnoreCase)
-                && !key.Contains("cookie", StringComparison.OrdinalIgnoreCase)
-                && !key.Contains("token", StringComparison.OrdinalIgnoreCase))
-            {
-                lines.Add($"{key}：{value}");
-            }
-        }
-        if (!string.IsNullOrWhiteSpace(media.SourceUrl)) lines.Add($"链接：{media.SourceUrl}");
-        return string.Join(Environment.NewLine, lines);
     }
 
     private static ProviderMuxedMediaStream ToMuxedStream(MediaAsset asset) =>

@@ -42,7 +42,7 @@ send_provider_failure_messages = true
 # 通用错误提示文案，支持 {provider} 占位符。
 provider_failure_message_template = "{provider}处理失败，请稍后重试。"
 
-# 是否下载并发送 VideoSegment。关闭后只发送解析文本或卡片。
+# 是否下载并发送 VideoSegment。关闭后仍可发送封面卡片和正文内容，不发送视频。
 send_video_segment = true
 
 # 是否上传视频为群/私聊文件。

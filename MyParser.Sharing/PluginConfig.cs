@@ -41,7 +41,7 @@ public sealed class PluginConfig
     [ConfigField("通用 Provider 错误提示模板，支持 {provider} 占位符。", Label = "错误提示模板", Placeholder = "{provider}处理失败，请稍后重试。")]
     public string ProviderFailureMessageTemplate { get; set; } = "{provider}处理失败，请稍后重试。";
 
-    [ConfigField("是否下载并发送 VideoSegment。关闭后只发送解析文本或卡片。", Label = "发送 VideoSegment")]
+    [ConfigField("是否下载并发送 VideoSegment。关闭后仍可发送封面卡片和正文内容，不发送视频。", Label = "发送 VideoSegment")]
     public bool SendVideoSegment { get; set; } = true;
 
     public bool IsVideoDeliveryEnabled() => !DevelopmentMode && SendVideoSegment;
