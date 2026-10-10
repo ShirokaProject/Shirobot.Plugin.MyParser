@@ -20,6 +20,13 @@ public static partial class UrlRedirectResolver
         "x.com", "twitter.com", "t.co",
     ];
 
+    // 免跳转解析域名：解析器可直接从原始链接取作品 ID，无需先展开跳转。
+    // 无谓的直连探测在被墙网络下必然失败，只会产生误导性告警并拖慢解析。
+    private static readonly string[] NoRedirectDomains =
+    [
+        "x.com", "twitter.com",
+    ];
+
     public static CookieContainer SharedCookies { get; } = new();
     private static readonly HttpClient Client = CreateClient();
 
@@ -37,6 +44,7 @@ public static partial class UrlRedirectResolver
             if (!Uri.TryCreate(rawUrl, UriKind.Absolute, out var uri)
                 || !SafeHttpTransport.IsAllowedUri(uri)
                 || !IsSupportedLinkHost(uri.Host)) continue;
+            if (IsHostInDomains(uri.Host, NoRedirectDomains)) continue;
             try
             {
                 if (!await SafeHttpTransport.IsPublicHttpTargetAsync(uri, cancellationToken).ConfigureAwait(false)) continue;
@@ -92,8 +100,10 @@ public static partial class UrlRedirectResolver
         return current.ToString();
     }
 
-    private static bool IsSupportedLinkHost(string host) =>
-        SupportedLinkDomains.Any(domain =>
+    private static bool IsSupportedLinkHost(string host) => IsHostInDomains(host, SupportedLinkDomains);
+
+    private static bool IsHostInDomains(string host, string[] domains) =>
+        domains.Any(domain =>
             string.Equals(host, domain, StringComparison.OrdinalIgnoreCase)
             || host.EndsWith("." + domain, StringComparison.OrdinalIgnoreCase));
 
