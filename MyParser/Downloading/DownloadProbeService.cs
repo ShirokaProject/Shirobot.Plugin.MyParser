@@ -1,21 +1,32 @@
+using System.Collections.Concurrent;
 using System.Net;
 using Shirobot.Plugin.MyParser.Parsing;
+using Shirobot.Plugin.MyParser.Utility;
 
 namespace Shirobot.Plugin.MyParser.Downloading;
 
 internal sealed class DownloadProbeService
 {
-    private static readonly HttpClient ProbeHttp = new(SafeHttpTransport.CreateHandler(DecompressionMethods.None))
+    private static readonly HttpClient DirectProbeHttp = new(SafeHttpTransport.CreateHandler(DecompressionMethods.None))
     {
         Timeout = Timeout.InfiniteTimeSpan,
     };
+
+    private static readonly ConcurrentDictionary<string, HttpClient> ProxiedProbeHttp = new(StringComparer.Ordinal);
 
     public async Task<(long? ContentLength, bool AcceptRanges)> ProbeAsync(
         HttpRangeDownloadRequest request,
         CancellationToken cancellationToken)
     {
+        var http = string.IsNullOrWhiteSpace(request.HttpProxy)
+            ? DirectProbeHttp
+            : ProxiedProbeHttp.GetOrAdd(request.HttpProxy, address =>
+                new HttpClient(HttpProxySettings.CreateHandler(address, DecompressionMethods.None))
+                {
+                    Timeout = Timeout.InfiniteTimeSpan,
+                });
         using var httpRequest = request.CreateRequest(HttpMethod.Get, "bytes=0-0");
-        using var response = await ProbeHttp.SendAsync(
+        using var response = await http.SendAsync(
             httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
             throw request.CreateHttpException(response.StatusCode);

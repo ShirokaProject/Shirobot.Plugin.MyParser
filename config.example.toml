@@ -152,3 +152,11 @@ you_tube_admin_only = true
 
 # 是否发送 YouTube 视频封面。
 send_you_tube_cover = true
+
+# X (Twitter)
+
+# 是否自动解析聊天中的 X (Twitter) 链接。
+auto_parse_x_links = true
+
+# 是否发送 X (Twitter) 推文封面卡片。
+send_x_cover = true

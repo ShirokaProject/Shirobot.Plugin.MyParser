@@ -165,6 +165,13 @@ public sealed class PluginConfig
     [ConfigField("是否发送 YouTube 视频封面。", Label = "发送 YouTube 封面")]
     public bool SendYouTubeCover { get; set; } = true;
 
+    // X (Twitter)
+    [ConfigField("是否自动解析聊天中的 X (Twitter) 链接。", Label = "【X (Twitter)】自动解析 X 链接")]
+    public bool AutoParseXLinks { get; set; } = true;
+
+    [ConfigField("是否发送 X (Twitter) 推文封面卡片。", Label = "发送 X 封面")]
+    public bool SendXCover { get; set; } = true;
+
     public bool IsCoverEnabled(string platform) => SendCoverImages && (platform.ToLowerInvariant() switch
     {
         var p when p.StartsWith("抖音") || p == "douyin" => SendDouyinCover,
@@ -173,6 +180,7 @@ public sealed class PluginConfig
         var p when p.StartsWith("网易云音乐") || p is "netease" or "neteasecloudmusic" => SendNetEaseCloudMusicIntroCard,
         var p when p.StartsWith("微信视频号") || p == "weixinchannels" => SendWeixinChannelsCover,
         var p when p.StartsWith("youtube") => SendYouTubeCover,
+        var p when p == "x" || p.StartsWith("x (") || p.StartsWith("twitter") => SendXCover,
         _ => true,
     });
 }

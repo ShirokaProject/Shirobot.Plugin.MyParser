@@ -466,9 +466,9 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
             }
             else if (galleryMessages.Count > 1)
             {
-                var title = string.IsNullOrWhiteSpace(media.Title) ? "抖音图文" : TextPreviewFormatter.TrimLine(media.Title, 48);
+                var title = string.IsNullOrWhiteSpace(media.Title) ? media.ProviderName : TextPreviewFormatter.TrimLine(media.Title, 48);
                 var preview = images.Take(4).Select((_, index) => $"图片 {index + 1}").ToArray();
-                var forward = new ForwardOutgoingSegment(galleryMessages, title, preview, $"共 {galleryMessages.Count} 张", "抖音图文");
+                var forward = new ForwardOutgoingSegment(galleryMessages, title, preview, $"共 {galleryMessages.Count} 张", media.ProviderName);
                 var sent = await BotContext.Message.ReplyAsync(message, forward).ConfigureAwait(false);
                 if (string.IsNullOrWhiteSpace(sent.MessageId)) throw new InvalidOperationException("图文合并转发未返回消息 ID。");
             }

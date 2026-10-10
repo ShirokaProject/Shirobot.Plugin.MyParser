@@ -22,12 +22,14 @@ internal sealed class ProviderSettingsMonitor(IBotContext context, PluginConfig 
         MyParserRuntime.BilibiliDownloadDirectory = Path.Combine(PluginDirectory, "tmp", "bilibili");
         MyParserRuntime.YouTubeDownloadDirectory = Path.Combine(PluginDirectory, "tmp", "youtube");
         MyParserRuntime.WeixinChannelsDownloadDirectory = Path.Combine(PluginDirectory, "tmp", "weixinchannels");
+        MyParserRuntime.XDownloadDirectory = Path.Combine(PluginDirectory, "tmp", "x");
 
         TemporaryMediaCleanupService.CleanupStartupResidues(config);
         Directory.CreateDirectory(MyParserRuntime.DownloadDirectory);
         Directory.CreateDirectory(MyParserRuntime.BilibiliDownloadDirectory);
         Directory.CreateDirectory(MyParserRuntime.YouTubeDownloadDirectory);
         Directory.CreateDirectory(MyParserRuntime.WeixinChannelsDownloadDirectory);
+        Directory.CreateDirectory(MyParserRuntime.XDownloadDirectory);
     }
 
     public void LoadCookies(IEnumerable<ProviderCookieDescriptor> descriptors)

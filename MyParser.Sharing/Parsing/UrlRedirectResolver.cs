@@ -17,6 +17,7 @@ public static partial class UrlRedirectResolver
         "music.163.com", "163cn.tv",
         "weixin.qq.com",
         "youtube.com", "youtu.be",
+        "x.com", "twitter.com", "t.co",
     ];
 
     public static CookieContainer SharedCookies { get; } = new();

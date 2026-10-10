@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using Shirobot.Plugin.MyParser.Parsing;
 using Shirobot.Plugin.MyParser.Utility;
@@ -8,6 +9,14 @@ namespace Shirobot.Plugin.MyParser.MessageHandling;
 internal static class RemoteImageFetchService
 {
     private const long DefaultMaxImageBytes = 10 * 1024L * 1024L;
+    private const int ImageCacheCapacity = 256;
+    private static readonly TimeSpan ImageCacheTtl = TimeSpan.FromSeconds(120);
+
+    private static readonly HttpClient DirectImageHttp = CreateImageHttpClient(null);
+    private static readonly ConcurrentDictionary<string, HttpClient> ProxiedImageHttp = new(StringComparer.Ordinal);
+    private static readonly ConcurrentDictionary<string, CachedImage> RecentImages = new(StringComparer.Ordinal);
+
+    private readonly record struct CachedImage(string Uri, string? LocalPath, DateTimeOffset CreatedAt);
 
     public static async Task<(string Uri, string? LocalPath)> BuildRemoteImageAsync(
         string platformName,
@@ -27,8 +36,17 @@ internal static class RemoteImageFetchService
 
         try
         {
+            var cacheKey = BuildImageCacheKey(imageUrl, referer);
+            if (RecentImages.TryGetValue(cacheKey, out var cached)
+                && DateTimeOffset.UtcNow - cached.CreatedAt <= ImageCacheTtl
+                && (!persistLocalFile || cached.LocalPath is not null))
+            {
+                BotLog.Info($"MyParser {platformName} 图片下载缓存命中: prefix={filePrefix}, source_url={imageUrl}");
+                return (cached.Uri, cached.LocalPath);
+            }
+
             BotLog.Info($"MyParser {platformName} 图片下载开始: prefix={filePrefix}, source_url={imageUrl}, referer={referer}");
-            using var http = CreateImageHttpClient(httpProxy);
+            var http = GetImageHttpClient(httpProxy);
             using var request = new HttpRequestMessage(HttpMethod.Get, imageUrl);
             configureRequest?.Invoke(request);
 
@@ -87,6 +105,7 @@ internal static class RemoteImageFetchService
             }
 
             BotLog.Info($"MyParser {platformName} 图片下载完成: source_url={imageUrl}, content_type={contentType}, bytes={total}, mode=base64, physical_path={localPath ?? "<none>"}");
+            TryCacheImage(cacheKey, uri, localPath);
             return (uri, localPath);
         }
         catch (Exception ex)
@@ -121,18 +140,42 @@ internal static class RemoteImageFetchService
 
     public static HttpClient CreateImageHttpClient(string? httpProxy = null)
     {
-        var proxy = HttpProxySettings.Create(httpProxy);
-        if (proxy is not null)
+        return new HttpClient(HttpProxySettings.CreateHandler(httpProxy));
+    }
+
+    private static string BuildImageCacheKey(string imageUrl, string? referer) =>
+        $"{referer?.Trim() ?? string.Empty}\u0000{imageUrl.Trim()}";
+
+    private static void TryCacheImage(string key, string uri, string? localPath)
+    {
+        var now = DateTimeOffset.UtcNow;
+        RecentImages[key] = new CachedImage(uri, localPath, now);
+        if (RecentImages.Count <= ImageCacheCapacity)
         {
-            return new HttpClient(new HttpClientHandler
-            {
-                Proxy = proxy,
-                UseProxy = true,
-                AutomaticDecompression = DecompressionMethods.All,
-                AllowAutoRedirect = true,
-            });
+            return;
         }
 
-        return new HttpClient(SafeHttpTransport.CreateHandler());
+        foreach (var pair in RecentImages.Where(pair => now - pair.Value.CreatedAt > ImageCacheTtl))
+        {
+            RecentImages.TryRemove(pair.Key, out _);
+        }
+
+        var overflow = RecentImages.Count - ImageCacheCapacity;
+        if (overflow <= 0)
+        {
+            return;
+        }
+
+        foreach (var pair in RecentImages.OrderBy(pair => pair.Value.CreatedAt).Take(overflow))
+        {
+            RecentImages.TryRemove(pair.Key, out _);
+        }
+    }
+
+    private static HttpClient GetImageHttpClient(string? httpProxy)
+    {
+        return string.IsNullOrWhiteSpace(httpProxy)
+            ? DirectImageHttp
+            : ProxiedImageHttp.GetOrAdd(httpProxy, address => CreateImageHttpClient(address));
     }
 }
