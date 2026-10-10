@@ -116,7 +116,8 @@ internal sealed class ProviderHostServices : IProviderHostServices, IDisposable
             request.MaxBytes,
             request.PersistLocalFile,
             pluginConfig.HttpProxy,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken,
+            preferFileUri: pluginConfig.FileProtocol == 1).ConfigureAwait(false);
         return new ProviderImageBuildResult(uri, localPath);
     }
 

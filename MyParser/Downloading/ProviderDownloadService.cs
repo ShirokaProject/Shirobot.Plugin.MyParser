@@ -812,6 +812,23 @@ internal sealed class ProviderDownloadService
 
     private static async Task MuxAsync(PluginConfig config, string videoPath, string audioPath, string outputPath, CancellationToken cancellationToken)
     {
+        // Keep per-sample media allocations out of the long-lived host when ffmpeg is available.
+        var preferredFfmpeg = ResolveFfmpegPath(config);
+        if (preferredFfmpeg is not null)
+        {
+            try
+            {
+                await MuxWithFfmpegAsync(preferredFfmpeg, videoPath, audioPath, outputPath, cancellationToken).ConfigureAwait(false);
+                return;
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                TryDelete(outputPath);
+                BotLog.Warning($"MyParser ffmpeg 音视频合并失败，回退 SharpMP4: error={ex.Message}");
+            }
+        }
+
         try
         {
             await Task.Run(() => SharpMp4MediaService.Mux(videoPath, audioPath, outputPath), cancellationToken).ConfigureAwait(false);
@@ -825,6 +842,8 @@ internal sealed class ProviderDownloadService
         catch (Exception ex)
         {
             TryDelete(outputPath);
+            if (preferredFfmpeg is not null)
+                throw; // Both backends failed; do not retry the same ffmpeg command.
             BotLog.Warning($"MyParser SharpMP4 音视频合并失败，回退 ffmpeg: error={ex.Message}");
         }
 
@@ -861,7 +880,19 @@ internal sealed class ProviderDownloadService
         using var process = Process.Start(psi) ?? throw new InvalidOperationException("ffmpeg 启动失败。");
         var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken);
+        try
+        {
+            await process.WaitForExitAsync(cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
+            catch (InvalidOperationException) { }
+            // Observe redirected-read cancellation before propagating it.
+            try { await Task.WhenAll(stdoutTask, stderrTask); }
+            catch (OperationCanceledException) { }
+            throw;
+        }
         var stdout = await stdoutTask;
         var stderr = await stderrTask;
         if (process.ExitCode != 0)

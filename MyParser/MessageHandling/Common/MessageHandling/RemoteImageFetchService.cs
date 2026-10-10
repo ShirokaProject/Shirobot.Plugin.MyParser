@@ -18,7 +18,8 @@ internal static class RemoteImageFetchService
         long maxBytes = DefaultMaxImageBytes,
         bool persistLocalFile = false,
         string? httpProxy = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool preferFileUri = false)
     {
         if (string.IsNullOrWhiteSpace(imageUrl))
         {
@@ -64,9 +65,10 @@ internal static class RemoteImageFetchService
                 output.Write(buffer, 0, read);
             }
 
-            var bytes = output.ToArray();
+            // Encode/write directly from the stream's backing buffer instead of copying the image.
+            var bytes = output.GetBuffer();
+            var byteCount = checked((int)output.Length);
             var contentType = response.Content.Headers.ContentType?.MediaType;
-            var uri = "base64://" + Convert.ToBase64String(bytes);
             string? localPath = null;
             if (persistLocalFile)
             {
@@ -77,7 +79,8 @@ internal static class RemoteImageFetchService
                     var extension = ResolveImageExtension(contentType);
                     var safePrefix = SanitizeLocalFileName(filePrefix);
                     localPath = Path.Combine(cacheDirectory, $"{safePrefix}_{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}_{Guid.NewGuid():N}.{extension}");
-                    await File.WriteAllBytesAsync(localPath, bytes, cancellationToken).ConfigureAwait(false);
+                    await using var file = new FileStream(localPath, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
+                    await file.WriteAsync(bytes.AsMemory(0, byteCount), cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
@@ -86,7 +89,11 @@ internal static class RemoteImageFetchService
                 }
             }
 
-            BotLog.Info($"MyParser {platformName} 图片下载完成: source_url={imageUrl}, content_type={contentType}, bytes={total}, mode=base64, physical_path={localPath ?? "<none>"}");
+            var uri = preferFileUri && localPath is not null
+                ? new Uri(Path.GetFullPath(localPath)).AbsoluteUri
+                : "base64://" + Convert.ToBase64String(bytes, 0, byteCount);
+            var uriMode = preferFileUri && localPath is not null ? "file" : "base64";
+            BotLog.Info($"MyParser {platformName} 图片下载完成: source_url={imageUrl}, content_type={contentType}, bytes={total}, mode={uriMode}, physical_path={localPath ?? "<none>"}");
             return (uri, localPath);
         }
         catch (Exception ex)
