@@ -383,7 +383,7 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
                 var shouldPersistImage = Config.SendVideoSegment
                     && (!string.IsNullOrWhiteSpace(livePhotoUrl) || !string.IsNullOrWhiteSpace(musicPath));
                 var imageResult = await HostServices.BuildProviderImageAsync(new ProviderImageBuildRequest(
-                    media.ProviderName, image.Url, media.SourceUrl, $"douyin_image_{media.MediaId}_{index + 1:D2}",
+                    media.ProviderName, image.Url, media.SourceUrl, $"{image.FileNamePrefix ?? "image"}_{media.MediaId}_{index + 1:D2}",
                     request => ApplyHeaders(request, image.RequestHeaders), PersistLocalFile: shouldPersistImage), cancellationToken).ConfigureAwait(false);
                 if (string.IsNullOrWhiteSpace(imageResult.Uri)) continue;
 
