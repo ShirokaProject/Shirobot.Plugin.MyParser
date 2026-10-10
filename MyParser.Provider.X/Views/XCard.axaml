@@ -1,0 +1,123 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:MyParser.Provider.X.Views"
+             x:Class="MyParser.Provider.X.Views.XCard"
+             x:DataType="vm:XCardViewModel"
+             Width="420">
+
+    <Design.DataContext>
+        <vm:XCardViewModel />
+    </Design.DataContext>
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="CardBackground">#FFFFFF</SolidColorBrush>
+                    <SolidColorBrush x:Key="CardTextPrimary">#0F1419</SolidColorBrush>
+                    <SolidColorBrush x:Key="CardTextSecondary">#536471</SolidColorBrush>
+                    <SolidColorBrush x:Key="CardMuted">#EFF3F4</SolidColorBrush>
+                    <SolidColorBrush x:Key="CardDivider">#EFF3F4</SolidColorBrush>
+                    <SolidColorBrush x:Key="CardAccent">#1D9BF0</SolidColorBrush>
+                    <SolidColorBrush x:Key="CardVerified">#FFD400</SolidColorBrush>
+                </ResourceDictionary>
+
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="CardBackground">#15202B</SolidColorBrush>
+                    <SolidColorBrush x:Key="CardTextPrimary">#F7F9F9</SolidColorBrush>
+                    <SolidColorBrush x:Key="CardTextSecondary">#8B98A5</SolidColorBrush>
+                    <SolidColorBrush x:Key="CardMuted">#253341</SolidColorBrush>
+                    <SolidColorBrush x:Key="CardDivider">#2F3336</SolidColorBrush>
+                    <SolidColorBrush x:Key="CardAccent">#1D9BF0</SolidColorBrush>
+                    <SolidColorBrush x:Key="CardVerified">#1D9BF0</SolidColorBrush>
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Border CornerRadius="14" Background="{DynamicResource CardBackground}" BorderBrush="{DynamicResource CardDivider}" BorderThickness="1" Padding="16">
+        <StackPanel Spacing="12">
+            <!-- 品牌行 -->
+            <Grid ColumnDefinitions="Auto,*">
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Border Width="22" Height="22" CornerRadius="11" Background="{DynamicResource CardMuted}">
+                        <TextBlock Text="𝕏" FontSize="14" FontWeight="Bold"
+                                   Foreground="{DynamicResource CardAccent}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <TextBlock Text="X (Twitter)" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource CardTextSecondary}" VerticalAlignment="Center" />
+                </StackPanel>
+                <TextBlock Grid.Column="1" Text="{Binding PublishTime}" FontSize="11" Foreground="{DynamicResource CardTextSecondary}"
+                           HorizontalAlignment="Right" VerticalAlignment="Center" />
+            </Grid>
+
+            <!-- 作者行 -->
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <Border Width="44" Height="44" CornerRadius="22" Background="{DynamicResource CardMuted}" ClipToBounds="True">
+                    <Grid>
+                        <Image Source="{Binding Avatar}" Stretch="UniformToFill" IsVisible="{Binding HasAvatar}" />
+                        <StackPanel IsVisible="{Binding ShowAvatarPlaceholder}" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock Text="𝕏" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource CardTextSecondary}" HorizontalAlignment="Center" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+                <StackPanel VerticalAlignment="Center" Spacing="1">
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                        <TextBlock Text="{Binding DisplayName}" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource CardTextPrimary}" />
+                        <PathIcon Data="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" Width="14" Height="14"
+                                  Foreground="{DynamicResource CardVerified}" IsVisible="{Binding Verified}" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding ScreenName}" FontSize="12" Foreground="{DynamicResource CardTextSecondary}" />
+                </StackPanel>
+            </StackPanel>
+
+            <!-- 封面 / 媒体占位 -->
+            <Border Height="260" CornerRadius="12" Background="{DynamicResource CardMuted}" ClipToBounds="True" IsVisible="{Binding HasCover}">
+                <Grid>
+                    <Image Source="{Binding Cover}" Stretch="UniformToFill" />
+                    <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="10" Padding="8,3" CornerRadius="10"
+                            Background="#66000000">
+                        <TextBlock Text="{Binding KindBadge}" FontSize="11" FontWeight="SemiBold" Foreground="White" />
+                    </Border>
+                </Grid>
+            </Border>
+            <Border Height="150" CornerRadius="12" Background="{DynamicResource CardMuted}" IsVisible="{Binding ShowCoverPlaceholder}">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">
+                    <TextBlock Text="𝕏" FontSize="34" FontWeight="Bold" Foreground="{DynamicResource CardAccent}" HorizontalAlignment="Center" />
+                    <TextBlock Text="{Binding KindBadge}" FontSize="12" Foreground="{DynamicResource CardTextSecondary}" HorizontalAlignment="Center" />
+                </StackPanel>
+            </Border>
+
+            <!-- 正文 -->
+            <TextBlock Text="{Binding Description}" FontSize="13" Foreground="{DynamicResource CardTextPrimary}"
+                       TextWrapping="Wrap" MaxLines="8" LineHeight="19" />
+
+            <!-- 统计 -->
+            <Border Height="1" Background="{DynamicResource CardDivider}" />
+            <Grid ColumnDefinitions="*,*,*,*">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="5" HorizontalAlignment="Center">
+                    <PathIcon Data="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" Width="15" Height="15"
+                              Foreground="{DynamicResource CardTextSecondary}" />
+                    <TextBlock Text="{Binding ReplyCount}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource CardTextSecondary}" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="5" HorizontalAlignment="Center">
+                    <PathIcon Data="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-2.21 0-4 1.79-4 4s1.79 4 4 4c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z" Width="15" Height="15"
+                              Foreground="{DynamicResource CardTextSecondary}" />
+                    <TextBlock Text="{Binding RetweetCount}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource CardTextSecondary}" />
+                </StackPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="5" HorizontalAlignment="Center">
+                    <PathIcon Data="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" Width="15" Height="15"
+                              Foreground="#F91880" />
+                    <TextBlock Text="{Binding LikeCount}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource CardTextPrimary}" />
+                </StackPanel>
+                <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="5" HorizontalAlignment="Center">
+                    <PathIcon Data="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" Width="15" Height="15"
+                              Foreground="{DynamicResource CardTextSecondary}" />
+                    <TextBlock Text="{Binding ViewCount}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource CardTextSecondary}" />
+                </StackPanel>
+            </Grid>
+
+            <!-- 链接 -->
+            <TextBlock Text="{Binding SourceUrl}" FontSize="10" Foreground="{DynamicResource CardAccent}" TextTrimming="CharacterEllipsis" />
+        </StackPanel>
+    </Border>
+</UserControl>

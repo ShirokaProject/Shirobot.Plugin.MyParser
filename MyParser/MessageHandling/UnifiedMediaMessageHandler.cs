@@ -383,7 +383,7 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
                 var shouldPersistImage = Config.SendVideoSegment
                     && (!string.IsNullOrWhiteSpace(livePhotoUrl) || !string.IsNullOrWhiteSpace(musicPath));
                 var imageResult = await HostServices.BuildProviderImageAsync(new ProviderImageBuildRequest(
-                    media.ProviderName, image.Url, media.SourceUrl, $"douyin_image_{media.MediaId}_{index + 1:D2}",
+                    media.ProviderName, image.Url, media.SourceUrl, $"{image.FileNamePrefix ?? "image"}_{media.MediaId}_{index + 1:D2}",
                     request => ApplyHeaders(request, image.RequestHeaders), PersistLocalFile: shouldPersistImage), cancellationToken).ConfigureAwait(false);
                 if (string.IsNullOrWhiteSpace(imageResult.Uri)) continue;
 
@@ -466,9 +466,9 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
             }
             else if (galleryMessages.Count > 1)
             {
-                var title = string.IsNullOrWhiteSpace(media.Title) ? "抖音图文" : TextPreviewFormatter.TrimLine(media.Title, 48);
+                var title = string.IsNullOrWhiteSpace(media.Title) ? media.ProviderName : TextPreviewFormatter.TrimLine(media.Title, 48);
                 var preview = images.Take(4).Select((_, index) => $"图片 {index + 1}").ToArray();
-                var forward = new ForwardOutgoingSegment(galleryMessages, title, preview, $"共 {galleryMessages.Count} 张", "抖音图文");
+                var forward = new ForwardOutgoingSegment(galleryMessages, title, preview, $"共 {galleryMessages.Count} 张", media.ProviderName);
                 var sent = await BotContext.Message.ReplyAsync(message, forward).ConfigureAwait(false);
                 if (string.IsNullOrWhiteSpace(sent.MessageId)) throw new InvalidOperationException("图文合并转发未返回消息 ID。");
             }

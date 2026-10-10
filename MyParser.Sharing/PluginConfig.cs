@@ -94,76 +94,83 @@ public sealed class PluginConfig
     [ConfigField("是否自动解析聊天中的抖音链接。", Label = "【抖音】自动解析抖音链接")]
     public bool AutoParseDouyinLinks { get; set; } = true;
 
-    [ConfigField("是否发送抖音作品封面卡片。", Label = "发送抖音封面")]
+    [ConfigField("是否发送抖音作品封面卡片。", Label = "【抖音】发送抖音封面")]
     public bool SendDouyinCover { get; set; } = true;
 
-    [ConfigField("解析抖音作品时是否获取并发送热门评论。需要有效的抖音 Cookie，接口失败不会影响作品发送。", Label = "获取抖音评论")]
+    [ConfigField("解析抖音作品时是否获取并发送热门评论。需要有效的抖音 Cookie，接口失败不会影响作品发送。", Label = "【抖音】获取抖音评论")]
     public bool DouyinFetchComments { get; set; } = true;
 
-    [ConfigField("抖音作品最多获取的热门评论数量。", Label = "抖音评论数量", Min = 0, Max = 50)]
+    [ConfigField("抖音作品最多获取的热门评论数量。", Label = "【抖音】抖音评论数量", Min = 0, Max = 50)]
     public int DouyinCommentCount { get; set; } = 10;
 
     // Bilibili
     [ConfigField("是否自动解析聊天中的 Bilibili 链接。", Label = "【Bilibili】自动解析 Bilibili 链接")]
     public bool AutoParseBilibiliLinks { get; set; } = true;
 
-    [ConfigField("是否发送 Bilibili 视频、番剧、分 P 和直播封面。", Label = "发送 Bilibili 封面")]
+    [ConfigField("是否发送 Bilibili 视频、番剧、分 P 和直播封面。", Label = "【Bilibili】发送 Bilibili 封面")]
     public bool SendBilibiliVideoCover { get; set; } = true;
 
-    [ConfigField("Bilibili 分 P 总览最多展示封面数量。", Label = "Bilibili 分P封面上限", Min = 0, Max = 200)]
+    [ConfigField("Bilibili 分 P 总览最多展示封面数量。", Label = "【Bilibili】分P封面上限", Min = 0, Max = 200)]
     public int BilibiliMultiPageCoverImageLimit { get; set; } = 50;
 
-    [ConfigField("解析 Bilibili 直播时是否尝试发送短回溯片段。", Label = "发送 Bilibili 直播回溯")]
+    [ConfigField("解析 Bilibili 直播时是否尝试发送短回溯片段。", Label = "【Bilibili】发送直播回溯")]
     public bool SendBilibiliLiveReplayClip { get; set; } = true;
 
-    [ConfigField("Bilibili 直播短回溯片段时长，单位秒。", Label = "直播回溯秒数", Min = 3, Max = 3000)]
+    [ConfigField("Bilibili 直播短回溯片段时长，单位秒。", Label = "【Bilibili】直播回溯秒数", Min = 3, Max = 3000)]
     public int BilibiliLiveReplayClipSeconds { get; set; } = 30;
 
-    [ConfigField("Bilibili 直播短回溯片段最大下载大小，单位 MB。", Label = "直播回溯最大 MB", Min = 1, Max = 2048)]
+    [ConfigField("Bilibili 直播短回溯片段最大下载大小，单位 MB。", Label = "【Bilibili】直播回溯最大 MB", Min = 1, Max = 2048)]
     public int BilibiliLiveReplayClipMaxMegabytes { get; set; } = 256;
 
     // 网易云音乐
     [ConfigField("是否启用网易云音乐解析。关闭后网易云链接解析和 #wyy 搜索均不可用。", Label = "【网易云音乐】启用网易云音乐解析")]
     public bool EnableNetEaseCloudMusic { get; set; } = true;
 
-    [ConfigField("是否自动解析聊天中的网易云音乐歌曲链接。", Label = "自动解析网易云音乐链接")]
+    [ConfigField("是否自动解析聊天中的网易云音乐歌曲链接。", Label = "【网易云音乐】自动解析网易云音乐链接")]
     public bool AutoParseNetEaseCloudMusicLinks { get; set; } = true;
 
-    [ConfigField("解析网易云音乐时是否发送歌曲介绍卡片。", Label = "发送网易云介绍卡片")]
+    [ConfigField("解析网易云音乐时是否发送歌曲介绍卡片。", Label = "【网易云音乐】发送介绍卡片")]
     public bool SendNetEaseCloudMusicIntroCard { get; set; } = true;
 
-    [ConfigField("解析网易云音乐时是否发送歌词卡片。", Label = "发送网易云歌词卡片")]
+    [ConfigField("解析网易云音乐时是否发送歌词卡片。", Label = "【网易云音乐】发送歌词卡片")]
     public bool SendNetEaseCloudMusicLyricCard { get; set; } = true;
 
-    [ConfigField("发送网易云音乐语音时是否额外发送手机高音质版。关闭时默认只发送电脑兼容版。", Label = "网易云额外发送手机高音质语音")]
+    [ConfigField("发送网易云音乐语音时是否额外发送手机高音质版。关闭时默认只发送电脑兼容版。", Label = "【网易云音乐】额外发送手机高音质语音")]
     public bool SendNetEaseMobileBestRecord { get; set; } = false;
 
     // 小黑盒
     [ConfigField("是否启用小黑盒解析。关闭后小黑盒链接解析不可用。", Label = "【小黑盒】启用小黑盒解析")]
     public bool EnableHeybox { get; set; } = true;
 
-    [ConfigField("是否自动解析聊天中的小黑盒链接。", Label = "自动解析小黑盒链接")]
+    [ConfigField("是否自动解析聊天中的小黑盒链接。", Label = "【小黑盒】自动解析小黑盒链接")]
     public bool AutoParseHeyboxLinks { get; set; } = true;
 
-    [ConfigField("是否发送小黑盒封面。", Label = "发送小黑盒封面")]
+    [ConfigField("是否发送小黑盒封面。", Label = "【小黑盒】发送小黑盒封面")]
     public bool SendHeyboxCover { get; set; } = true;
 
     // 微信视频号
     [ConfigField("是否自动解析聊天中的微信视频号链接。", Label = "【微信视频号】自动解析微信视频号链接")]
     public bool AutoParseWeixinChannelsLinks { get; set; } = true;
 
-    [ConfigField("是否发送微信视频号封面卡片。", Label = "发送视频号封面")]
+    [ConfigField("是否发送微信视频号封面卡片。", Label = "【微信视频号】发送视频号封面")]
     public bool SendWeixinChannelsCover { get; set; } = true;
 
     // YouTube
     [ConfigField("是否自动解析聊天中的 YouTube 视频链接。", Label = "【YouTube】自动解析 YouTube 链接")]
     public bool AutoParseYouTubeLinks { get; set; } = true;
 
-    [ConfigField("开启后仅允许机器人 Owner/Admin 发送的 YouTube 链接触发解析，群聊和私聊均生效。", Label = "YouTube 仅管理员")]
+    [ConfigField("开启后仅允许机器人 Owner/Admin 发送的 YouTube 链接触发解析，群聊和私聊均生效。", Label = "【YouTube】仅管理员触发解析")]
     public bool YouTubeAdminOnly { get; set; } = true;
 
-    [ConfigField("是否发送 YouTube 视频封面。", Label = "发送 YouTube 封面")]
+    [ConfigField("是否发送 YouTube 视频封面。", Label = "【YouTube】发送 YouTube 封面")]
     public bool SendYouTubeCover { get; set; } = true;
+
+    // X (Twitter)
+    [ConfigField("是否自动解析聊天中的 X (Twitter) 链接。", Label = "【X (Twitter)】自动解析 X 链接")]
+    public bool AutoParseXLinks { get; set; } = true;
+
+    [ConfigField("是否发送 X (Twitter) 推文封面卡片。", Label = "【X (Twitter)】发送 X 封面")]
+    public bool SendXCover { get; set; } = true;
 
     public bool IsCoverEnabled(string platform) => SendCoverImages && (platform.ToLowerInvariant() switch
     {
@@ -173,6 +180,7 @@ public sealed class PluginConfig
         var p when p.StartsWith("网易云音乐") || p is "netease" or "neteasecloudmusic" => SendNetEaseCloudMusicIntroCard,
         var p when p.StartsWith("微信视频号") || p == "weixinchannels" => SendWeixinChannelsCover,
         var p when p.StartsWith("youtube") => SendYouTubeCover,
+        var p when p == "x" || p.StartsWith("x (") || p.StartsWith("twitter") => SendXCover,
         _ => true,
     });
 }

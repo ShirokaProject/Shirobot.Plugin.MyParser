@@ -16,6 +16,7 @@
 | 网易云音乐 | 歌曲链接、搜索、歌词卡片、QQ 语音 |
 | 微信视频号 | `weixin.qq.com/sph/...` 分享链接 |
 | YouTube | watch、youtu.be、shorts、live 视频链接，AV1 MP4 + AAC |
+| X (Twitter) | 推文视频、动图、图片集、纯文本（fxTwitter 直连优先，官方 Syndication 兜底） |
 
 ## 安装
 
@@ -50,6 +51,8 @@ weixin_channels_yuanbao_cookie = ""
 **从旧版更新时，先升级包含 Cookie 文件保护修复的宿主，再更新插件。** 旧宿主可能按旧安装清单删除 Cookie 文件；仅取消发布空文件无法修复已安装的旧版。已经被覆盖为空的 Cookie 需要从备份恢复或重新获取。
 
 自动解析、视频大小上限、请求超时和媒体发送策略等参数同样在配置界面或 `config.toml` 中调整，修改后自动重载。
+
+X (Twitter) 的解析、封面与视频下载共用 `http_proxy`；在无法直连 x.com / twimg 的网络下必须配置可用代理，否则解析或视频下载会超时/失败。
 
 ## 构建
 

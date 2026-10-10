@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Net;
 using LightDl;
-using Shirobot.Plugin.MyParser.Parsing;
+using Shirobot.Plugin.MyParser.Utility;
 using ShiroBot.SDK.Abstractions;
 
 namespace Shirobot.Plugin.MyParser.Downloading;
@@ -37,7 +37,7 @@ internal sealed class LightDlDownloadService(DownloadProgressLogger progressLogg
             ProgressIntervalMs = Math.Clamp(progressLogger.IntervalMilliseconds, 100, 30_000),
             UserAgent = headers.TryGetValue("User-Agent", out var userAgent) ? userAgent : "Shirobot.Plugin.MyParser",
             HttpMessageHandlerFactory = () => new DownloadSizeLimitHandler(
-                SafeHttpTransport.CreateHandler(DecompressionMethods.None), responseLimit),
+                HttpProxySettings.CreateHandler(request.HttpProxy, DecompressionMethods.None, allowAutoRedirect: false), responseLimit),
         };
 
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(request.Path)) ?? AppContext.BaseDirectory);

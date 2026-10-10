@@ -1,4 +1,5 @@
 using Avalonia.Media.Imaging;
+using System.Net;
 using Shirobot.Plugin.MyParser.MessageHandling;
 using Shirobot.Plugin.MyParser.Parsing;
 using Shirobot.Plugin.MyParser.Services;
@@ -155,9 +156,57 @@ internal sealed class ProviderHostServices : IProviderHostServices, IDisposable
         BotLog.Info($"MyParser {request.PlatformDisplayName} VideoSegment URI 模式：{uriMode}, {request.IdentifierName}={request.MediaId}, file_mb={fileSize / 1024d / 1024d:F2}, uri_preview={PreviewUri(videoUri)}");
         var segment = new VideoOutgoingSegment(videoUri)
         {
-            ThumbnailUri = config.IsCoverEnabled(request.PlatformDisplayName) && !string.IsNullOrWhiteSpace(request.ThumbUri) ? request.ThumbUri : null,
+            ThumbnailUri = config.IsCoverEnabled(request.PlatformDisplayName)
+                           && IsThumbnailReachableByAdapter(request.PlatformDisplayName, request.ThumbUri)
+                ? request.ThumbUri
+                : null,
         };
         return new ProviderLocalVideoSegmentResult(segment, uriMode, videoUri, fileSize, registeredToHttpServer);
+    }
+
+    private static bool IsThumbnailReachableByAdapter(string platformDisplayName, string? thumbUri)
+    {
+        if (!IsXPlatform(platformDisplayName))
+        {
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(thumbUri))
+        {
+            return false;
+        }
+
+        if (!Uri.TryCreate(thumbUri, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https"))
+        {
+            return false;
+        }
+
+        if (uri.IsLoopback)
+        {
+            return true;
+        }
+
+        return IPAddress.TryParse(uri.Host, out var address)
+               && (IPAddress.IsLoopback(address) || IsPrivateAddress(address));
+    }
+
+    private static bool IsXPlatform(string platformDisplayName)
+    {
+        return platformDisplayName.Equals("x", StringComparison.OrdinalIgnoreCase)
+               || platformDisplayName.StartsWith("x (", StringComparison.OrdinalIgnoreCase)
+               || platformDisplayName.StartsWith("twitter", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsPrivateAddress(IPAddress address)
+    {
+        var bytes = address.GetAddressBytes();
+        var ipv4 = bytes.Length == 4;
+        var a = ipv4 ? bytes[0] : 0;
+        var b = ipv4 && bytes.Length > 1 ? bytes[1] : 0;
+        return ipv4 && (a == 10
+                       || a == 127
+                       || (a == 172 && b is >= 16 and <= 31)
+                       || (a == 192 && b == 168));
     }
 
     private readonly ProviderDownloadService _downloadService = new();

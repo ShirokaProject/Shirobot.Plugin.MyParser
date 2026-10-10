@@ -21,6 +21,7 @@ internal static class MyParserRuntime
 
     public static string WeixinChannelsDownloadDirectory { get; set; } = string.Empty;
     public static string YouTubeDownloadDirectory { get; set; } = string.Empty;
+    public static string XDownloadDirectory { get; set; } = string.Empty;
 
     public static string DownloadDirectory { get; set; } = string.Empty;
 
@@ -65,6 +66,7 @@ internal static class MyParserRuntime
         WeixinChannelsYuanbaoCookie = string.Empty;
         WeixinChannelsDownloadDirectory = string.Empty;
         YouTubeDownloadDirectory = string.Empty;
+        XDownloadDirectory = string.Empty;
         DownloadDirectory = string.Empty;
         BilibiliDownloadDirectory = string.Empty;
     }
