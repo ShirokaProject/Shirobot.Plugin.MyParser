@@ -60,7 +60,7 @@ X (Twitter) 的解析、封面与视频下载共用 `http_proxy`；在无法直�
 
 ```bash
 git submodule update --init --recursive
-dotnet build MyParser.sln -c Release -p:CopyPluginToHost=false
+dotnet build MyParser.slnx -c Release -p:CopyPluginToHost=false
 dotnet publish MyParser/Shirobot.Plugin.MyParser.csproj -c Release -p:CopyPluginToHost=false -o release/Shirobot.Plugin.MyParser
 ```
 

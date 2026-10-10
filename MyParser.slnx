@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="MyParser.Sharing/MyParser.Sharing.csproj" />
+  <Project Path="MyParser/Shirobot.Plugin.MyParser.csproj" />
+</Solution>
