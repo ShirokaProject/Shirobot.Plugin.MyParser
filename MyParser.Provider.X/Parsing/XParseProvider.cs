@@ -71,6 +71,7 @@ internal sealed class XParseProvider(XParser parser) : IParseProvider, IParsePro
                     RequestHeaders = MediaRequestHeaders,
                 },
             };
+            assets.AddRange(BuildPhotoAssets(photos, cacheKey, downloadDirectory));
 
             return new ParsedMedia
             {
@@ -82,7 +83,9 @@ internal sealed class XParseProvider(XParser parser) : IParseProvider, IParsePro
                 Title = tweet.AuthorName,
                 AuthorName = "@" + screenName,
                 Description = tweet.Text,
-                CoverUrl = !string.IsNullOrWhiteSpace(item.ThumbnailUrl) ? item.ThumbnailUrl : item.Url,
+                CoverUrl = !string.IsNullOrWhiteSpace(item.ThumbnailUrl)
+                    ? item.ThumbnailUrl
+                    : photos.FirstOrDefault()?.Url ?? item.Url,
                 Attributes = attributes,
                 Assets = assets,
             };
@@ -90,24 +93,7 @@ internal sealed class XParseProvider(XParser parser) : IParseProvider, IParsePro
 
         if (photos.Length > 0)
         {
-            var assets = new List<MediaAsset>(photos.Length);
-            for (var index = 0; index < photos.Length; index++)
-            {
-                var photo = photos[index];
-                assets.Add(new MediaAsset
-                {
-                    Kind = MediaAssetKind.Image,
-                    Url = photo.Url ?? string.Empty,
-                    CacheKey = $"{cacheKey}:{index}",
-                    FileNamePrefix = "x_image",
-                    DownloadDirectory = downloadDirectory,
-                    FileExtension = "jpg",
-                    Width = photo.Width,
-                    Height = photo.Height,
-                    Referer = "https://x.com/",
-                    RequestHeaders = MediaRequestHeaders,
-                });
-            }
+            var assets = BuildPhotoAssets(photos, cacheKey, downloadDirectory);
 
             return new ParsedMedia
             {
@@ -144,6 +130,33 @@ internal sealed class XParseProvider(XParser parser) : IParseProvider, IParsePro
                 new MediaContentBlock { Kind = MediaContentKind.Text, Text = BuildTextFooter(tweet, sourceUrl) },
             ],
         };
+    }
+
+    private static List<MediaAsset> BuildPhotoAssets(
+        IReadOnlyList<XMediaItem> photos,
+        string cacheKey,
+        string downloadDirectory)
+    {
+        var assets = new List<MediaAsset>(photos.Count);
+        for (var index = 0; index < photos.Count; index++)
+        {
+            var photo = photos[index];
+            assets.Add(new MediaAsset
+            {
+                Kind = MediaAssetKind.Image,
+                Url = photo.Url ?? string.Empty,
+                CacheKey = $"{cacheKey}:{index}",
+                FileNamePrefix = "x_image",
+                DownloadDirectory = downloadDirectory,
+                FileExtension = "jpg",
+                Width = photo.Width,
+                Height = photo.Height,
+                Referer = "https://x.com/",
+                RequestHeaders = MediaRequestHeaders,
+            });
+        }
+
+        return assets;
     }
 
     private static Dictionary<string, string> BuildAttributes(XTweetData tweet)

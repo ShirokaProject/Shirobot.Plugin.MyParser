@@ -166,7 +166,7 @@ public sealed class XParser : IParserHttpClientAccessor, IDisposable
             IsBlueVerified: GetFxTwitterVerified(tweet),
             Likes: GetLong(tweet, "likes"),
             Replies: GetLong(tweet, "replies"),
-            Retweets: GetLong(tweet, "retweets"),
+            Retweets: GetLong(tweet, "reposts") ?? GetLong(tweet, "retweets"),
             Views: GetLong(tweet, "views"),
             CreatedAt: GetFxTwitterCreatedAt(tweet),
             PossiblySensitive: GetBool(tweet, "possibly_sensitive"),
@@ -226,19 +226,7 @@ public sealed class XParser : IParserHttpClientAccessor, IDisposable
         {
             var kind = GetString(item, "type").ToLowerInvariant();
             if (kind is not ("photo" or "video" or "gif")) continue;
-            var variants = new List<XMediaVariant>();
-            if (item.TryGetProperty("variants", out var variantsElement) && variantsElement.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var variant in variantsElement.EnumerateArray())
-                {
-                    var variantUrl = GetString(variant, "url");
-                    if (string.IsNullOrWhiteSpace(variantUrl)) continue;
-                    variants.Add(new XMediaVariant(
-                        variantUrl,
-                        variant.TryGetProperty("bitrate", out var bitrate) && bitrate.ValueKind == JsonValueKind.Number ? bitrate.GetInt32() : 0,
-                        GetString(variant, "content_type")));
-                }
-            }
+            var variants = ParseFxTwitterVariants(item);
 
             var url = GetString(item, "url");
             var thumbnailUrl = GetString(item, "thumbnail_url");
@@ -249,6 +237,42 @@ public sealed class XParser : IParserHttpClientAccessor, IDisposable
         }
 
         return items;
+    }
+
+    private static List<XMediaVariant> ParseFxTwitterVariants(JsonElement item)
+    {
+        var variants = new List<XMediaVariant>();
+        if (item.TryGetProperty("variants", out var variantsElement) && variantsElement.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var variant in variantsElement.EnumerateArray())
+            {
+                var variantUrl = GetString(variant, "url");
+                if (string.IsNullOrWhiteSpace(variantUrl)) continue;
+                variants.Add(new XMediaVariant(
+                    variantUrl,
+                    GetInt(variant, "bitrate"),
+                    GetString(variant, "content_type")));
+            }
+        }
+
+        // FxTwitter's current response calls these formats; older responses used variants.
+        if (item.TryGetProperty("formats", out var formatsElement) && formatsElement.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var format in formatsElement.EnumerateArray())
+            {
+                var formatUrl = GetString(format, "url");
+                if (string.IsNullOrWhiteSpace(formatUrl)) continue;
+                var container = GetString(format, "container");
+                var contentType = container.Equals("mp4", StringComparison.OrdinalIgnoreCase)
+                    ? "video/mp4"
+                    : container;
+                variants.Add(new XMediaVariant(formatUrl, GetInt(format, "bitrate"), contentType));
+            }
+        }
+
+        return variants
+            .DistinctBy(variant => variant.Url, StringComparer.Ordinal)
+            .ToList();
     }
 
     private static (int Width, int Height) GetOriginalSize(JsonElement item)

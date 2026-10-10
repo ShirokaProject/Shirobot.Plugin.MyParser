@@ -75,6 +75,15 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
                 {
                     succeeded = await SendVideoAsync(message, media, cancellationToken).ConfigureAwait(false);
                 }
+                var accompanyingImages = media.Assets.Where(asset => asset.Kind == MediaAssetKind.Image).ToArray();
+                if (accompanyingImages.Length > 0)
+                {
+                    await SendGalleryAsync(message, media with
+                    {
+                        Kind = ParsedMediaKind.Gallery,
+                        Assets = accompanyingImages,
+                    }, cancellationToken).ConfigureAwait(false);
+                }
                 break;
             case ParsedMediaKind.Track:
                 succeeded = await SendTrackAsync(message, media, cancellationToken).ConfigureAwait(false);
