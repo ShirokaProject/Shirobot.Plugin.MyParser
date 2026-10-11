@@ -34,6 +34,7 @@ if (args is ["--mux-media", var videoPath, var audioPath]) await LoopMuxVerifica
 await GalleryVerification.RunAsync();
 await GalleryParsingVerification.RunAsync();
 await ArticleForwardVerification.RunAsync();
+await BilibiliPresentationVerification.RunAsync();
 
 internal sealed class DetailCapture : DelegatingHandler
 {

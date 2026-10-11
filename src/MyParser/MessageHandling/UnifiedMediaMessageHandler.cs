@@ -132,7 +132,7 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
                 case ParsedMediaKind.Article:
                     if (media.ProviderId == "heybox")
                         await SendArticleForwardAsync(message, media, cancellationToken).ConfigureAwait(false);
-                    else
+                    else if (media.ProviderId != "bilibili-article" || !coverSent)
                         await SendContentAsync(message, media, cancellationToken).ConfigureAwait(false);
                     break;
                 case ParsedMediaKind.Gallery:
@@ -718,7 +718,6 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
             return true;
         }
 
-        await ReplyAsync(message, $"直播信息已解析，可用线路数：{streams.Length}。").ConfigureAwait(false);
         if (!Config.IsBilibiliLiveReplayEnabled()) return true;
 
         string? localPath = null;

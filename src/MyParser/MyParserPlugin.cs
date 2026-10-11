@@ -1,3 +1,4 @@
+using System.Reflection;
 using ShiroBot.SDK.Config;
 using Shirobot.Plugin.MyParser.Parsing;
 using Shirobot.Plugin.MyParser.Services;
@@ -13,7 +14,7 @@ namespace Shirobot.Plugin.MyParser;
 
 [BotPlugin(id: "MyParser",
     Name = "MyParser",
-    Version = "0.6.6",
+    Version = "0.6.7",
     Author = "PVPGood",
     Category = PluginCategory.Utility,
     Description = "面向 Shirobot 的学习型内容消息处理插件。",
@@ -64,6 +65,9 @@ public sealed class MyParserPlugin : PluginBase, IConfigurableComponent<PluginCo
 
     protected override Task LoadAsync()
     {
+        var version = typeof(MyParserPlugin).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+            .InformationalVersion.Split('+')[0] ?? "未知";
+        BotLog.Info($"MyParser 开始加载，当前版本：{version}。");
         MyParserRuntime.ResetForLoad();
         ProviderReactionService.ClearCache();
 
