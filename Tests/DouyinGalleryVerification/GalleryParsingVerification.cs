@@ -46,6 +46,12 @@ internal static class GalleryParsingVerification
             if (result.Images.Count != 1 || result.Images[0].LivePhotoUrl != "https://example.com/live.mp4")
                 throw new Exception("Static share-page preview prevented dynamic detail enrichment.");
             if (handler.DetailRequests != 1) throw new Exception("Gallery detail was not enriched exactly once.");
+            using var resetHandler = new GalleryDetailHandler { ResetFirstShare = true, ResetFirstDetail = true };
+            using var resetHttp = new HttpClient(resetHandler);
+            using var resetParser = new DouyinParser(new PluginConfig { DouyinFetchComments = false }, resetHttp);
+            var recovered = await resetParser.ParseAsync("https://www.douyin.com/note/1234567890123456789");
+            if (recovered.Images[0].LivePhotoUrl != "https://example.com/live.mp4" || resetHandler.DetailRequests != 2)
+                throw new Exception("Network resets prevented alternate share/detail endpoints from recovering.");
 
             var simplified = result with { Images = [new DouyinImageInfo { Url = "https://other-cdn.example.com/picture~resize.jpeg" }] };
             var merge = typeof(DouyinParseService).GetMethod("MergeGalleryMediaDetail", BindingFlags.Static | BindingFlags.NonPublic)!;
@@ -59,15 +65,27 @@ internal static class GalleryParsingVerification
     private sealed class GalleryDetailHandler : HttpMessageHandler
     {
         public int DetailRequests { get; private set; }
+        public bool ResetFirstShare { get; set; }
+        public bool ResetFirstDetail { get; set; }
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var path = request.RequestUri!.AbsolutePath;
             string content;
+            if (path.Contains("/share/") && ResetFirstShare)
+            {
+                ResetFirstShare = false;
+                return Task.FromException<HttpResponseMessage>(new HttpRequestException("Connection reset by peer", new System.Net.Sockets.SocketException((int)System.Net.Sockets.SocketError.ConnectionReset)));
+            }
             if (path.Contains("/share/"))
                 content = "<script>window._ROUTER_DATA=" + Aweme(false) + ";</script>";
             else if (path == "/aweme/v1/web/aweme/detail/")
             {
                 DetailRequests++;
+                if (ResetFirstDetail)
+                {
+                    ResetFirstDetail = false;
+                    return Task.FromException<HttpResponseMessage>(new HttpRequestException("Connection reset by peer", new System.Net.Sockets.SocketException((int)System.Net.Sockets.SocketError.ConnectionReset)));
+                }
                 if (!request.RequestUri.Query.Contains("x-secsdk-web-signature=")) throw new Exception("Missing final signature on detail request.");
                 content = "{\"aweme_detail\":" + Aweme(true) + "}";
             }

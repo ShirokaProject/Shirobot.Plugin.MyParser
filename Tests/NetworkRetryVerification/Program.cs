@@ -51,6 +51,52 @@ using (var request = new HttpRequestMessage(HttpMethod.Get, "https://media.examp
 }
 Console.WriteLine("HTTPS CDN redirect on port 58001 and subsequent HTTP redirect on port 8080 are followed; cross-origin credentials are stripped and Range is preserved.");
 
+// A trusted local proxy is allowed as a transport endpoint, while private media targets remain blocked.
+var previousProxy = HttpClient.DefaultProxy;
+var listener = new TcpListener(IPAddress.Loopback, 0);
+listener.Start();
+try
+{
+    HttpClient.DefaultProxy = new WebProxy($"http://127.0.0.1:{((IPEndPoint)listener.LocalEndpoint).Port}");
+    var proxyServer = Task.Run(async () =>
+    {
+        var lines = new List<string>();
+        for (int i = 0; i < 2; i++)
+        {
+            using var client = await listener.AcceptTcpClientAsync();
+            using var stream = client.GetStream();
+            using var reader = new StreamReader(stream, leaveOpen: true);
+            var first = await reader.ReadLineAsync(); lines.Add(first!);
+            while (!string.IsNullOrEmpty(await reader.ReadLineAsync())) { }
+            var reply = System.Text.Encoding.ASCII.GetBytes(i == 0
+                ? "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok"
+                : "HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+            await stream.WriteAsync(reply);
+        }
+        return lines;
+    });
+    using var transport = new HttpClient(SafeHttpTransport.CreateHandler()) { Timeout = TimeSpan.FromSeconds(5) };
+    Check(await transport.GetStringAsync("http://8.8.8.8/test") == "ok", "System proxy was ignored.");
+    try { await transport.GetAsync("https://8.8.8.8/test"); throw new Exception("Expected fixture CONNECT failure."); }
+    catch (HttpRequestException ex) { Check(ex.Message.Contains("502"), "Local proxy tunnel was rejected by IP validation."); }
+    var requests = await proxyServer.WaitAsync(TimeSpan.FromSeconds(5));
+    Check(requests[0].StartsWith("GET http://8.8.8.8/test") && requests[1].StartsWith("CONNECT 8.8.8.8:443"), "Incorrect proxy routing.");
+    try { await transport.GetAsync("http://127.0.0.1/test"); throw new Exception("Private media target reached the proxy."); }
+    catch (HttpRequestException ex) { Check(ex.Message.Contains("127.0.0.1") && ex.Message.Contains("rejected_ips="), "Rejected IP/endpoint missing from diagnostics."); }
+}
+finally { listener.Stop(); HttpClient.DefaultProxy = previousProxy; }
+var filter = typeof(SafeHttpTransport).GetMethod("FilterPublicAddresses", BindingFlags.NonPublic | BindingFlags.Static)!;
+IPAddress[] Filter(string host, string[] ips, bool proxy) => (IPAddress[])filter.Invoke(null, [host, ips.Select(IPAddress.Parse).ToArray(), proxy])!;
+Check(Filter("cdn.example", ["10.0.0.1", "8.8.8.8"], false).Single().ToString() == "8.8.8.8", "One private DNS answer discarded the public answer.");
+Check(Filter("cdn.example", ["198.18.0.11", "2001:2::26"], true).Length == 2, "Configured proxy rejected DNS Fake-IP.");
+foreach (var (host, proxy) in new[] { ("cdn.example", false), ("198.18.0.11", true) })
+{
+    try { Filter(host, ["198.18.0.11"], proxy); throw new Exception("Direct/literal Fake-IP was accepted."); }
+    catch (TargetInvocationException ex) when (ex.InnerException is HttpRequestException error)
+    { Check(error.Message.Contains(host) && error.Message.Contains("198.18.0.11"), "Missing rejected host/IP."); }
+}
+Console.WriteLine("HTTP system proxy and HTTPS CONNECT are honored; Fake-IP is accepted only for proxied domain DNS; direct/private targets and mixed DNS answers are handled correctly.");
+
 var source = new MessageEvent { Platform = "qq", InstanceId = "test", MessageId = "source", Sender = new User("tester"), Channel = new Channel("test", ChannelType.Group), Segments = [] };
 foreach (var (retries, failures, expectedCalls, expectedFailures) in new[] { (2, 2, 3, 0), (2, 9, 3, 1), (0, 2, 1, 1) })
 {

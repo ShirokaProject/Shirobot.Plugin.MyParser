@@ -3,9 +3,11 @@ using System.Net.Sockets;
 
 namespace Shirobot.Plugin.MyParser.Parsing;
 
-/// <summary>HTTP transport that pins connections to validated public IP addresses.</summary>
+/// <summary>HTTP transport that validates direct targets and respects the explicitly configured system proxy.</summary>
 public static class SafeHttpTransport
 {
+    private static readonly HttpRequestOptionsKey<string> ConnectionDescription = new("MyParser.ConnectionDescription");
+
     public const int MaximumBufferedRedirectBodyBytes = 8 * 1024 * 1024;
 
     public static HttpMessageHandler CreateHandler(
@@ -19,15 +21,17 @@ public static class SafeHttpTransport
         DecompressionMethods automaticDecompression = DecompressionMethods.All,
         CookieContainer? cookieContainer = null)
     {
+        var proxy = HttpClient.DefaultProxy;
         return new SocketsHttpHandler
         {
             AllowAutoRedirect = false,
             MaxAutomaticRedirections = UrlRedirectResolver.MaximumRedirects,
             AutomaticDecompression = automaticDecompression,
-            UseProxy = false,
+            UseProxy = true,
+            Proxy = proxy,
             UseCookies = cookieContainer is not null,
             CookieContainer = cookieContainer ?? new CookieContainer(),
-            ConnectCallback = ConnectToValidatedPublicAddressAsync,
+            ConnectCallback = (context, token) => ConnectToValidatedAddressAsync(context, proxy, token),
             PooledConnectionLifetime = TimeSpan.FromMinutes(5),
             PooledConnectionIdleTimeout = TimeSpan.FromSeconds(30),
         };
@@ -50,23 +54,42 @@ public static class SafeHttpTransport
     public static async Task<bool> IsPublicHttpTargetAsync(Uri uri, CancellationToken cancellationToken)
     {
         if (!IsAllowedUri(uri)) return false;
-        var addresses = await ResolvePublicAddressesAsync(uri.DnsSafeHost, cancellationToken).ConfigureAwait(false);
+        var addresses = await ResolvePublicAddressesAsync(uri.DnsSafeHost, cancellationToken, GetConfiguredProxy(uri, HttpClient.DefaultProxy) is not null).ConfigureAwait(false);
         return addresses.Length > 0;
     }
 
-    private static async ValueTask<Stream> ConnectToValidatedPublicAddressAsync(
-        SocketsHttpConnectionContext context,
+    private static async ValueTask<Stream> ConnectToValidatedAddressAsync(
+        SocketsHttpConnectionContext context, IWebProxy proxy,
         CancellationToken cancellationToken)
     {
         var requestUri = context.InitialRequestMessage.RequestUri;
         var endpoint = context.DnsEndPoint;
-        if (!IsAllowedUri(requestUri) || requestUri!.Port != endpoint.Port
-            || !SameHost(requestUri.DnsSafeHost, endpoint.Host))
+        // .NET's HTTPS proxy tunnel uses a CONNECT request addressed to the proxy;
+        // the destination authority is in Host. Never treat the local proxy as the media target.
+        if (context.InitialRequestMessage.Method == HttpMethod.Connect)
         {
-            throw new HttpRequestException("出站 HTTP 请求的目标地址无效或使用了不允许的端口。");
+            var authority = context.InitialRequestMessage.Headers.Host;
+            if (authority is null || !Uri.TryCreate("https://" + authority + "/", UriKind.Absolute, out requestUri))
+                throw new HttpRequestException("HTTP 代理隧道缺少有效目标地址。");
         }
-
-        var addresses = await ResolvePublicAddressesAsync(endpoint.Host, cancellationToken).ConfigureAwait(false);
+        if (!IsAllowedUri(requestUri)) throw new HttpRequestException("出站 HTTP 请求的目标地址无效。");
+        var configuredProxy = GetConfiguredProxy(requestUri!, proxy);
+        bool viaProxy = configuredProxy is not null && configuredProxy.Port == endpoint.Port
+                        && SameHost(configuredProxy.DnsSafeHost, endpoint.Host);
+        IPAddress[] addresses;
+        if (viaProxy)
+        {
+            // The proxy is trusted only because it was configured by the local user, not by a redirect.
+            // Permit DNS Fake-IP for domain names here; the proxy resolves the actual destination.
+            await ResolvePublicAddressesAsync(requestUri!.DnsSafeHost, cancellationToken, true).ConfigureAwait(false);
+            addresses = await Dns.GetHostAddressesAsync(endpoint.Host, cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            if (requestUri!.Port != endpoint.Port || !SameHost(requestUri.DnsSafeHost, endpoint.Host))
+                throw new HttpRequestException($"出站 HTTP 连接目标不匹配: host={requestUri.DnsSafeHost}, endpoint={endpoint.Host}:{endpoint.Port}。");
+            addresses = await ResolvePublicAddressesAsync(endpoint.Host, cancellationToken).ConfigureAwait(false);
+        }
         SocketException? lastError = null;
         foreach (var address in addresses)
         {
@@ -77,6 +100,8 @@ public static class SafeHttpTransport
             try
             {
                 await socket.ConnectAsync(new IPEndPoint(address, endpoint.Port), cancellationToken).ConfigureAwait(false);
+                context.InitialRequestMessage.Options.Set(ConnectionDescription,
+                    $"route={(viaProxy ? "system-proxy" : "direct")}, connected_ip={address}, port={endpoint.Port}");
                 return new NetworkStream(socket, ownsSocket: true);
             }
             catch (SocketException ex)
@@ -91,27 +116,46 @@ public static class SafeHttpTransport
             }
         }
 
-        throw new HttpRequestException("无法连接到经过校验的公网地址。", lastError);
+        throw new HttpRequestException($"无法连接到{(viaProxy ? "系统代理" : "公网目标")}: host={endpoint.Host}, port={endpoint.Port}, ips={string.Join(",", addresses.Select(address => address.ToString()))}。", lastError);
     }
 
-    private static async Task<IPAddress[]> ResolvePublicAddressesAsync(string host, CancellationToken cancellationToken)
+    private static Uri? GetConfiguredProxy(Uri target, IWebProxy proxy)
     {
-        IPAddress[] addresses;
-        if (IPAddress.TryParse(host, out var literal))
-        {
-            addresses = [literal];
-        }
-        else
-        {
-            addresses = await Dns.GetHostAddressesAsync(host, cancellationToken).ConfigureAwait(false);
-        }
+        if (proxy.IsBypassed(target)) return null;
+        var address = proxy.GetProxy(target);
+        return address is not null && address != target ? address : null;
+    }
 
-        if (addresses.Length == 0 || addresses.Any(address => !IsPublicAddress(address)))
-        {
-            throw new HttpRequestException("拒绝连接到非公网或特殊用途 IP 地址。");
-        }
+    private static async Task<IPAddress[]> ResolvePublicAddressesAsync(string host, CancellationToken cancellationToken,
+        bool allowProxyFakeIp = false)
+    {
+        var addresses = IPAddress.TryParse(host, out var literal)
+            ? new[] { literal }
+            : await Dns.GetHostAddressesAsync(host, cancellationToken).ConfigureAwait(false);
+        return FilterPublicAddresses(host, addresses, allowProxyFakeIp);
+    }
 
-        return addresses;
+    private static IPAddress[] FilterPublicAddresses(string host, IPAddress[] addresses, bool allowProxyFakeIp)
+    {
+        bool isDomainName = !IPAddress.TryParse(host, out _);
+        var accepted = addresses.Where(address => IsPublicAddress(address)
+            || allowProxyFakeIp && isDomainName && IsProxyFakeAddress(address)).ToArray();
+        if (accepted.Length == 0)
+        {
+            var ips = addresses.Length == 0 ? "none" : string.Join(",", addresses.Select(address => address.ToString()));
+            var hint = addresses.Any(IsProxyFakeAddress) ? "；检测到 Fake-IP，请检查系统代理或 TUN/DNS 配置" : "";
+            throw new HttpRequestException($"拒绝连接到非公网或特殊用途 IP 地址: host={host}, rejected_ips={ips}{hint}。");
+        }
+        // One private/special DNS answer must not discard other usable public answers.
+        return accepted;
+    }
+
+    private static bool IsProxyFakeAddress(IPAddress address)
+    {
+        var bytes = NormalizeAddress(address).GetAddressBytes();
+        return bytes.Length == 4 ? bytes[0] == 198 && bytes[1] is 18 or 19
+            : bytes[0] == 0x20 && bytes[1] == 0x01 && bytes[2] == 0 && bytes[3] == 2
+              && bytes.Skip(4).Take(2).All(value => value == 0); // 2001:2::/48
     }
 
     private static bool SameHost(string requestHost, string endpointHost)
@@ -142,7 +186,7 @@ public static class SafeHttpTransport
             var isOrchid = bytes[0] == 0x20 && bytes[1] == 0x01 && bytes[2] == 0 && (bytes[3] & 0xF0) == 0x20;
             var isDocumentation = bytes[0] == 0x20 && bytes[1] == 0x01
                                   && bytes[2] == 0x0D && bytes[3] == 0xB8;
-            return isGlobalUnicast && !isSixToFour && !isTeredo && !isOrchid && !isDocumentation
+            return isGlobalUnicast && !IsProxyFakeAddress(address) && !isSixToFour && !isTeredo && !isOrchid && !isDocumentation
                    && !address.IsIPv6LinkLocal
                    && !address.IsIPv6SiteLocal
                    && !address.IsIPv6UniqueLocal
@@ -184,7 +228,7 @@ public static class SafeHttpTransport
         {
             if (!IsAllowedUri(request.RequestUri))
             {
-                throw new HttpRequestException("拒绝发送到无效、非 HTTP(S) 或非标准端口的 URL。");
+                throw new HttpRequestException("拒绝发送到无效或非 HTTP(S) 的 URL。");
             }
 
             var originalContent = await BufferContentAsync(request.Content, cancellationToken).ConfigureAwait(false);
@@ -198,6 +242,10 @@ public static class SafeHttpTransport
             {
                 while (true)
                 {
+                    var selectedProxy = GetConfiguredProxy(currentRequest.RequestUri!, HttpClient.DefaultProxy);
+                    if (selectedProxy is not null)
+                        currentRequest.Options.Set(ConnectionDescription,
+                            $"route=system-proxy, proxy_host={selectedProxy.DnsSafeHost}, proxy_port={selectedProxy.Port}");
                     response = await base.SendAsync(currentRequest, cancellationToken).ConfigureAwait(false);
                     if (!RedirectStatusCodes.Contains(response.StatusCode) || response.Headers.Location is null)
                     {
@@ -239,6 +287,17 @@ public static class SafeHttpTransport
                     currentHasContent = preserveContent;
                     redirectCount++;
                 }
+            }
+            catch (HttpRequestException ex)
+            {
+                response?.Dispose();
+                var uri = currentRequest.RequestUri!;
+                var endpoint = $"{uri.Scheme}://{uri.IdnHost}:{uri.Port}{uri.AbsolutePath}";
+                var connection = currentRequest.Options.TryGetValue(ConnectionDescription, out var description)
+                    ? ", " + description : "";
+                if (ownsCurrentRequest) currentRequest.Dispose();
+                throw new HttpRequestException(ex.HttpRequestError,
+                    $"HTTP 请求失败: endpoint={endpoint}{connection}, error={ex.Message}", ex, ex.StatusCode);
             }
             catch
             {

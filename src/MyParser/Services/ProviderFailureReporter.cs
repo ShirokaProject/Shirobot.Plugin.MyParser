@@ -18,7 +18,7 @@ internal sealed class ProviderFailureReporter(ProviderMessageSender messageSende
             BotLog.Warning($"MyParser provider failure: provider={providerName}, kind={kind}{contextText}");
         else
         {
-            var detail = config.DevelopmentMode ? exception.ToString() : exception.GetBaseException().Message;
+            var detail = config.DevelopmentMode ? exception.ToString() : exception.Message;
             if (!config.DevelopmentMode && detail.Length > 160) detail = detail[..160] + "…";
             BotLog.Error($"MyParser provider failure: provider={providerName}, kind={kind}{contextText}, exception={detail}");
         }

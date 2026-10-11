@@ -4,6 +4,33 @@ using MyParser.Provider.Douyin.Parsing;
 using Shirobot.Plugin.MyParser;
 using Shirobot.Plugin.MyParser.Parsing;
 
+if (args is ["--live-network-cookie-file", var networkCookiePath])
+{
+    typeof(PluginConfig).Assembly.GetType("Shirobot.Plugin.MyParser.MyParserRuntime", true)!
+        .GetProperty("DouyinCookie")!.SetValue(null, File.ReadAllText(networkCookiePath).Trim());
+    using var http = new HttpClient(new NetworkProbe { InnerHandler = Shirobot.Plugin.MyParser.Parsing.SafeHttpTransport.CreateHandler() })
+        { Timeout = TimeSpan.FromSeconds(20) };
+    using var parser = new DouyinParser(new PluginConfig { DouyinFetchComments = false }, http);
+    foreach (var link in new[] { "https://v.douyin.com/9y08g87Ec_g/", "https://v.douyin.com/LkJBc45Qqeg/" })
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(90));
+        var result = await NetworkRetry.ExecuteAsync(token => parser.ParseAsync(link, token), 2, timeout.Token);
+        Console.WriteLine($"parsed={result.AwemeId}, gallery={result.IsGallery}, images={result.Images.Count}, video_qualities={result.Qualities.Count}, music={!string.IsNullOrWhiteSpace(result.MusicUrl)}");
+        var mediaUrl = result.IsGallery ? result.Images.FirstOrDefault()?.LivePhotoUrl : result.Qualities.FirstOrDefault()?.Url;
+        if (!string.IsNullOrWhiteSpace(mediaUrl))
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, mediaUrl);
+            request.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0");
+            request.Headers.TryAddWithoutValidation("Referer", "https://www.douyin.com/");
+            request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(0, 0);
+            using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+            response.EnsureSuccessStatusCode();
+            Console.WriteLine($"media_probe={(int)response.StatusCode}, content_type={response.Content.Headers.ContentType?.MediaType}");
+        }
+    }
+    return;
+}
+
 if (args is ["--live-cookie-file", var cookiePath])
 {
     var cookie = File.ReadAllText(cookiePath).Trim();
@@ -78,5 +105,24 @@ internal sealed class DetailCapture : DelegatingHandler
         }
         else if (element.ValueKind == JsonValueKind.Array)
             foreach (var item in element.EnumerateArray()) Capture(item);
+    }
+}
+
+internal sealed class NetworkProbe : DelegatingHandler
+{
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        var uri = request.RequestUri!;
+        try
+        {
+            var response = await base.SendAsync(request, cancellationToken);
+            Console.WriteLine($"HTTP {(int)response.StatusCode}: {uri.Host}{uri.AbsolutePath}");
+            return response;
+        }
+        catch (HttpRequestException ex)
+        {
+            Console.WriteLine($"network_failure: {ex.Message}");
+            throw;
+        }
     }
 }

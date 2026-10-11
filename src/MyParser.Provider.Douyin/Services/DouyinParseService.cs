@@ -67,16 +67,18 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
             detail = await FetchSharePageDataAsync(awemeId, sourceUrl, cancellationToken);
             phases.Add("share=ok");
         }
-        catch (DouyinParseException ex)
+        catch (Exception ex) when (CanTryAlternative(ex, cancellationToken))
         {
             phases.Add("share=" + ex.Message);
-            await _guestSession.EnsureRegisteredAsync(http, cancellationToken);
+            try { await _guestSession.EnsureRegisteredAsync(http, cancellationToken); }
+            catch (Exception registrationError) when (CanTryAlternative(registrationError, cancellationToken))
+            { phases.Add("guest-register=" + registrationError.Message); }
             try
             {
                 detail = await FetchSharePageDataAsync(awemeId, sourceUrl, cancellationToken);
                 phases.Add("guest-share=ok");
             }
-            catch (DouyinParseException guestEx)
+            catch (Exception guestEx) when (CanTryAlternative(guestEx, cancellationToken))
             {
                 phases.Add("guest-share=" + guestEx.Message);
                 detail = await FetchAwemeDetailAsync(awemeId, sourceUrl, phases, cancellationToken);
@@ -306,13 +308,17 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
             global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser 抖音详情接口响应缺少作品数据: aweme_id={awemeId}, source={source}");
             doc.Dispose();
         }
-        catch (DouyinParseException ex)
+        catch (Exception ex) when (CanTryAlternative(ex, cancellationToken))
         {
             global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser 抖音详情接口失败，尝试备用解析: aweme_id={awemeId}, source={source}, error={ex.Message}");
         }
 
         return null;
     }
+
+    private static bool CanTryAlternative(Exception exception, CancellationToken cancellationToken) =>
+        !cancellationToken.IsCancellationRequested
+        && (exception is DouyinParseException || NetworkRetry.IsTransient(exception));
 
     private async Task<JsonDocument> FetchSharePageDataAsync(string awemeId, string originalUrl, CancellationToken cancellationToken)
     {
@@ -328,24 +334,34 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
                 ? new[] { noteShareUrl, videoShareUrl, originalUrl }
                 : new[] { videoShareUrl, noteShareUrl, originalUrl })
             .Distinct(StringComparer.OrdinalIgnoreCase);
+        Exception? lastNetworkError = null;
         foreach (var shareUrl in urls)
         {
-            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-            using var request = new HttpRequestMessage(HttpMethod.Get, shareUrl);
-            ApplySharePageHeaders(request);
-            AddGuestCookies(request);
-            using var response = await http.SendAsync(request, cancellationToken);
-            _guestSession.Capture(response);
-            var html = await response.Content.ReadAsStringAsync(cancellationToken);
-            _guestSession.CaptureHtml(html);
-            if (response.IsSuccessStatusCode && TryExtractShareAweme(html, awemeId, out var doc))
+            try
             {
-                global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 抖音分享页命中: aweme_id={awemeId}, endpoint={SafeEndpoint(shareUrl)}, elapsed_ms={stopwatch.ElapsedMilliseconds}");
-                return (html, doc);
-            }
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                using var request = new HttpRequestMessage(HttpMethod.Get, shareUrl);
+                ApplySharePageHeaders(request);
+                AddGuestCookies(request);
+                using var response = await http.SendAsync(request, cancellationToken);
+                _guestSession.Capture(response);
+                var html = await response.Content.ReadAsStringAsync(cancellationToken);
+                _guestSession.CaptureHtml(html);
+                if (response.IsSuccessStatusCode && TryExtractShareAweme(html, awemeId, out var doc))
+                {
+                    global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 抖音分享页命中: aweme_id={awemeId}, endpoint={SafeEndpoint(shareUrl)}, elapsed_ms={stopwatch.ElapsedMilliseconds}");
+                    return (html, doc);
+                }
 
-            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 抖音分享页未命中: aweme_id={awemeId}, endpoint={SafeEndpoint(shareUrl)}, http={(int)response.StatusCode}, elapsed_ms={stopwatch.ElapsedMilliseconds}");
+                global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 抖音分享页未命中: aweme_id={awemeId}, endpoint={SafeEndpoint(shareUrl)}, http={(int)response.StatusCode}, elapsed_ms={stopwatch.ElapsedMilliseconds}");
+            }
+            catch (Exception ex) when (NetworkRetry.IsTransient(ex) && !cancellationToken.IsCancellationRequested)
+            {
+                lastNetworkError = ex;
+                global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser 抖音分享页网络失败，尝试备用入口: endpoint={SafeEndpoint(shareUrl)}, error={ex.Message}");
+            }
         }
+        if (lastNetworkError is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(lastNetworkError).Throw();
         throw new DouyinParseException("分享页未命中作品数据");
     }
 
