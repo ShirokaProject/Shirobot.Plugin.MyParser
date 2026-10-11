@@ -33,7 +33,7 @@
             </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>
     </UserControl.Resources>
-    <Border CornerRadius="12" ClipToBounds="True" Background="{DynamicResource CardBg}">
+    <Border CornerRadius="8" ClipToBounds="True" Background="{DynamicResource CardBg}">
         <Grid>
             <Grid IsHitTestVisible="False" ClipToBounds="True">
                 <Border Margin="-28">

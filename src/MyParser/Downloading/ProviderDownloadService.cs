@@ -122,7 +122,9 @@ internal sealed class ProviderDownloadService
         var ffmpeg = ResolveFfmpegPath(config)
                      ?? throw new InvalidOperationException("图文合成音乐需要 ffmpeg；请配置 FfmpegPath 或将 ffmpeg 加入 PATH。");
         var duration = await ProbeMediaDurationAsync(ffmpeg, stillImage ? audioPath! : visualPath, cancellationToken, video: !stillImage);
+        var originalDuration = duration;
         if (!stillImage) duration *= loopCount;
+        if (mixAudio) duration = Math.Max(duration, await ProbeMediaDurationAsync(ffmpeg, audioPath!, cancellationToken));
         var psi = new ProcessStartInfo
         {
             FileName = ffmpeg,
@@ -142,7 +144,7 @@ internal sealed class ProviderDownloadService
         else
         {
             psi.ArgumentList.Add("-stream_loop");
-            psi.ArgumentList.Add((loopCount - 1).ToString(CultureInfo.InvariantCulture));
+            psi.ArgumentList.Add(mixAudio ? "-1" : (loopCount - 1).ToString(CultureInfo.InvariantCulture));
         }
 
         psi.ArgumentList.Add("-i");
@@ -150,7 +152,7 @@ internal sealed class ProviderDownloadService
         if (mixAudio)
         {
             foreach (var argument in new[] { "-i", audioPath!, "-filter_complex",
-                "[0:a:0]apad[original];[1:a:0]apad[music];[original][music]amix=inputs=2:duration=longest:dropout_transition=0:normalize=1[mixed]",
+                $"[0:a:0]atrim=duration={originalDuration.ToString(CultureInfo.InvariantCulture)},apad[original];[1:a:0]apad[music];[original][music]amix=inputs=2:duration=longest:dropout_transition=0:normalize=1[mixed]",
                 "-map", "0:v:0", "-map", "[mixed]" })
                 psi.ArgumentList.Add(argument);
         }

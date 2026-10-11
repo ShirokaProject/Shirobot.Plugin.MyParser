@@ -39,8 +39,14 @@ internal static class AudioMixVerification
                 var sound = streams.Single(s => s.GetProperty("codec_type").GetString() == "audio");
                 if (sound.GetProperty("codec_name").GetString() != "aac") throw new Exception("Mixed output is not AAC.");
                 var picture = streams.Single(s => s.GetProperty("codec_type").GetString() == "video");
-                if (int.Parse(picture.GetProperty("nb_read_frames").GetString()!) != loops * 30) throw new Exception("Video looping changed.");
-                if (Math.Abs(double.Parse(sound.GetProperty("duration").GetString()!, CultureInfo.InvariantCulture) - loops) > .03) throw new Exception("Audio duration changed.");
+                using var musicProbe = JsonDocument.Parse(await Run("ffprobe", "-v", "error", "-show_format", "-of", "json", music));
+                var musicDuration = double.Parse(musicProbe.RootElement.GetProperty("format").GetProperty("duration").GetString()!, CultureInfo.InvariantCulture);
+                var expectedDuration = Math.Max(loops, musicDuration);
+                var outputDuration = double.Parse(sound.GetProperty("duration").GetString()!, CultureInfo.InvariantCulture);
+                if (Math.Abs(outputDuration - expectedDuration) > .08) throw new Exception("Background music was truncated or output duration changed.");
+                if (Math.Abs(double.Parse(picture.GetProperty("duration").GetString()!, CultureInfo.InvariantCulture) - outputDuration) > .03)
+                    throw new Exception("Picture ended before the soundtrack.");
+                if (int.Parse(picture.GetProperty("nb_read_frames").GetString()!) < loops * 30) throw new Exception("Minimum video looping changed.");
                 var decoded = Path.Combine(directory, "decoded.f32");
                 await Run("ffmpeg", "-y", "-v", "error", "-i", output, "-map", "0:a:0", "-ar", "48000", "-ac", "1", "-f", "f32le", decoded);
                 var data = File.ReadAllBytes(decoded);
@@ -50,9 +56,14 @@ internal static class AudioMixVerification
                 if (Math.Abs(voice - .0625) > .008 || Math.Abs(bg - .0625) > .008) throw new Exception("Both source tones must survive at half gain without amplification.");
                 if (loops == 3)
                 {
-                    if (Magnitude(pcm, 440, 2.6) < .04) throw new Exception("Original audio did not loop.");
+                    if (Magnitude(pcm, 440, 2.6) > .005) throw new Exception("Original audio repeated after its first pass.");
                     if (music != shortMusic && Magnitude(pcm, 880, 2.6) < .04) throw new Exception("Background audio was lost later in the video.");
                     if (music == shortMusic && Magnitude(pcm, 880, 2.6) > .005) throw new Exception("Short background music was repeated instead of padded.");
+                }
+                if (music != shortMusic)
+                {
+                    if (Magnitude(pcm, 440, 4.5) > .005) throw new Exception("Original audio repeated while music continued.");
+                    if (Magnitude(pcm, 880, 4.5) < .04) throw new Exception("Background music did not play to its end.");
                 }
                 // Video packets must be copied unchanged, not re-encoded.
                 using var sourcePackets = JsonDocument.Parse(await Run("ffprobe", "-v", "error", "-select_streams", "v:0", "-show_packets", "-show_data_hash", "sha256", "-of", "json", video));

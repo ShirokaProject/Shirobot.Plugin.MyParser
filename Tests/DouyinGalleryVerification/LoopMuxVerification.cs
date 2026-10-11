@@ -75,7 +75,14 @@ internal static class LoopMuxVerification
                 var visual = streams.Single(s => s.GetProperty("codec_type").GetString() == "video");
                 var frames = int.Parse(visual.GetProperty("nb_read_frames").GetString()!, CultureInfo.InvariantCulture);
                 var duration = double.Parse(visual.GetProperty("duration").GetString()!, CultureInfo.InvariantCulture);
-                if (frames != loops * originalFrames || Math.Abs(duration - loops * originalDuration) > .1) throw new Exception($"Incorrect looping: frames={frames}, duration={duration}, loops={loops}");
+                var expectedDuration = loops * originalDuration;
+                if (hasEmbeddedAudio && audio is not null)
+                {
+                    using var musicProbe = JsonDocument.Parse(await RunAsync("ffprobe", "-v", "error", "-show_format", "-of", "json", audio));
+                    expectedDuration = Math.Max(expectedDuration,
+                        double.Parse(musicProbe.RootElement.GetProperty("format").GetProperty("duration").GetString()!, CultureInfo.InvariantCulture));
+                }
+                if (frames < loops * originalFrames || Math.Abs(duration - expectedDuration) > .1) throw new Exception($"Incorrect looping: frames={frames}, duration={duration}, loops={loops}");
                 if (streams.Count(s => s.GetProperty("codec_type").GetString() == "audio") != (audio is null && !hasEmbeddedAudio ? 0 : 1)) throw new Exception("Incorrect audio track count.");
                 if (hasEmbeddedAudio && audio is null || !hasEmbeddedAudio && audio is not null && Path.GetExtension(audio) == ".mp3")
                 {

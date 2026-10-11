@@ -50,7 +50,7 @@
         </ResourceDictionary>
     </UserControl.Resources>
 
-    <Border CornerRadius="12" ClipToBounds="True" BorderThickness="0"
+    <Border CornerRadius="8" ClipToBounds="True" BorderThickness="0"
             Background="{DynamicResource CardBg}">
         <Grid>
             <!-- 顶部封面渐隐到卡片底色 -->

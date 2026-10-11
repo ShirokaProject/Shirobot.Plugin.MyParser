@@ -54,7 +54,7 @@
     <Border Classes="PremiumCard"
             Width="720"
             Height="{Binding CanvasHeight}"
-            CornerRadius="8"
+            CornerRadius="6"
             ClipToBounds="True"
             Background="{DynamicResource CardFallbackBg}">
         <Grid>
