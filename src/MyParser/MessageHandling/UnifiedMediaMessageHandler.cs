@@ -20,8 +20,9 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
     {
         if (media.Kind == ParsedMediaKind.Video)
             BotLog.Info($"MyParser 视频投递计划: provider={media.ProviderId}, media_id={media.MediaId}, preview_only={media.Attributes.GetValueOrDefault("preview_only", "false")}, video_streams={media.Assets.Count(asset => asset.Kind == MediaAssetKind.Video)}, audio_streams={media.Assets.Count(asset => asset.Kind == MediaAssetKind.Audio)}, development_mode={Config.DevelopmentMode}, send_video_segment={Config.SendVideoSegment}");
+        var coverEnabled = Config.IsCoverEnabled(media.ProviderId);
         var coverSent = false;
-        if (Config.IsCoverEnabled(media.ProviderId))
+        if (coverEnabled)
         {
             coverSent = await SendCoverAsync(message, media, cancellationToken).ConfigureAwait(false);
         }
@@ -56,7 +57,7 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
             }
         }
 
-        if (!coverSent && media.ProviderId is ("bilibili" or "bilibili-bangumi")
+        if (coverEnabled && !coverSent && media.ProviderId is ("bilibili" or "bilibili-bangumi")
             && media.Kind is ParsedMediaKind.Video or ParsedMediaKind.Collection)
         {
             var pageCount = int.TryParse(media.Attributes.GetValueOrDefault("pages"), out var pages)
