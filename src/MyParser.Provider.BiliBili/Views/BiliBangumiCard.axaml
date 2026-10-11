@@ -16,7 +16,6 @@
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Light">
                     <SolidColorBrush x:Key="CardBg" Color="#E9ECEF" />
-                    <SolidColorBrush x:Key="AmbientGlow" Color="#FCE7F3" />
                     <SolidColorBrush x:Key="TextTitle" Color="#1D1B20" />
                     <SolidColorBrush x:Key="TextMeta" Color="#49454F" />
                     <SolidColorBrush x:Key="TextDesc" Color="#49454F" />
@@ -33,7 +32,6 @@
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <SolidColorBrush x:Key="CardBg" Color="#343A40" />
-                    <SolidColorBrush x:Key="AmbientGlow" Color="#452738" />
                     <SolidColorBrush x:Key="TextTitle" Color="#F3EEF6" />
                     <SolidColorBrush x:Key="TextMeta" Color="#C9C4D0" />
                     <SolidColorBrush x:Key="TextDesc" Color="#C9C4D0" />
@@ -55,12 +53,6 @@
     <Border CornerRadius="12" ClipToBounds="True" BorderThickness="0"
             Background="{DynamicResource CardBg}">
         <Grid>
-            <!-- 底层漫反射光晕 -->
-            <Border Width="260" Height="260" CornerRadius="130"
-                    HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                    Margin="0,0,-50,-50" Background="{DynamicResource AmbientGlow}"
-                    Opacity="0.45" IsHitTestVisible="False" />
-
             <!-- 顶部封面渐隐到卡片底色 -->
             <Border Height="{Binding CoverHeight}" VerticalAlignment="Top" ClipToBounds="True">
                 <Border.OpacityMask>
