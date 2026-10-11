@@ -1,0 +1,81 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+    <Version>0.6.2</Version>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+        <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+        <LocalSharpMp4Root>$(MSBuildProjectDirectory)\..\SharpMP4\src</LocalSharpMp4Root>
+        <ShiroBotPluginSharedAssemblies>ShiroBot.Model.QQ;ShiroBot.Model.Discord;ShiroBot.Model.Telegram</ShiroBotPluginSharedAssemblies>
+        <ShiroBotPluginPackagingEnabled Condition="'$(Configuration)' == 'Release'">true</ShiroBotPluginPackagingEnabled>
+        <ShiroBotAvaloniaPreviewerSupport Condition="'$(Configuration)' == 'Debug'">true</ShiroBotAvaloniaPreviewerSupport>
+        <DefineConstants Condition="'$(UseShiroBotSource)' == 'true'">$(DefineConstants);SHIROBOT_SOURCE</DefineConstants>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+        <ShiroBotPluginPackagingEnabled>false</ShiroBotPluginPackagingEnabled>
+        <DebugType>portable</DebugType>
+        <DebugSymbols>true</DebugSymbols>
+        <DisableFastUpToDateCheck>true</DisableFastUpToDateCheck>
+    </PropertyGroup>
+
+    <Import Project="$(ShiroBotSourceRoot)\SDK\buildTransitive\ShiroBot.SDK.props"
+            Condition="'$(UseShiroBotSource)' == 'true'" />
+
+    <ItemGroup>
+        <PackageReference Include="VideoLibrary" />
+        <PackageReference Include="ShiroBot.SDK" Condition="'$(UseShiroBotSource)' != 'true'" />
+        <PackageReference Include="SilkCodec.NET" />
+        <PackageReference Include="LightDl" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\MyParser.Sharing\MyParser.Sharing.csproj" />
+        <ProjectReference Include="$(ShiroBotSourceRoot)\SDK\ShiroBot.SDK.csproj"
+                          Private="false"
+                          Condition="'$(UseShiroBotSource)' == 'true'" />
+        <ProjectReference Include="$(ShiroBotSourceRoot)\Models\QQ\ShiroBot.Model.QQ.csproj"
+                          Private="false"
+                          Condition="'$(UseShiroBotSource)' == 'true'" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Reference Include="SharpMP4" HintPath="$(LocalSharpMp4Root)\SharpMP4\bin\$(Configuration)\net10.0\$(RuntimeIdentifier)\SharpMP4.dll" />
+        <Reference Include="SharpISOBMFF" HintPath="$(LocalSharpMp4Root)\SharpISOBMFF\bin\$(Configuration)\net10.0\SharpISOBMFF.dll" />
+        <Reference Include="SharpMP4Common" HintPath="$(LocalSharpMp4Root)\SharpMP4Common\bin\$(Configuration)\net10.0\SharpMP4Common.dll" />
+        <Reference Include="SharpAV1" HintPath="$(LocalSharpMp4Root)\SharpAV1\bin\$(Configuration)\net10.0\SharpAV1.dll" />
+        <Reference Include="SharpH264" HintPath="$(LocalSharpMp4Root)\SharpH264\bin\$(Configuration)\net10.0\SharpH264.dll" />
+        <Reference Include="SharpH265" HintPath="$(LocalSharpMp4Root)\SharpH265\bin\$(Configuration)\net10.0\SharpH265.dll" />
+        <Reference Include="SharpH266" HintPath="$(LocalSharpMp4Root)\SharpH266\bin\$(Configuration)\net10.0\SharpH266.dll" />
+        <Reference Include="SharpH26X" HintPath="$(LocalSharpMp4Root)\SharpH26X\bin\$(Configuration)\net10.0\SharpH26X.dll" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Compile Include="..\MyParser.Provider.*\**\*.cs"
+                 Exclude="..\MyParser.Provider.*\bin\**;..\MyParser.Provider.*\obj\**"
+                 Link="Providers\%(RecursiveDir)%(Filename)%(Extension)" />
+        <AvaloniaXaml Include="..\MyParser.Provider.*\**\*.axaml"
+                      Link="Providers\%(RecursiveDir)%(Filename)%(Extension)" />
+    </ItemGroup>
+
+    <Target Name="BuildLocalSharpMp4" BeforeTargets="ResolveAssemblyReferences">
+        <MSBuild Projects="$(LocalSharpMp4Root)\SharpMP4\SharpMP4.csproj"
+                 Targets="Restore;Build"
+                 Properties="Configuration=$(Configuration);TargetFramework=net10.0;AutoGenerateCode=false;GeneratePackageOnBuild=false;ManagePackageVersionsCentrally=false" />
+    </Target>
+
+    <Target Name="RemoveBundledDependencySymbolsFromPublish" AfterTargets="Publish">
+        <ItemGroup>
+            <BundledDependencySymbols Include="$(PublishDir)*.pdb"
+                                      Exclude="$(PublishDir)Shirobot.Plugin.MyParser.pdb" />
+        </ItemGroup>
+        <Delete Files="@(BundledDependencySymbols)" />
+    </Target>
+
+    <Import Project="$(ShiroBotSourceRoot)\SDK\buildTransitive\ShiroBot.SDK.targets"
+            Condition="'$(UseShiroBotSource)' == 'true'" />
+
+
+</Project>

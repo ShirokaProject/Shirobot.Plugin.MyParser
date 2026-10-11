@@ -1,0 +1,104 @@
+using ShiroBot.SDK.Models;
+using ShiroBot.SDK.Core;
+using ShiroBot.SDK.Plugin;
+using Shirobot.Plugin.MyParser.Parsing;
+using MyParser.Provider.BiliBili.Services;
+using MyParser.Provider.BiliBili.Parsing;
+
+namespace MyParser.Provider.BiliBili;
+
+[MyParserProvider("bilibili")]
+public sealed class BilibiliProviderModule : MyParserProviderModuleBase, IProviderTextNormalizer, IIncomingProviderTextNormalizer, ICookieValidator, IProviderCookieStore, IProviderAutoParsePolicy, IProviderResultMessageClassifier, IProviderReplyParseTextBuilder, IProviderMediaCardRendererFactory
+{
+    public override string Id => "bilibili";
+
+    public override string DisplayName => "Bilibili";
+
+    public IProviderMediaCardRenderer CreateMediaCardRenderer(ProviderCardRenderContext context) => new BilibiliMediaCardRenderer(context);
+
+    public IReadOnlyList<ProviderCookieDescriptor> CookieDescriptors =>
+    [
+        new(
+            Id,
+            DisplayName,
+            "bilibili.txt",
+            cookie => MyParserRuntime.BilibiliCookie = cookie,
+            LooksLikeCookie,
+            EmptyHint: "请在插件配置的 Cookie 分组填写哔哩哔哩 Cookie，保存后自动重载。",
+            InvalidHint: "请确保配置内容包含 SESSDATA/bili_jct 等 Cookie。")
+    ];
+
+    public override IReadOnlyList<IParseProvider> CreateProviders(PluginConfig config)
+    {
+        var parser = new BilibiliParser(config);
+        return
+        [
+            new BilibiliArticleParseProvider(parser),
+            new BilibiliBangumiParseProvider(new BilibiliBangumiParser(parser.HttpClient, config), parser),
+            new BilibiliLiveParseProvider(new BilibiliLiveParser(parser.HttpClient)),
+            new BilibiliParseProvider(parser),
+        ];
+    }
+
+    public string? NormalizeParseText(string text)
+    {
+        return BilibiliUrlParser.ExtractStrictBilibiliUrl(text)
+               ?? BilibiliUrlParser.NormalizeStandaloneBilibiliId(text);
+    }
+
+    public string? NormalizeParseText(IncomingMessage message)
+    {
+        var text = message.GetPlainText();
+        return BilibiliUrlParser.ExtractStrictBilibiliUrl(text)
+               ?? BilibiliUrlParser.NormalizeStandaloneBvid(text)
+               ?? BilibiliUrlParser.NormalizeStandaloneBangumiId(text)
+               ?? (BilibiliLightAppUrlExtractor.ExtractParseText(message) is { } extracted
+                   ? BilibiliUrlParser.ExtractStrictBilibiliUrl(extracted)
+                   : null);
+    }
+
+    public bool LooksLikeCookie(string cookie) => BilibiliParser.LooksLikeBilibiliCookie(cookie);
+
+    public bool IsAutoParseEnabled(PluginConfig config) => config.AutoParseBilibiliLinks;
+
+    public bool IsPluginResultMessage(string text)
+    {
+        return text.StartsWith("Bilibili 视频解析", StringComparison.OrdinalIgnoreCase)
+               || text.StartsWith("Bilibili 直播解析", StringComparison.OrdinalIgnoreCase)
+               || text.StartsWith("Bilibili 图文解析", StringComparison.OrdinalIgnoreCase)
+               || text.StartsWith("Bilibili 专栏解析", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public string? TryBuildParseText(IncomingMessage message)
+    {
+        var text = message.GetPlainText().Trim();
+        if (!BilibiliMultiPageReplyCache.TryParsePage(text, out var page))
+        {
+            return null;
+        }
+
+        var reply = message.GetQqReply();
+        var quotedMessageId = message.GetQuote()?.MessageId ?? reply?.MessageId;
+        if (!string.IsNullOrWhiteSpace(quotedMessageId))
+        {
+            var selection = BilibiliMultiPageReplyCache.Resolve(message, quotedMessageId, page, allowSubscribed: false);
+            if (selection is not null) return selection;
+        }
+        if (reply is null)
+        {
+            return null;
+        }
+
+        var repliedText = reply.GetPlainText().Trim();
+        return IsDeferredParseText(repliedText) ? repliedText + page : null;
+    }
+
+    public bool IsDeferredParseText(string text)
+    {
+        return System.Text.RegularExpressions.Regex.IsMatch(
+            text.Trim(),
+            @"^https?://www\.bilibili\.com/video/BV[0-9A-Za-z]{10}/?\?p=\s*$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    }
+
+}

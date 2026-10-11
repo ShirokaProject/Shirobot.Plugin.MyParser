@@ -29,10 +29,10 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Restore
-        run: dotnet restore MyParser.sln
+        run: dotnet restore MyParser.slnx
 
       - name: Publish plugin
-        run: dotnet publish MyParser/Shirobot.Plugin.MyParser.csproj --configuration Release --no-restore -p:CopyPluginToHost=false --output artifact/Shirobot.Plugin.MyParser -v:minimal
+        run: dotnet publish src/MyParser/Shirobot.Plugin.MyParser.csproj --configuration Release --no-restore -p:CopyPluginToHost=false --output artifact/Shirobot.Plugin.MyParser -v:minimal
 
       - name: Collect plugin layout
         shell: pwsh

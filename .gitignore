@@ -48,3 +48,6 @@ Thumbs.db
 # Local launch profiles
 **/Properties/launchSettings.json
 sharpmp4-demo.cs
+
+# Local development host
+.shirobot-dev/

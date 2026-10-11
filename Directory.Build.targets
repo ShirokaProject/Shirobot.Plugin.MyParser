@@ -1,0 +1,10 @@
+<Project>
+  <!-- Run and Debug use the same direct host launch profile; prepare its files during Debug builds. -->
+  <Target Name="PrepareShiroBotDevelopmentHost" AfterTargets="Build"
+          Condition="'$(MSBuildProjectName)' == 'Shirobot.Plugin.MyParser' and '$(Configuration)' == 'Debug' and '$(DesignTimeBuild)' != 'true'">
+    <Exec Condition="'$(OS)' != 'Windows_NT'" WorkingDirectory="$(MSBuildProjectDirectory)"
+          Command="/bin/sh &quot;$(MSBuildThisFileDirectory)scripts/dev.sh&quot; --prepare --no-build" />
+    <Exec Condition="'$(OS)' == 'Windows_NT'" WorkingDirectory="$(MSBuildProjectDirectory)"
+          Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)scripts/dev.ps1&quot; --prepare --no-build" />
+  </Target>
+</Project>

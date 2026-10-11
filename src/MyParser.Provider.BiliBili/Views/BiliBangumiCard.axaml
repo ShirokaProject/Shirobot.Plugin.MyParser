@@ -1,0 +1,150 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:MyParser.Provider.BiliBili.Views"
+             xmlns:collections="using:System.Collections.Generic"
+             x:Class="MyParser.Provider.BiliBili.Views.BiliBangumiCard"
+             x:DataType="vm:BiliCardViewModel"
+             Width="310" MinHeight="450"
+             HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
+    <Design.DataContext>
+        <vm:BiliCardViewModel Title="URARA迷路帖" Description="少女们在迷路町追寻各自的梦想。"
+            VideoMeta="全12集 · 日常 · 漫画改" HasMultiPages="True" CurrentPageText="当前解析 第1/12集" />
+    </Design.DataContext>
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="CardBg" Color="#E9ECEF" />
+                    <SolidColorBrush x:Key="AmbientGlow" Color="#FCE7F3" />
+                    <SolidColorBrush x:Key="TextTitle" Color="#1D1B20" />
+                    <SolidColorBrush x:Key="TextMeta" Color="#49454F" />
+                    <SolidColorBrush x:Key="TextDesc" Color="#49454F" />
+                    <SolidColorBrush x:Key="TagBg" Color="#80E6E0E9" />
+                    <SolidColorBrush x:Key="TagText" Color="#49454F" />
+                    <SolidColorBrush x:Key="PillBg" Color="#75E6E0E9" />
+                    <SolidColorBrush x:Key="MetricNumber" Color="#1D1B20" />
+                    <SolidColorBrush x:Key="MetricLabel" Color="#49454F" />
+                    <SolidColorBrush x:Key="AvatarBorder" Color="#CAC4D0" />
+                    <SolidColorBrush x:Key="BrandText" Color="#79747E" />
+                    <SolidColorBrush x:Key="BiliIconColor" Color="#00AEEC" />
+                    <SolidColorBrush x:Key="MultiPageBarBg" Color="#1200AEEC" />
+                    <SolidColorBrush x:Key="MultiPagePillBg" Color="#2200AEEC" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="CardBg" Color="#343A40" />
+                    <SolidColorBrush x:Key="AmbientGlow" Color="#452738" />
+                    <SolidColorBrush x:Key="TextTitle" Color="#F3EEF6" />
+                    <SolidColorBrush x:Key="TextMeta" Color="#C9C4D0" />
+                    <SolidColorBrush x:Key="TextDesc" Color="#C9C4D0" />
+                    <SolidColorBrush x:Key="TagBg" Color="#7036343B" />
+                    <SolidColorBrush x:Key="TagText" Color="#E6E0E9" />
+                    <SolidColorBrush x:Key="PillBg" Color="#4536343B" />
+                    <SolidColorBrush x:Key="MetricNumber" Color="#F3EEF6" />
+                    <SolidColorBrush x:Key="MetricLabel" Color="#C9C4D0" />
+                    <SolidColorBrush x:Key="AvatarBorder" Color="#49454F" />
+                    <SolidColorBrush x:Key="BrandText" Color="#938F99" />
+                    <SolidColorBrush x:Key="BiliIconColor" Color="#23C9FF" />
+                    <SolidColorBrush x:Key="MultiPageBarBg" Color="#2823C9FF" />
+                    <SolidColorBrush x:Key="MultiPagePillBg" Color="#4023C9FF" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Border CornerRadius="12" ClipToBounds="True" BorderThickness="0"
+            Background="{DynamicResource CardBg}">
+        <Grid>
+            <!-- 底层漫反射光晕 -->
+            <Border Width="260" Height="260" CornerRadius="130"
+                    HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                    Margin="0,0,-50,-50" Background="{DynamicResource AmbientGlow}"
+                    Opacity="0.45" IsHitTestVisible="False" />
+
+            <!-- 顶部封面渐隐到卡片底色 -->
+            <Border Height="{Binding CoverHeight}" VerticalAlignment="Top" ClipToBounds="True">
+                <Border.OpacityMask>
+                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                        <GradientStop Color="#FFFFFFFF" Offset="0.0" />
+                        <GradientStop Color="#FFFFFFFF" Offset="0.55" />
+                        <GradientStop Color="#60FFFFFF" Offset="0.75" />
+                        <GradientStop Color="#00FFFFFF" Offset="0.92" />
+                        <GradientStop Color="#00FFFFFF" Offset="1.0" />
+                    </LinearGradientBrush>
+                </Border.OpacityMask>
+                <Image Source="{Binding Cover}" Stretch="UniformToFill"
+                       HorizontalAlignment="Center" VerticalAlignment="Top" />
+            </Border>
+
+            <StackPanel Spacing="11" Margin="{Binding ContentMargin}" VerticalAlignment="Bottom">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="{Binding Title}" Foreground="{DynamicResource TextTitle}"
+                               FontSize="16" FontWeight="Bold" LineHeight="22" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding VideoMeta}" Foreground="{DynamicResource TextMeta}"
+                               FontSize="10" FontWeight="Medium" TextWrapping="Wrap" />
+                </StackPanel>
+
+                <TextBlock Text="{Binding Description}" IsVisible="{Binding HasDescription}"
+                           Foreground="{DynamicResource TextDesc}" FontSize="11"
+                           LineHeight="17" TextWrapping="Wrap"
+                           MaxLines="{Binding DescriptionMaxLines}" TextTrimming="CharacterEllipsis" />
+
+                <ItemsControl ItemsSource="{Binding Tags}" IsVisible="{Binding HasTags}" Margin="0,-2,0,0">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="x:String">
+                            <Border Background="{DynamicResource TagBg}" CornerRadius="4"
+                                    Padding="6,2" Margin="0,0,5,4">
+                                <TextBlock Text="{Binding}" FontSize="10"
+                                           Foreground="{DynamicResource TagText}" FontWeight="Medium" />
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- 底部多P条：利用半透明主题青蓝色块拉开层次 -->
+                <Border IsVisible="{Binding HasMultiPages}"
+                        Background="{DynamicResource MultiPageBarBg}"
+                        CornerRadius="9"
+                        Padding="6,4"
+                        Height="35">
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <!-- 明显的内嵌聚焦胶囊 -->
+                        <Border Background="{DynamicResource MultiPagePillBg}"
+                                CornerRadius="6"
+                                Padding="6,3">
+                            <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                                <Viewbox Width="11" Height="11" Stretch="Uniform"
+                                         VerticalAlignment="Center">
+                                    <Path Data="M0 0h10v2H0V0zm0 4h10v2H0V4zm0 4h7v2H0V8zm12-4v7l5-3.5L12 4z"
+                                          Fill="{DynamicResource BiliIconColor}"
+                                          Width="17" Height="11" Stretch="Fill" />
+                                </Viewbox>
+                                <TextBlock Text="{Binding CurrentPageText}"
+                                           Foreground="{DynamicResource TextTitle}"
+                                           FontSize="10.5"
+                                           FontWeight="Bold"
+                                           VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 紧随其后的提示文案 -->
+                        <TextBlock Text="10min内回复数字解析剧集"
+                                   Foreground="{DynamicResource TextMeta}"
+                                   FontSize="9"
+                                   FontWeight="Medium"
+                                   Opacity="0.85"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+                <TextBlock Text="{Binding BrandText}" Foreground="{DynamicResource BrandText}"
+                           FontSize="7" Opacity="0.5" HorizontalAlignment="Right" Margin="0,2,0,0" />
+            </StackPanel>
+
+        </Grid>
+    </Border>
+</UserControl>

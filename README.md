@@ -1,6 +1,6 @@
 # Shirobot.Plugin.MyParser
 
-当前发布：`v0.6.2`。本版本使用 SDK `0.9.8`，需要宿主 `0.9.8` 的新 ABI；旧宿主不兼容。
+当前发布：`v0.6.2`。本版本使用 SDK `1.0.0`，需要宿主 `1.0.0` 的临时目录 API。
 
 <p align="center"><img src="./Assets/icon.png" alt="MyParser" width="160" /></p>
 
@@ -22,7 +22,7 @@
 
 直接在Shirobot插件市场安装 / 从Release下载zip解压dll放入plugins插件目录。
 
-兼容要求：ShiroBot 宿主最低版本为 0.9.8，插件使用 ShiroBot.SDK 0.9.8（API 0.9.2）。
+兼容要求：ShiroBot 宿主最低版本为 1.0.0，插件使用 ShiroBot.SDK 1.0.0。
 
 
 ## 使用
@@ -31,7 +31,9 @@
 
 ## 配置
 
-完整默认配置见 [config.example.toml](./config.example.toml)，按通用设置和各平台集中排列。已有配置的顺序由宿主保留，可参照示例整理并保留自己的值。
+配置项可在插件配置界面或 `config.toml` 中查看和修改；修改后自动重载。
+
+所有媒体下载、图片落盘、直播分片和转码中间文件均通过宿主 `CreateTempDirectory` API 创建独立临时目录，创建后保留 6 小时，由宿主自动清理；插件不再启动清扫或发送后删除临时文件。旧配置 `delete_local_video_after_send`、`delete_local_video_delay_seconds` 不再使用。
 
 抖音动态图片会用 SharpMP4 循环并合成配乐；静图生成视频以及不支持的媒体回退需要本机安装 `ffmpeg` 和 `ffprobe`。
 多张图文会优先使用 QQ 合并转发，其他平台会按图片顺序作为普通消息发送；包含动态图片时发送 Live Photo 视频，配乐合成失败则单独发送音乐。
@@ -61,10 +63,10 @@ X (Twitter) 的解析、封面与视频下载共用 `http_proxy`；在无法直�
 ```bash
 git submodule update --init --recursive
 dotnet build MyParser.slnx -c Release -p:CopyPluginToHost=false
-dotnet publish MyParser/Shirobot.Plugin.MyParser.csproj -c Release -p:CopyPluginToHost=false -o release/Shirobot.Plugin.MyParser
+dotnet publish src/MyParser/Shirobot.Plugin.MyParser.csproj -c Release -p:CopyPluginToHost=false -o release/Shirobot.Plugin.MyParser
 ```
 
-源码按主插件（`MyParser/`）、共享层（`MyParser.Sharing/`）和平台模块（`MyParser.Provider.*/`）组织。主插件构建时包含各平台源码，发布时合并依赖。
+源码、共享层、平台模块和 SharpMP4 子模块统一放在 `src/` 下；测试项目保留在 `Tests/`。主插件构建时包含各平台源码，发布时合并依赖。
 
 ## 说明
 
@@ -73,3 +75,26 @@ dotnet publish MyParser/Shirobot.Plugin.MyParser.csproj -c Release -p:CopyPlugin
 本项目与第三方平台无隶属或背书关系。许可证：[Apache License 2.0](./LICENSE)。
 
 配置通过宿主统一接口应用；保存后等待应用完成。修改 config.toml 也由宿主监听并应用，无需重新加载插件。
+
+## 本地开发与调试
+
+源码项目位于 `src/MyParser/`，共享代码和 Provider 项目也放在 `src/`；
+开发脚本统一放在根目录 `scripts/`。打开 `MyParser.slnx`，使用 **Debug** 配置。
+首次先构建主插件项目，再选择 **ShiroBot** 运行配置，直接点 Run 或 Debug。
+Debug 构建会准备宿主并复制 DLL / PDB，Release 仍使用分发打包。
+
+在仓库根目录也可以运行：
+
+```bash
+sh scripts/dev.sh --prepare  # 只构建并准备宿主
+sh scripts/dev.sh --no-console  # 构建并启动
+```
+
+Windows 使用 `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 --no-console`。
+开发宿主和配置位于 `.shirobot-dev/host/<RID>/`，新配置默认端口 7003。
+已有配置和插件数据保留。未发布的 SDK 版本需要先准备同版本的本地宿主。
+
+AXAML 预览在 Debug 开启：先构建，再在 Rider 预览器中选择主插件项目。
+不要为设计预览修改宿主运行配置。
+若点击 Debug 仍运行旧插件，确认启动前有 Build，并在 Rider 的
+Toolset and Build 设置中关闭 Use ReSharper Build，确保 MSBuild 执行复制步骤。

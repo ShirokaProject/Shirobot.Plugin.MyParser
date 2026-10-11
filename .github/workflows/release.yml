@@ -35,10 +35,10 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Restore
-        run: dotnet restore MyParser.sln
+        run: dotnet restore MyParser.slnx
 
       - name: Publish plugin
-        run: dotnet publish MyParser/Shirobot.Plugin.MyParser.csproj --configuration Release --no-restore -p:CopyPluginToHost=false --output release/Shirobot.Plugin.MyParser -v:minimal
+        run: dotnet publish src/MyParser/Shirobot.Plugin.MyParser.csproj --configuration Release --no-restore -p:CopyPluginToHost=false --output release/Shirobot.Plugin.MyParser -v:minimal
 
       - name: Verify Cookie migration and merged plugin hot reload
         run: dotnet run --project Tests/CookieVerification --configuration Release -p:CopyPluginToHost=false -- release/Shirobot.Plugin.MyParser/Shirobot.Plugin.MyParser.dll

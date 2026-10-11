@@ -1,0 +1,245 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:MyParser.Provider.BiliBili.Views"
+             xmlns:collections="using:System.Collections.Generic"
+             x:Class="MyParser.Provider.BiliBili.Views.BiliCard"
+             x:DataType="vm:BiliCardViewModel"
+             Width="310" MinHeight="450"
+             HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
+    <Design.DataContext>
+        <vm:BiliCardViewModel
+            Title="[MuseDash] 电波妄想美少女Q Lv.9 AP 手元解析"
+            Description="计划通曲包更新实战测试，带来大触模式全连全 AP 手元演示与配置拆解，重点分析中后段高密度交互与双押判定技巧。"
+            AuthorName="格瑞普喵" AuthorMeta="IP属地：广东"
+            VideoMeta="10-24 发布 · 音游 · BV1xx411c7xx"
+            DurationText="02:08" ViewCount="14.8万" LikeCount="2.6万"
+            CoinCount="7,305" CollectCount="9,142"
+            HasMultiPages="True" CurrentPageText="当前解析 P1/3">
+            <vm:BiliCardViewModel.Tags>
+                <collections:List x:TypeArguments="x:String">
+                    <x:String>#手元AP</x:String>
+                    <x:String>#MuseDash</x:String>
+                    <x:String>#音游大触</x:String>
+                </collections:List>
+            </vm:BiliCardViewModel.Tags>
+        </vm:BiliCardViewModel>
+    </Design.DataContext>
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="CardBg" Color="#E9ECEF" />
+                    <SolidColorBrush x:Key="AmbientGlow" Color="#FCE7F3" />
+                    <SolidColorBrush x:Key="TextTitle" Color="#1D1B20" />
+                    <SolidColorBrush x:Key="TextMeta" Color="#49454F" />
+                    <SolidColorBrush x:Key="TextDesc" Color="#49454F" />
+                    <SolidColorBrush x:Key="TagBg" Color="#80E6E0E9" />
+                    <SolidColorBrush x:Key="TagText" Color="#49454F" />
+                    <SolidColorBrush x:Key="PillBg" Color="#75E6E0E9" />
+                    <SolidColorBrush x:Key="MetricNumber" Color="#1D1B20" />
+                    <SolidColorBrush x:Key="MetricLabel" Color="#49454F" />
+                    <SolidColorBrush x:Key="AvatarBorder" Color="#CAC4D0" />
+                    <SolidColorBrush x:Key="BrandText" Color="#79747E" />
+                    <SolidColorBrush x:Key="BiliIconColor" Color="#00AEEC" />
+                    <SolidColorBrush x:Key="MultiPageBarBg" Color="#1200AEEC" />
+                    <SolidColorBrush x:Key="MultiPagePillBg" Color="#2200AEEC" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="CardBg" Color="#343A40" />
+                    <SolidColorBrush x:Key="AmbientGlow" Color="#452738" />
+                    <SolidColorBrush x:Key="TextTitle" Color="#F3EEF6" />
+                    <SolidColorBrush x:Key="TextMeta" Color="#C9C4D0" />
+                    <SolidColorBrush x:Key="TextDesc" Color="#C9C4D0" />
+                    <SolidColorBrush x:Key="TagBg" Color="#7036343B" />
+                    <SolidColorBrush x:Key="TagText" Color="#E6E0E9" />
+                    <SolidColorBrush x:Key="PillBg" Color="#4536343B" />
+                    <SolidColorBrush x:Key="MetricNumber" Color="#F3EEF6" />
+                    <SolidColorBrush x:Key="MetricLabel" Color="#C9C4D0" />
+                    <SolidColorBrush x:Key="AvatarBorder" Color="#49454F" />
+                    <SolidColorBrush x:Key="BrandText" Color="#938F99" />
+                    <SolidColorBrush x:Key="BiliIconColor" Color="#23C9FF" />
+                    <SolidColorBrush x:Key="MultiPageBarBg" Color="#2823C9FF" />
+                    <SolidColorBrush x:Key="MultiPagePillBg" Color="#4023C9FF" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Border CornerRadius="12" ClipToBounds="True" BorderThickness="0"
+            Background="{DynamicResource CardBg}">
+        <Grid>
+            <!-- 底层漫反射光晕 -->
+            <Border Width="260" Height="260" CornerRadius="130"
+                    HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                    Margin="0,0,-50,-50" Background="{DynamicResource AmbientGlow}"
+                    Opacity="0.45" IsHitTestVisible="False" />
+
+            <!-- 顶部封面渐隐到卡片底色 -->
+            <Border Height="{Binding CoverHeight}" VerticalAlignment="Top" ClipToBounds="True">
+                <Border.OpacityMask>
+                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                        <GradientStop Color="#FFFFFFFF" Offset="0.0" />
+                        <GradientStop Color="#FFFFFFFF" Offset="0.55" />
+                        <GradientStop Color="#60FFFFFF" Offset="0.75" />
+                        <GradientStop Color="#00FFFFFF" Offset="0.92" />
+                        <GradientStop Color="#00FFFFFF" Offset="1.0" />
+                    </LinearGradientBrush>
+                </Border.OpacityMask>
+                <Image Source="{Binding Cover}" Stretch="UniformToFill"
+                       HorizontalAlignment="Center" VerticalAlignment="Top" />
+            </Border>
+
+            <StackPanel Spacing="11" Margin="{Binding ContentMargin}" VerticalAlignment="Bottom">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="{Binding Title}" Foreground="{DynamicResource TextTitle}"
+                               FontSize="16" FontWeight="Bold" LineHeight="22" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding VideoMeta}" Foreground="{DynamicResource TextMeta}"
+                               FontSize="10" FontWeight="Medium" TextWrapping="Wrap" />
+                </StackPanel>
+
+                <TextBlock Text="{Binding Description}" IsVisible="{Binding HasDescription}"
+                           Foreground="{DynamicResource TextDesc}" FontSize="11"
+                           LineHeight="17" TextWrapping="Wrap"
+                           MaxLines="{Binding DescriptionMaxLines}" TextTrimming="CharacterEllipsis" />
+
+                <ItemsControl ItemsSource="{Binding Tags}" IsVisible="{Binding HasTags}" Margin="0,-2,0,0">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="x:String">
+                            <Border Background="{DynamicResource TagBg}" CornerRadius="4"
+                                    Padding="6,2" Margin="0,0,5,4">
+                                <TextBlock Text="{Binding}" FontSize="10"
+                                           Foreground="{DynamicResource TagText}" FontWeight="Medium" />
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <Border Background="{DynamicResource PillBg}" BorderThickness="0"
+                        CornerRadius="12" Padding="4,9">
+                    <UniformGrid Columns="4">
+                        <StackPanel Spacing="2" HorizontalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="3" HorizontalAlignment="Center">
+                                <Path Data="M8 5v14l11-7z"
+                                      Fill="{DynamicResource MetricLabel}" Stretch="Uniform"
+                                      Width="8" Height="8" VerticalAlignment="Center" />
+                                <TextBlock Text="播放" Foreground="{DynamicResource MetricLabel}"
+                                           FontSize="9" FontWeight="Medium" />
+                            </StackPanel>
+                            <TextBlock Text="{Binding ViewCount}" Foreground="{DynamicResource MetricNumber}"
+                                       FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" />
+                        </StackPanel>
+                        <StackPanel Spacing="2" HorizontalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="3" HorizontalAlignment="Center">
+                                <Path Data="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"
+                                      Fill="{DynamicResource MetricLabel}" Stretch="Uniform"
+                                      Width="8" Height="8" VerticalAlignment="Center" />
+                                <TextBlock Text="点赞" Foreground="{DynamicResource MetricLabel}"
+                                           FontSize="9" FontWeight="Medium" />
+                            </StackPanel>
+                            <TextBlock Text="{Binding LikeCount}" Foreground="{DynamicResource MetricNumber}"
+                                       FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" />
+                        </StackPanel>
+                        <StackPanel Spacing="2" HorizontalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="3" HorizontalAlignment="Center">
+                                <Path Data="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-2.5-9.5h5v3h-5zm0-2h5v1h-5z"
+                                      Fill="{DynamicResource MetricLabel}" Stretch="Uniform"
+                                      Width="8" Height="8" VerticalAlignment="Center" />
+                                <TextBlock Text="投币" Foreground="{DynamicResource MetricLabel}"
+                                           FontSize="9" FontWeight="Medium" />
+                            </StackPanel>
+                            <TextBlock Text="{Binding CoinCount}" Foreground="{DynamicResource MetricNumber}"
+                                       FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" />
+                        </StackPanel>
+                        <StackPanel Spacing="2" HorizontalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="3" HorizontalAlignment="Center">
+                                <Path Data="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"
+                                      Fill="{DynamicResource MetricLabel}" Stretch="Uniform"
+                                      Width="8" Height="8" VerticalAlignment="Center" />
+                                <TextBlock Text="收藏" Foreground="{DynamicResource MetricLabel}"
+                                           FontSize="9" FontWeight="Medium" />
+                            </StackPanel>
+                            <TextBlock Text="{Binding CollectCount}" Foreground="{DynamicResource MetricNumber}"
+                                       FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" />
+                        </StackPanel>
+                    </UniformGrid>
+                </Border>
+
+                <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center" Margin="0,2,0,0">
+                    <Grid ColumnDefinitions="32,*" Margin="0,0,7,0" VerticalAlignment="Center">
+                        <Ellipse Width="32" Height="32" Stroke="{DynamicResource AvatarBorder}" StrokeThickness="1.2">
+                            <Ellipse.Fill>
+                                <ImageBrush Source="{Binding Avatar}" Stretch="UniformToFill" />
+                            </Ellipse.Fill>
+                        </Ellipse>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="0" Margin="7,0,0,0">
+                            <TextBlock Text="{Binding AuthorName}" Foreground="{DynamicResource TextTitle}"
+                                       FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{Binding AuthorMeta}" IsVisible="{Binding HasAuthorMeta}"
+                                       Foreground="{DynamicResource TextMeta}" FontSize="8.5" Opacity="0.4" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </Grid>
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Bottom">
+                        <TextBlock Text="{Binding BrandText}" Foreground="{DynamicResource BrandText}"
+                                   FontSize="7" Opacity="0.5" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- 底部多P条：利用半透明主题青蓝色块拉开层次 -->
+                <Border IsVisible="{Binding HasMultiPages}"
+                        Background="{DynamicResource MultiPageBarBg}"
+                        CornerRadius="9"
+                        Padding="6,4"
+                        Height="35">
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <!-- 明显的内嵌聚焦胶囊 -->
+                        <Border Background="{DynamicResource MultiPagePillBg}"
+                                CornerRadius="6"
+                                Padding="6,3">
+                            <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                                <Viewbox Width="11" Height="11" Stretch="Uniform"
+                                         VerticalAlignment="Center">
+                                    <Path Data="M0 0h10v2H0V0zm0 4h10v2H0V4zm0 4h7v2H0V8zm12-4v7l5-3.5L12 4z"
+                                          Fill="{DynamicResource BiliIconColor}"
+                                          Width="17" Height="11" Stretch="Fill" />
+                                </Viewbox>
+                                <TextBlock Text="{Binding CurrentPageText}"
+                                           Foreground="{DynamicResource TextTitle}"
+                                           FontSize="10.5"
+                                           FontWeight="Bold"
+                                           VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 紧随其后的提示文案 -->
+                        <TextBlock Text="10min内回复数字解析对应P"
+                                   Foreground="{DynamicResource TextMeta}"
+                                   FontSize="9"
+                                   FontWeight="Medium"
+                                   Opacity="0.85"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- 独立置顶，确保时长胶囊在封面和内容之上 -->
+            <Border ZIndex="10" Height="18"
+                    Background="#2A000000" BorderBrush="#25FFFFFF" BorderThickness="1"
+                    CornerRadius="6" Padding="6,2" HorizontalAlignment="Right"
+                    VerticalAlignment="Top" Margin="0,12,12,0">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                    <Path Data="M8 5v14l11-7z" Fill="#FFFFFF" Stretch="Uniform"
+                          Width="6" Height="6" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding DurationText}" Foreground="#FFFFFF" FontSize="7"
+                               FontWeight="Medium" VerticalAlignment="Center" />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
+</UserControl>
