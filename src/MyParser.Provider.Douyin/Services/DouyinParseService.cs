@@ -479,6 +479,14 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
                 {
                     mergedResult = MergeGalleryMediaDetail(result, publishResult, "publish-list");
                 }
+                else if (!publishResult.IsGallery)
+                {
+                    // Preserve the primary selection and add independently supplied
+                    // download routes rather than discarding the publish-list video.
+                    var qualities = result.Qualities.Concat(publishResult.Qualities)
+                        .DistinctBy(quality => quality.Url, StringComparer.Ordinal).ToList();
+                    mergedResult = result with { Qualities = qualities };
+                }
             }
 
             var publishCover = ExtractPublishCoverUrl(publishAweme.Value);

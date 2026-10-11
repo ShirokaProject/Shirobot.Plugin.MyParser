@@ -77,6 +77,7 @@ public sealed class DouyinVideoWorkParser(PluginConfig config) : IDouyinWorkPars
     private List<DouyinVideoQuality> ExtractQualities(JsonElement video)
     {
         var result = new List<DouyinVideoQuality>();
+        var fallback = new List<DouyinVideoQuality>();
         if (video.ValueKind != JsonValueKind.Object)
         {
             return result;
@@ -106,7 +107,7 @@ public sealed class DouyinVideoWorkParser(PluginConfig config) : IDouyinWorkPars
             }
         }
 
-        if (result.Count == 0 && TryGetProperty(video, "play_addr", out var playAddrFallback))
+        if (TryGetProperty(video, "play_addr", out var playAddrFallback))
         {
             foreach (var url in EnumerateUrlList(playAddrFallback))
             {
@@ -116,20 +117,23 @@ public sealed class DouyinVideoWorkParser(PluginConfig config) : IDouyinWorkPars
             }
 
             var uri = GetString(playAddrFallback, "uri");
-            if (result.Count == 0 && !string.IsNullOrWhiteSpace(uri))
+            if (!string.IsNullOrWhiteSpace(uri))
             {
                 foreach (var ratio in new[] { "1080p", "720p", "540p", "480p", "360p" })
                 {
-                    AddQuality(result, $"https://aweme.snssdk.com/aweme/v1/play/?video_id={Uri.EscapeDataString(uri)}&ratio={ratio}&line=0", uri, ratio, 0, string.Empty, 0, 0, 0, string.Empty, false);
+                    AddQuality(fallback, $"https://aweme.snssdk.com/aweme/v1/play/?video_id={Uri.EscapeDataString(uri)}&ratio={ratio}&line=0", uri, ratio, 0, string.Empty, 0, 0, 0, string.Empty, false);
                 }
             }
         }
 
+        // Keep supplied URLs ahead of generated routes. Generated routes are a last
+        // resort when the CDN addresses returned in the metadata stop working.
         return result
-            .GroupBy(i => i.Url)
-            .Select(g => g.First())
             .OrderByDescending(QualityScore)
             .ThenByDescending(i => i.BitRate)
+            .Concat(fallback)
+            .GroupBy(i => i.Url)
+            .Select(g => g.First())
             .ToList();
     }
 

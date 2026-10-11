@@ -34,6 +34,20 @@ internal static class GalleryParsingVerification
                 throw new Exception("Live Photo selected the blocked CDN or lost its H.264 file id.");
         }
 
+        using (var video = JsonDocument.Parse("""
+            {"aweme_id":"123","video":{"width":1280,"height":720,
+              "bit_rate":[{"bit_rate":1000000,"play_addr":{"url_list":["https://cdn.example.com/primary.mp4"],"width":1280,"height":720}}],
+              "play_addr":{"uri":"video-id","url_list":["https://cdn.example.com/backup.mp4"]}}}
+            """))
+        {
+            var parsed = new MyParser.Provider.Douyin.WorkParsers.DouyinVideoWorkParser(new PluginConfig())
+                .Parse(video.RootElement, "123", "https://www.douyin.com/video/123");
+            if (parsed.Qualities[0].Url != "https://cdn.example.com/primary.mp4"
+                || !parsed.Qualities.Any(quality => quality.Url == "https://cdn.example.com/backup.mp4")
+                || !parsed.Qualities.Any(quality => quality.Url.StartsWith("https://aweme.snssdk.com/aweme/v1/play/?video_id=video-id&")))
+                throw new Exception("Video CDN fallback routes were lost or replaced the primary selection.");
+        }
+
         var runtimeCookie = typeof(PluginConfig).Assembly.GetType("Shirobot.Plugin.MyParser.MyParserRuntime", true)!.GetProperty("DouyinCookie")!;
         var previous = runtimeCookie.GetValue(null);
         runtimeCookie.SetValue(null, "UIFID=test-visitor; ttwid=test");

@@ -4,6 +4,55 @@ using MyParser.Provider.Douyin.Parsing;
 using Shirobot.Plugin.MyParser;
 using Shirobot.Plugin.MyParser.Parsing;
 
+if (args is ["--download-cookie-file" or "--download-fallback-cookie-file", var downloadCookiePath, var downloadLink])
+{
+    var assembly = typeof(PluginConfig).Assembly;
+    var runtime = assembly.GetType("Shirobot.Plugin.MyParser.MyParserRuntime", true)!;
+    var cookie = File.ReadAllText(downloadCookiePath).Trim();
+    runtime.GetProperty("DouyinCookie")!.SetValue(null, cookie);
+    runtime.GetProperty("TemporaryDirectoryFactory")!.SetValue(null,
+        (Func<ShiroBot.SDK.Plugin.TemporaryDirectory>)(() => {
+            var path = Path.Combine(Path.GetTempPath(), "myparser-download-check", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(path);
+            return new ShiroBot.SDK.Plugin.TemporaryDirectory(path, DateTimeOffset.UtcNow.AddHours(1));
+        }));
+    var config = new PluginConfig { DouyinFetchComments = false, LogDownloadProgress = false };
+    using var http = new HttpClient(new NetworkProbe { InnerHandler = SafeHttpTransport.CreateHandler() }) { Timeout = TimeSpan.FromSeconds(20) };
+    using var parser = new DouyinParser(config, http);
+    using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+    var result = await parser.ParseAsync(downloadLink, timeout.Token);
+    Console.WriteLine($"parsed={result.AwemeId}, candidates={result.Qualities.Count}");
+    var type = typeof(DouyinParser).Assembly.GetType("Shirobot.Plugin.MyParser.Downloading.ProviderDownloadService", true)!;
+    var service = Activator.CreateInstance(type)!;
+    foreach (var quality in result.Qualities)
+    {
+        var uri = new Uri(quality.Url);
+        Console.WriteLine($"candidate={uri.Scheme}://{uri.Authority}{uri.AbsolutePath}");
+    }
+    var candidates = result.Qualities.Select(candidate => candidate.Url).ToList();
+    var forceFallback = args[0] == "--download-fallback-cookie-file";
+    const string missingVideo = "https://aweme.snssdk.com/aweme/v1/play/?video_id=myparser-nonexistent-video";
+    if (forceFallback) candidates.Insert(0, missingVideo);
+    var attemptedFallback = false;
+    var request = new ProviderVideoDownloadRequest("douyin", "抖音", result.AwemeId, Guid.NewGuid().ToString("N"),
+        candidates, "", "douyin", "mp4", (method, url, range) => {
+            if (forceFallback && url != missingVideo) attemptedFallback = true;
+            var message = new HttpRequestMessage(method, url);
+            message.Headers.TryAddWithoutValidation("User-Agent", MyParser.Provider.Douyin.Infrastructure.DouyinConstants.UserAgent);
+            message.Headers.TryAddWithoutValidation("Accept", "application/json, text/plain, */*");
+            message.Headers.TryAddWithoutValidation("Referer", result.SourceUrl);
+            message.Headers.TryAddWithoutValidation("Cookie", cookie);
+            if (range is not null) message.Headers.TryAddWithoutValidation("Range", range);
+            return message;
+        });
+    var task = (Task<(string FileUri, string LocalPath)>)type.GetMethod("DownloadProviderVideoAsync")!.Invoke(service, [config, request, timeout.Token])!;
+    var downloaded = await task;
+    Console.WriteLine($"download_complete={new FileInfo(downloaded.LocalPath).Length}, path={downloaded.LocalPath}");
+    if (forceFallback && !attemptedFallback) throw new Exception("The missing video did not exercise candidate failover.");
+    if (forceFallback) Console.WriteLine("Unavailable primary route recovered through a complete alternate download.");
+    return;
+}
+
 if (args is ["--live-network-cookie-file", var networkCookiePath])
 {
     typeof(PluginConfig).Assembly.GetType("Shirobot.Plugin.MyParser.MyParserRuntime", true)!

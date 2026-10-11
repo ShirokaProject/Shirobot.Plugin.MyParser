@@ -29,7 +29,13 @@ internal sealed class DownloadProbeService
         using var response = await http.SendAsync(
             httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
-            throw request.CreateHttpException(response.StatusCode);
+        {
+            // Report the final redirect target without signed query strings or Cookies.
+            var endpoint = response.RequestMessage?.RequestUri ?? httpRequest.RequestUri;
+            throw new HttpRequestException(
+                $"{request.CreateHttpException(response.StatusCode).Message}: endpoint={endpoint?.GetLeftPart(UriPartial.Path)}",
+                null, response.StatusCode);
+        }
 
         long? contentLength = response.Content.Headers.ContentRange?.Length ?? response.Content.Headers.ContentLength;
         var acceptRanges = response.StatusCode == HttpStatusCode.PartialContent
