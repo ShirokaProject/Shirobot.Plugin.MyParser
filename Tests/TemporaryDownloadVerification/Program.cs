@@ -52,11 +52,26 @@ try
     var records = await (Task<IReadOnlyList<ProviderRecordVariant>>)service.GetType().GetMethod("BuildSilkRecordVariantsAsync")!.Invoke(service,
         [config,new ProviderRecordBuildRequest("neteasecloudmusic","网易云音乐","test",renewed.LocalPath,"test"),CancellationToken.None])!;
     Check(records.Count == 1 && records[0].SilkRate == 35000 && records.All(record => File.Exists(record.Path) && record.Path.StartsWith(root + Path.DirectorySeparatorChar)), "Silk escaped host temporary storage.");
+    var aacRecords = await (Task<IReadOnlyList<ProviderRecordVariant>>)service.GetType().GetMethod("BuildSilkRecordVariantsAsync")!.Invoke(service,
+        [config,new ProviderRecordBuildRequest("douyin","抖音","aac-test",aacPath,"aac-test"),CancellationToken.None])!;
+    Check(aacRecords.Count == 1 && (await File.ReadAllBytesAsync(aacRecords[0].Path)).AsSpan().StartsWith(new byte[] { 2, (byte)'#', (byte)'!' }), "AAC did not produce Tencent Silk.");
+    Check(Directory.GetFiles(root,"*.pcm",SearchOption.AllDirectories).Length == 0, "Intermediate PCM was retained after AAC encoding.");
+    var invalidAudio = Path.Combine(fixtures,"invalid.mp3");
+    await File.WriteAllBytesAsync(invalidAudio,new byte[] { 1, 2, 3 });
+    try
+    {
+        await (Task)service.GetType().GetMethod("EncodeSilkAsync",BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(service,
+            [new ProviderRecordBuildRequest("test","test","invalid",invalidAudio,"invalid"),Path.Combine(fixtures,"invalid.silk"),35000,CancellationToken.None])!;
+        throw new InvalidOperationException("Invalid audio unexpectedly encoded.");
+    }
+    catch (Exception ex) when (ex is not InvalidOperationException || ex.Message != "Invalid audio unexpectedly encoded.") { }
+    Check(!File.Exists(Path.Combine(fixtures,"invalid.silk")) && Directory.GetFiles(root,"*.pcm",SearchOption.AllDirectories).Length == 0,
+        "Failed encoding retained output or intermediate PCM.");
     var combined = await (Task<string>)service.GetType().GetMethod("CreateStillImageVideoWithAudioAsync")!.Invoke(service,
         [config,image.LocalPath,renewed.LocalPath,CancellationToken.None])!;
     Check(File.Exists(combined) && combined.StartsWith(root + Path.DirectorySeparatorChar), "Gallery synthesis escaped host temporary storage.");
     var looping = await (Task<string>)service.GetType().GetMethod("MuxLoopingVideoWithAudioAsync")!.Invoke(service,
-        [config,video.LocalPath,aacPath,CancellationToken.None])!;
+        [config,video.LocalPath,aacPath,CancellationToken.None,3])!;
     Check(File.Exists(looping) && Directory.GetFiles(root,"mp4-storage.bin",SearchOption.AllDirectories).Length > 0,
         "SharpMP4 did not use host temporary storage for intermediate samples.");
     using var canceled = new CancellationTokenSource();

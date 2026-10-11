@@ -295,7 +295,7 @@ internal sealed class ProviderDownloadService
         var pc = new ProviderRecordVariant(
             "pc-best",
             "电脑最优",
-            "pcm_rate=24000 silk_rate=35000 max=24000 tencent=true profile=Flat encoder=SilkCodec.NET/1.2.0",
+            "pcm_rate=24000 silk_rate=35000 max=24000 tencent=true profile=Flat encoder=SilkCodec.NET/1.2.1",
             Path.Combine(directory, safeBaseName + "_pc_24k_35000_silkcodecnet_120.silk"),
             35000);
 
@@ -671,32 +671,44 @@ internal sealed class ProviderDownloadService
             Tencent = true,
             Complexity = 2,
         });
-        await using (var mp3 = File.OpenRead(request.LocalAudioPath))
-        await using (var silk = File.Create(tempSilkPath))
+        try
         {
-            await Task.Run(
-                () =>
-                {
-                    if (SharpMP4.Readers.MP3Reader.IsMP3(mp3))
-                        encoder.EncodeMp3(mp3, silk, SilkMp3AudioProfile.Flat);
-                    else
+            await using (var mp3 = File.OpenRead(request.LocalAudioPath))
+            await using (var silk = File.Create(tempSilkPath))
+            {
+                await Task.Run(
+                    () =>
                     {
-                        using var pcm = new MemoryStream();
-                        SharpMP4.Audio.ManagedAudioDecoder.DecodeMonoPcm16(mp3, pcm, 24000, cancellationToken);
-                        silk.Write(encoder.EncodePcm16LittleEndian(pcm.GetBuffer().AsSpan(0, checked((int)pcm.Length))));
-                    }
-                },
-                cancellationToken).ConfigureAwait(false);
-            await silk.FlushAsync(cancellationToken).ConfigureAwait(false);
-        }
+                        if (SharpMP4.Readers.MP3Reader.IsMP3(mp3))
+                            encoder.EncodeMp3(mp3, silk, SilkMp3AudioProfile.Flat, cancellationToken);
+                        else
+                        {
+                            // AAC decoding writes bounded PCM chunks; keep the intermediate on disk,
+                            // then feed SILK one frame at a time instead of buffering the whole track.
+                            using var pcm = new FileStream(Path.Combine(workDirectory, tempBaseName + ".pcm"),
+                                FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 65536,
+                                FileOptions.DeleteOnClose | FileOptions.SequentialScan);
+                            SharpMP4.Audio.ManagedAudioDecoder.DecodeMonoPcm16(mp3, pcm, 24000, cancellationToken);
+                            pcm.Position = 0;
+                            encoder.EncodePcm16LittleEndian(pcm, silk, cancellationToken);
+                        }
+                    },
+                    cancellationToken).ConfigureAwait(false);
+                await silk.FlushAsync(cancellationToken).ConfigureAwait(false);
+            }
 
-        if (!File.Exists(tempSilkPath) || new FileInfo(tempSilkPath).Length == 0)
+            if (!File.Exists(tempSilkPath) || new FileInfo(tempSilkPath).Length == 0)
+            {
+                throw new InvalidDataException("SILK 编码输出为空。");
+            }
+
+            File.Move(tempSilkPath, outputSilkPath, overwrite: true);
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser {request.PlatformDisplayName} SILK 编码完成: input={request.LocalAudioPath}, output={outputSilkPath}, silk_rate={silkRate}, size_kb={new FileInfo(outputSilkPath).Length / 1024d:F1}, encoder=SilkCodec.NET");
+        }
+        finally
         {
-            throw new InvalidDataException("SILK 编码输出为空。");
+            File.Delete(tempSilkPath);
         }
-
-        File.Move(tempSilkPath, outputSilkPath, overwrite: true);
-        global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser {request.PlatformDisplayName} SILK 编码完成: input={request.LocalAudioPath}, output={outputSilkPath}, silk_rate={silkRate}, size_kb={new FileInfo(outputSilkPath).Length / 1024d:F1}, encoder=SilkCodec.NET");
     }
 
     private async Task<(string FileUri, string LocalPath)> DownloadProviderVideoCandidateAsync(
