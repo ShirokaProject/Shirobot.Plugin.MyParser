@@ -64,7 +64,7 @@ public sealed partial class HeyboxParser(PluginConfig config) : IDisposable
     {
         var sourceUrl = HeyboxUrlParser.ExtractHeyboxUrl(text) ?? throw new HeyboxParseException("未找到小黑盒链接。");
         var initialLinkId = HeyboxUrlParser.ExtractLinkId(sourceUrl);
-        BotLog.Info($"MyParser 小黑盒解析开始: url={sourceUrl}, link_id={initialLinkId ?? "-"}");
+        global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 小黑盒解析开始: url={sourceUrl}, link_id={initialLinkId ?? "-"}");
 
         if (!string.IsNullOrWhiteSpace(initialLinkId))
         {
@@ -79,11 +79,11 @@ public sealed partial class HeyboxParser(PluginConfig config) : IDisposable
             }
             catch (HeyboxParseException ex)
             {
-                BotLog.Warning($"MyParser 小黑盒 API-first 结果为空，尝试页面兜底: link_id={initialLinkId}, reason={ex.Message}");
+                global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser 小黑盒 API-first 结果为空，尝试页面兜底: link_id={initialLinkId}, reason={ex.Message}");
             }
         }
 
-        BotLog.Info($"MyParser 小黑盒页面请求开始: url={sourceUrl}");
+        global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 小黑盒页面请求开始: url={sourceUrl}");
         using var pageRequest = new HttpRequestMessage(HttpMethod.Get, sourceUrl);
         ApplyBrowserHeaders(pageRequest, null);
         using var pageResponse = await _http.SendAsync(pageRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
@@ -91,7 +91,7 @@ public sealed partial class HeyboxParser(PluginConfig config) : IDisposable
         var resolvedUrl = pageResponse.RequestMessage?.RequestUri?.ToString() ?? sourceUrl;
         var linkId = HeyboxUrlParser.ExtractLinkId(sourceUrl, resolvedUrl, pageText)
                      ?? throw new HeyboxParseException("未能从小黑盒链接中提取帖子 link_id。");
-        BotLog.Info($"MyParser 小黑盒页面请求完成: link_id={linkId}, status={(int)pageResponse.StatusCode}, resolved={resolvedUrl}");
+        global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 小黑盒页面请求完成: link_id={linkId}, status={(int)pageResponse.StatusCode}, resolved={resolvedUrl}");
 
         var aggregate = new HeyboxAggregate(sourceUrl, resolvedUrl, linkId)
         {
@@ -111,14 +111,14 @@ public sealed partial class HeyboxParser(PluginConfig config) : IDisposable
         ApplyApiHeaders(request, aggregate.ResolvedUrl ?? aggregate.SourceUrl);
         try
         {
-            BotLog.Info($"MyParser 小黑盒帖子 API 请求开始: link_id={aggregate.LinkId}, uri={uri}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 小黑盒帖子 API 请求开始: link_id={aggregate.LinkId}, uri={uri}");
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeoutCts.CancelAfter(TimeSpan.FromSeconds(12));
             using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeoutCts.Token);
-            BotLog.Info($"MyParser 小黑盒帖子 API 响应: link_id={aggregate.LinkId}, status={(int)response.StatusCode}, content_type={response.Content.Headers.ContentType}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 小黑盒帖子 API 响应: link_id={aggregate.LinkId}, status={(int)response.StatusCode}, content_type={response.Content.Headers.ContentType}");
             if (!response.IsSuccessStatusCode)
             {
-                BotLog.Warning($"MyParser 小黑盒帖子 API 请求失败: link_id={aggregate.LinkId}, status={(int)response.StatusCode}");
+                global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser 小黑盒帖子 API 请求失败: link_id={aggregate.LinkId}, status={(int)response.StatusCode}");
                 return;
             }
 
@@ -128,13 +128,13 @@ public sealed partial class HeyboxParser(PluginConfig config) : IDisposable
                 && document.RootElement.TryGetProperty("status", out var status)
                 && string.Equals(status.GetString(), "show_captcha", StringComparison.OrdinalIgnoreCase))
             {
-                BotLog.Warning($"MyParser 小黑盒帖子 API 返回验证码/风控: link_id={aggregate.LinkId}");
+                global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser 小黑盒帖子 API 返回验证码/风控: link_id={aggregate.LinkId}");
                 throw new HeyboxParseException("小黑盒返回验证码/风控，暂时无法自动解析该帖子。");
             }
 
             aggregate.SourceKind = "api";
             MergeJson(aggregate, document.RootElement);
-            BotLog.Info($"MyParser 小黑盒帖子 API 解析完成: link_id={aggregate.LinkId}, title={aggregate.Title ?? "-"}, blocks={aggregate.Blocks.Count}, images={aggregate.ImageCount}, videos={aggregate.VideoCount}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 小黑盒帖子 API 解析完成: link_id={aggregate.LinkId}, title={aggregate.Title ?? "-"}, blocks={aggregate.Blocks.Count}, images={aggregate.ImageCount}, videos={aggregate.VideoCount}");
         }
         catch (HeyboxParseException)
         {
@@ -142,11 +142,11 @@ public sealed partial class HeyboxParser(PluginConfig config) : IDisposable
         }
         catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         {
-            BotLog.Warning($"MyParser 小黑盒帖子 API 请求超时: link_id={aggregate.LinkId}, error={ex.GetType().Name}: {ex.Message}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser 小黑盒帖子 API 请求超时: link_id={aggregate.LinkId}, error={ex.GetType().Name}: {ex.Message}");
         }
         catch (Exception ex)
         {
-            BotLog.Warning($"MyParser 小黑盒帖子 API 解析失败: link_id={aggregate.LinkId}, error={ex.GetType().Name}: {ex.Message}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser 小黑盒帖子 API 解析失败: link_id={aggregate.LinkId}, error={ex.GetType().Name}: {ex.Message}");
         }
     }
 
@@ -794,7 +794,7 @@ public sealed partial class HeyboxParser(PluginConfig config) : IDisposable
         }
         catch (Exception ex)
         {
-            BotLog.Warning($"MyParser 小黑盒 device_id 状态读写失败，使用进程内临时值: {ex.GetType().Name}: {ex.Message}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser 小黑盒 device_id 状态读写失败，使用进程内临时值: {ex.GetType().Name}: {ex.Message}");
             return Guid.NewGuid().ToString("N");
         }
     }

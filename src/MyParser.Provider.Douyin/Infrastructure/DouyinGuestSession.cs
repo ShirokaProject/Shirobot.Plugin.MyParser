@@ -66,7 +66,7 @@ public sealed class DouyinGuestSession
         catch (Exception ex) when (ex is HttpRequestException or IOException or TaskCanceledException)
         {
             // Visitor registration is best effort; share-page extraction does not depend on it.
-            ShiroBot.SDK.Abstractions.BotLog.Warning($"MyParser 抖音游客 ttwid 注册失败: {ex.GetType().Name}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser 抖音游客 ttwid 注册失败: {ex.GetType().Name}");
         }
     }
 

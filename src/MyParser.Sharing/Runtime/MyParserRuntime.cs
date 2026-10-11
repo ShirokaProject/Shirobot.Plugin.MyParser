@@ -73,6 +73,7 @@ internal static class MyParserRuntime
             BackgroundCancellation.Cancel();
         }
 
+        DiagnosticLog.Configure(null);
         TemporaryDirectoryFactory = null;
         TemporaryDirectories.Clear();
         VideoDownloadCache.Clear();

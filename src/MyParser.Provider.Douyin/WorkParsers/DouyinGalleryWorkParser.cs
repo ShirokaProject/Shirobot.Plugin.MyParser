@@ -69,19 +69,19 @@ public sealed class DouyinGalleryWorkParser : IDouyinWorkParser
             var livePhotoType = GetLong(img, "live_photo_type");
             if (!string.IsNullOrWhiteSpace(livePhotoUrl))
             {
-                ShiroBot.SDK.Abstractions.BotLog.Info($"MyParser 抖音 Live Photo 动态地址命中: clip_type={clipType}, live_photo_type={livePhotoType}, url={livePhotoUrl}");
+                global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 抖音 Live Photo 动态地址命中: clip_type={clipType}, live_photo_type={livePhotoType}, url={livePhotoUrl}");
             }
             else
             {
                 var properties = img.ValueKind == JsonValueKind.Object
                     ? string.Join(',', img.EnumerateObject().Select(property => property.Name))
                     : img.ValueKind.ToString();
-                ShiroBot.SDK.Abstractions.BotLog.Info($"MyParser 抖音 Live Photo 字段未命中: clip_type={clipType}, live_photo_type={livePhotoType}, image_properties={properties}");
+                global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 抖音 Live Photo 字段未命中: clip_type={clipType}, live_photo_type={livePhotoType}, image_properties={properties}");
             }
 
             if (!string.IsNullOrWhiteSpace(imageUrl))
             {
-                result.Add(new DouyinImageInfo { Url = imageUrl, LivePhotoUrl = livePhotoUrl });
+                result.Add(new DouyinImageInfo { Url = imageUrl, LivePhotoUrl = livePhotoUrl, ClipType = TryGetProperty(img, "clip_type", out _) ? clipType : null });
             }
         }
 
@@ -145,6 +145,18 @@ public sealed class DouyinGalleryWorkParser : IDouyinWorkParser
                  })
         {
             if (!TryGetProperty(videoRoot, propertyName, out var playAddress)) continue;
+
+            var videoId = GetString(playAddress, "uri");
+            if (!string.IsNullOrWhiteSpace(videoId) && !Uri.TryCreate(videoId, UriKind.Absolute, out _))
+            {
+                // The CDN URLs can reject gallery clips. Resolve the exact H.264 file through the play endpoint.
+                var fileId = EnumerateUrlList(playAddress)
+                    .Select(url => Uri.TryCreate(url, UriKind.Absolute, out var address)
+                        ? System.Web.HttpUtility.ParseQueryString(address.Query)["file_id"] : null)
+                    .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+                var playUrl = $"https://aweme.snssdk.com/aweme/v1/play/?video_id={Uri.EscapeDataString(videoId)}";
+                return string.IsNullOrWhiteSpace(fileId) ? playUrl : playUrl + "&file_id=" + Uri.EscapeDataString(fileId);
+            }
 
             var directUrl = EnumerateUrlList(playAddress).FirstOrDefault();
             directUrl ??= EnumerateNestedHttpUrls(playAddress).FirstOrDefault(IsVideoUrl);

@@ -37,20 +37,20 @@ internal static class RemoteImageFetchService
 
         try
         {
-            var cacheKey = BuildImageCacheKey(imageUrl, referer);
+            var cacheKey = BuildImageCacheKey(imageUrl, referer) + (preferFileUri ? "|file" : "|base64");
             if (RecentImages.TryGetValue(cacheKey, out var cached)
                 && DateTimeOffset.UtcNow - cached.CreatedAt <= ImageCacheTtl
                 && (!persistLocalFile || cached.LocalPath is not null && File.Exists(cached.LocalPath))
                 && (!preferFileUri || cached.LocalPath is not null && File.Exists(cached.LocalPath)))
             {
-                BotLog.Info($"MyParser {platformName} 图片下载缓存命中: prefix={filePrefix}, source_url={imageUrl}");
+                global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser {platformName} 图片下载缓存命中: prefix={filePrefix}, source_url={imageUrl}");
                 var cachedUri = preferFileUri && cached.LocalPath is not null
                     ? new Uri(Path.GetFullPath(cached.LocalPath)).AbsoluteUri
                     : cached.Uri;
                 return (cachedUri, cached.LocalPath);
             }
 
-            BotLog.Info($"MyParser {platformName} 图片下载开始: prefix={filePrefix}, source_url={imageUrl}, referer={referer}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser {platformName} 图片下载开始: prefix={filePrefix}, source_url={imageUrl}, referer={referer}");
             var http = GetImageHttpClient(httpProxy);
             using var request = new HttpRequestMessage(HttpMethod.Get, imageUrl);
             configureRequest?.Invoke(request);
@@ -61,7 +61,7 @@ internal static class RemoteImageFetchService
             var contentLength = response.Content.Headers.ContentLength;
             if (contentLength is > 0 && contentLength > maxBytes)
             {
-                BotLog.Warning($"MyParser {platformName} 图片过大，已跳过远程图片: url={imageUrl}, image_mb={contentLength.Value / 1024d / 1024d:F2}, limit_mb={maxBytes / 1024d / 1024d:F0}");
+                global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser {platformName} 图片过大，已跳过远程图片: url={imageUrl}, image_mb={contentLength.Value / 1024d / 1024d:F2}, limit_mb={maxBytes / 1024d / 1024d:F0}");
                 return (string.Empty, null);
             }
 
@@ -80,7 +80,7 @@ internal static class RemoteImageFetchService
                 total += read;
                 if (total > maxBytes)
                 {
-                    BotLog.Warning($"MyParser {platformName} 图片下载超过限制，已跳过远程图片: url={imageUrl}, limit_mb={maxBytes / 1024d / 1024d:F0}");
+                    global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser {platformName} 图片下载超过限制，已跳过远程图片: url={imageUrl}, limit_mb={maxBytes / 1024d / 1024d:F0}");
                     return (string.Empty, null);
                 }
 
@@ -92,7 +92,7 @@ internal static class RemoteImageFetchService
             var byteCount = checked((int)output.Length);
             var contentType = response.Content.Headers.ContentType?.MediaType;
             string? localPath = null;
-            if (persistLocalFile)
+            if (persistLocalFile || preferFileUri)
             {
                 try
                 {
@@ -104,9 +104,11 @@ internal static class RemoteImageFetchService
                     await using var file = new FileStream(localPath, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
                     await file.WriteAsync(bytes.AsMemory(0, byteCount), cancellationToken).ConfigureAwait(false);
                 }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
                 catch (Exception ex)
                 {
-                    BotLog.Warning($"MyParser {platformName} 图片缓存落盘失败，继续使用 base64: prefix={filePrefix}, error={ex.Message}");
+                    if (preferFileUri) throw;
+                    global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser {platformName} 图片缓存落盘失败，继续使用 base64: prefix={filePrefix}, error={ex.Message}");
                     localPath = null;
                 }
             }
@@ -115,13 +117,15 @@ internal static class RemoteImageFetchService
                 ? new Uri(Path.GetFullPath(localPath)).AbsoluteUri
                 : "base64://" + Convert.ToBase64String(bytes, 0, byteCount);
             var uriMode = preferFileUri && localPath is not null ? "file" : "base64";
-            BotLog.Info($"MyParser {platformName} 图片下载完成: source_url={imageUrl}, content_type={contentType}, bytes={total}, mode={uriMode}, physical_path={localPath ?? "<none>"}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser {platformName} 图片下载完成: source_url={imageUrl}, content_type={contentType}, bytes={total}, mode={uriMode}, physical_path={localPath ?? "<none>"}");
             TryCacheImage(cacheKey, uri, localPath);
             return (uri, localPath);
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (Exception ex) when (NetworkRetry.IsTransient(ex)) { throw; }
         catch (Exception ex)
         {
-            BotLog.Warning($"MyParser {platformName} 图片转 base64/本地文件失败，已跳过远程图片: url={imageUrl}, error={ex.Message}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser {platformName} 图片转 base64/本地文件失败，已跳过远程图片: url={imageUrl}, error={ex.Message}");
             return (string.Empty, null);
         }
     }

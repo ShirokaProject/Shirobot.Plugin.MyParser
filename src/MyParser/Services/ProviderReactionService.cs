@@ -27,7 +27,7 @@ internal sealed class ProviderReactionService(IBotContext context)
             SentReactions.TryRemove(key, out _);
             if (IsAlreadyReactedError(ex))
             {
-                BotLog.Info($"MyParser {platformName} 消息表情已存在，跳过重复贴表情: group_id={groupId}, message_seq={messageSeq}, face={faceId}");
+                global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser {platformName} 消息表情已存在，跳过重复贴表情: group_id={groupId}, message_seq={messageSeq}, face={faceId}");
                 return;
             }
 

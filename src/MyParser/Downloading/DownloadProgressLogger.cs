@@ -14,6 +14,11 @@ internal sealed class DownloadProgressLogger(bool enabled, int intervalSeconds, 
             return;
         }
 
+        if (!DiagnosticLog.IsEnabled)
+        {
+            BotLog.Info($"{logPrefix} 开始下载：{FormatBytes(totalBytes)}");
+            return;
+        }
         BotLog.Info($"{logPrefix} 下载开始: {identifierName}={mediaId}, mode={mode}, total={FormatBytes(totalBytes)}, path={path}");
     }
 
@@ -25,6 +30,11 @@ internal sealed class DownloadProgressLogger(bool enabled, int intervalSeconds, 
         }
 
         var speed = elapsed.TotalSeconds > 0 ? totalBytes / elapsed.TotalSeconds : 0;
+        if (!DiagnosticLog.IsEnabled)
+        {
+            BotLog.Info($"{logPrefix} 下载完成：{FormatBytes(totalBytes)}，用时 {FormatDuration(elapsed)}。");
+            return;
+        }
         BotLog.Info($"{logPrefix} 下载完成: {identifierName}={mediaId}, total={FormatBytes(totalBytes)}, elapsed={FormatDuration(elapsed)}, avg_speed={FormatBytes(speed)}/s, path={path}");
     }
 
@@ -76,6 +86,11 @@ internal sealed class DownloadProgressLogger(bool enabled, int intervalSeconds, 
             eta = "unknown";
         }
 
+        if (!DiagnosticLog.IsEnabled)
+        {
+            BotLog.Info($"{logPrefix} 下载进度：{percent}，{FormatBytes(speed)}/s。");
+            return;
+        }
         BotLog.Info($"{logPrefix} 下载进度: {identifierName}={mediaId}, mode={mode}, progress={percent}, downloaded={FormatBytes(downloadedBytes)}/{FormatBytes(totalBytes)}, speed={FormatBytes(speed)}/s, eta={eta}, elapsed={FormatDuration(elapsed)}");
     }
 

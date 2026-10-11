@@ -62,6 +62,7 @@ public sealed record DouyinImageInfo
 {
     public required string Url { get; init; }
     public string? LivePhotoUrl { get; init; }
+    public long? ClipType { get; init; }
 }
 
 public sealed record DouyinCommentInfo

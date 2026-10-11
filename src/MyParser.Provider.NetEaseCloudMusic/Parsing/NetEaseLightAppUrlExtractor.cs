@@ -20,7 +20,7 @@ internal static partial class NetEaseLightAppUrlExtractor
             var candidate = ExtractParseText(app);
             if (!string.IsNullOrWhiteSpace(candidate))
             {
-                BotLog.Info($"MyParser 网易云轻应用命中: source=qq-light-app, normalized={candidate}");
+                global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 网易云轻应用命中: source=qq-light-app, normalized={candidate}");
                 return candidate;
             }
         }

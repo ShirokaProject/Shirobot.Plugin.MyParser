@@ -99,7 +99,7 @@ public sealed class XParser : IParserHttpClientAccessor, IDisposable
 
         if (opened)
         {
-            BotLog.Info($"MyParser X fxTwitter 主通道失败，{PrimaryFailureCooldownMinutes} 分钟内直接回退官方 Syndication（proxy={_usesProxy}）。");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser X fxTwitter 主通道失败，{PrimaryFailureCooldownMinutes} 分钟内直接回退官方 Syndication（proxy={_usesProxy}）。");
         }
     }
 

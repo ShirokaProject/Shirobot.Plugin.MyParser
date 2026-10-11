@@ -13,11 +13,15 @@ internal sealed class ProviderFailureReporter(ProviderMessageSender messageSende
         Exception? exception = null,
         string? diagnosticContext = null)
     {
-        var contextText = string.IsNullOrWhiteSpace(diagnosticContext) ? string.Empty : $", context={diagnosticContext}";
+        var contextText = !config.DevelopmentMode || string.IsNullOrWhiteSpace(diagnosticContext) ? string.Empty : $", context={diagnosticContext}";
         if (exception is null)
             BotLog.Warning($"MyParser provider failure: provider={providerName}, kind={kind}{contextText}");
         else
-            BotLog.Error($"MyParser provider failure: provider={providerName}, kind={kind}{contextText}, exception={exception}");
+        {
+            var detail = config.DevelopmentMode ? exception.ToString() : exception.GetBaseException().Message;
+            if (!config.DevelopmentMode && detail.Length > 160) detail = detail[..160] + "…";
+            BotLog.Error($"MyParser provider failure: provider={providerName}, kind={kind}{contextText}, exception={detail}");
+        }
 
         if (!config.SendProviderFailureMessages) return;
         var messageText = kind switch

@@ -20,7 +20,7 @@ public sealed class PluginConfig
     public string WeixinChannelsYuanbaoCookie { get; set; } = string.Empty;
 
     // 通用设置
-    [ConfigField("启用开发模式时只解析并发送文本/卡片，不下载或发送视频。", Label = "【通用设置】开发模式")]
+    [ConfigField("启用开发模式时显示详细诊断日志，并只解析发送文本/卡片，不下载或发送视频。", Label = "【通用设置】开发模式")]
     public bool DevelopmentMode { get; set; } = false;
 
     [ConfigField("是否发送各平台封面图片和封面卡片，不影响正文图片。", Label = "【通用设置】发送封面（总开关）")]
@@ -29,7 +29,7 @@ public sealed class PluginConfig
     [ConfigField("可选 HTTP/HTTPS 代理地址，例如 http://127.0.0.1:7890；留空使用系统网络设置。", Label = "HTTP 代理", Placeholder = "http://127.0.0.1:7890")]
     public string HttpProxy { get; set; } = string.Empty;
 
-    [ConfigField("VideoSegment 发送 URI 协议：0 = Base64，1 = File（默认），2 = Http。", Label = "VideoSegment 协议", Min = 0, Max = 2)]
+    [ConfigField("图片、卡片和视频发送 URI 协议：0 = Base64，1 = File（默认），2 = Http。", Label = "图片/视频发送协议", Min = 0, Max = 2)]
     public int FileProtocol { get; set; } = 1;
 
     [ConfigField("单个视频最大下载大小，单位 MB。", Label = "最大视频下载 MB", Min = 1, Max = 51200)]
@@ -46,6 +46,9 @@ public sealed class PluginConfig
 
     [ConfigField("网络请求超时时间，单位秒。", Label = "请求超时秒数", Min = 5, Max = 300)]
     public int RequestTimeoutSeconds { get; set; } = 15;
+
+    [ConfigField("解析和媒体下载遇到连接重置、网络超时等瞬时错误时的额外静默重试次数。0 = 关闭；不重发已发送的消息。", Label = "网络失败静默重试次数", Min = 0, Max = 5)]
+    public int NetworkRetryCount { get; set; } = 2;
 
     [ConfigField("回复解析结果时是否引用原消息。", Label = "引用回复")]
     public bool QuoteReply { get; set; } = false;

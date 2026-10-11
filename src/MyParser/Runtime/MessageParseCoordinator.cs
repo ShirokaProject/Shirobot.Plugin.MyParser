@@ -103,7 +103,7 @@ internal sealed class MessageParseCoordinator(
     {
         if (taskManager.IsResponseSuppressed(message))
         {
-            BotLog.Info($"MyParser 忽略禁言状态下的解析请求: channel={message.Channel.Id}, sender={message.Sender.Id}, message_id={message.MessageId}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 忽略禁言状态下的解析请求: channel={message.Channel.Id}, sender={message.Sender.Id}, message_id={message.MessageId}");
             return;
         }
 
@@ -138,7 +138,7 @@ internal sealed class MessageParseCoordinator(
 
         if (taskManager.TryEnterProviderCooldown(message.Platform, message.Channel, provider.Id, parseText, out var workIdentity, out var remaining))
         {
-            BotLog.Info($"MyParser 冷却期内静默忽略重复作品: platform={message.Platform}, channel={message.Channel.Id}, provider={provider.Id}, work={workIdentity}, remaining_seconds={Math.Ceiling(remaining.TotalSeconds):F0}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 冷却期内静默忽略重复作品: platform={message.Platform}, channel={message.Channel.Id}, provider={provider.Id}, work={workIdentity}, remaining_seconds={Math.Ceiling(remaining.TotalSeconds):F0}");
             return;
         }
 
@@ -150,7 +150,7 @@ internal sealed class MessageParseCoordinator(
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            BotLog.Info($"MyParser 解析任务已取消: channel={message.Channel.Id}, message_id={message.MessageId}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 解析任务已取消: channel={message.Channel.Id}, message_id={message.MessageId}");
         }
     }
 

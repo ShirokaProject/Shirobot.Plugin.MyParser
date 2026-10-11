@@ -30,8 +30,18 @@ internal sealed class LocalVideoHttpServer : IDisposable
         _publicBaseUrl = PublicBaseUrl;
 
         _loopTask = Task.Run(ListenLoopAsync);
-        BotLog.Info($"MyParser 本地视频 HTTP 服务已启动: listen=http://{Host}:{Port}/myparser/ via TcpListener, public_base={_publicBaseUrl}, allow_remote=false");
+        global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 本地视频 HTTP 服务已启动: listen=http://{Host}:{Port}/myparser/ via TcpListener, public_base={_publicBaseUrl}, allow_remote=false");
     }
+
+    private static string GetContentType(string path) => Path.GetExtension(path).ToLowerInvariant() switch
+    {
+        ".png" => "image/png",
+        ".jpg" or ".jpeg" => "image/jpeg",
+        ".gif" => "image/gif",
+        ".webp" => "image/webp",
+        ".mp4" => "video/mp4",
+        _ => "application/octet-stream",
+    };
 
     public string RegisterFile(string path)
     {
@@ -46,7 +56,7 @@ internal sealed class LocalVideoHttpServer : IDisposable
         _files[token] = new RegisteredFile(path, DateTimeOffset.UtcNow);
         var fileName = Uri.EscapeDataString(Path.GetFileName(path));
         var url = $"{_publicBaseUrl}/video/{token}/{fileName}";
-        BotLog.Info($"MyParser 本地视频 HTTP 已注册: token={token[..8]}, file={path}, url={url}");
+        global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 本地视频 HTTP 已注册: token={token[..8]}, file={path}, url={url}");
         return url;
     }
 
@@ -165,7 +175,7 @@ internal sealed class LocalVideoHttpServer : IDisposable
             {
                 $"HTTP/1.1 {statusCode} {statusText}",
                 "Server: MyParserLocalVideo",
-                "Content-Type: video/mp4",
+                $"Content-Type: {GetContentType(filePath)}",
                 "Accept-Ranges: bytes",
                 "Cache-Control: no-store",
                 $"Content-Disposition: inline; filename=\"{EscapeHeaderValue(info.Name)}\"",
@@ -179,7 +189,7 @@ internal sealed class LocalVideoHttpServer : IDisposable
             }
 
             await WriteHeadersAsync(stream, headers, _cts.Token);
-            BotLog.Info($"MyParser 本地视频 HTTP 请求: token={token[..Math.Min(8, token.Length)]}, method={request.Method}, range={(range.IsPartial ? $"{start}-{end}" : "full")}, bytes={count}, file_mb={length / 1024d / 1024d:F2}, remote={client.Client.RemoteEndPoint}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 本地视频 HTTP 请求: token={token[..Math.Min(8, token.Length)]}, method={request.Method}, range={(range.IsPartial ? $"{start}-{end}" : "full")}, bytes={count}, file_mb={length / 1024d / 1024d:F2}, remote={client.Client.RemoteEndPoint}");
 
             if (string.Equals(request.Method, "HEAD", StringComparison.OrdinalIgnoreCase))
             {

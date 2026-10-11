@@ -13,6 +13,7 @@ internal sealed class ProviderSettingsMonitor(IBotContext context, PluginConfig 
 
     public void InitializeRuntimeDirectories()
     {
+        DiagnosticLog.Configure(() => config.DevelopmentMode);
         Directory.CreateDirectory(PluginDirectory);
         MyParserRuntime.DouyinCookie = string.Empty;
         MyParserRuntime.BilibiliCookie = string.Empty;

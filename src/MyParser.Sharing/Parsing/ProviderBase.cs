@@ -33,10 +33,12 @@ public abstract class ProviderMessageHandlerBase(ProviderMessageHandlerContext c
         bool silentProviderMismatch = false,
         CancellationToken cancellationToken = default)
     {
+        BotLog.Info($"MyParser 开始解析：{ReactionPlatformName}");
         await ReactAsync(message, "351", ReactionPlatformName).ConfigureAwait(false);
         try
         {
-            var media = await PrimaryProvider.ParseAsync(text, cancellationToken).ConfigureAwait(false);
+            var media = await NetworkRetry.ExecuteAsync(token => PrimaryProvider.ParseAsync(text, token),
+                Config.NetworkRetryCount, cancellationToken).ConfigureAwait(false);
             await PresentAsync(message, media, silentProviderMismatch, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -46,7 +48,7 @@ public abstract class ProviderMessageHandlerBase(ProviderMessageHandlerContext c
         catch (Exception ex) when (silentProviderMismatch && ParseProviderRegistry.IsProviderMismatch(ex))
         {
             await RemoveReactionAsync(message, "351", ReactionPlatformName).ConfigureAwait(false);
-            BotLog.Info($"MyParser 自动解析忽略不匹配链接: provider={PrimaryProvider.Id}, error={ex.Message}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 自动解析忽略不匹配链接: provider={PrimaryProvider.Id}, error={ex.Message}");
         }
         catch (Exception ex)
         {

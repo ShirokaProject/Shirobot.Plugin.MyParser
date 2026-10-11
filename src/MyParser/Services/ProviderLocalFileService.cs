@@ -59,7 +59,7 @@ internal sealed class ProviderLocalFileService(IBotContext context)
             : new Uri(localPath).AbsoluteUri;
         var fileName = Path.GetFileName(localPath);
         var stopwatch = Stopwatch.StartNew();
-        BotLog.Info($"MyParser {platformName} 文件上传开始: media_id={mediaId}, mode={uploadMode}, file_mb={fileSize / 1024d / 1024d:F2}, file={localPath}");
+        global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser {platformName} 文件上传开始: media_id={mediaId}, mode={uploadMode}, file_mb={fileSize / 1024d / 1024d:F2}, file={localPath}");
 
         var fileId = message.Channel.Type switch
         {

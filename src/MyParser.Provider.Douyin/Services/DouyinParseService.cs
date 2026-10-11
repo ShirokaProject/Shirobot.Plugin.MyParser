@@ -54,7 +54,7 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
             sourceUrl = landingPage.FinalUrl;
             awemeId = landingPage.AwemeId;
         }
-        BotLog.Info($"MyParser 抖音入口解析完成: endpoint={SafeEndpoint(sourceUrl)}, elapsed_ms={entryStopwatch.ElapsedMilliseconds}");
+        global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 抖音入口解析完成: endpoint={SafeEndpoint(sourceUrl)}, elapsed_ms={entryStopwatch.ElapsedMilliseconds}");
         if (awemeId is null)
         {
             throw new DouyinParseException("未能从最终页面提取作品 ID。可能不是公开视频/图集链接。");
@@ -84,8 +84,9 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
         }
         using (detail)
         {
-            BotLog.Info($"MyParser 抖音入口详情获取完成: aweme_id={awemeId}, phases={string.Join(",", phases)}, elapsed_ms={entryStopwatch.ElapsedMilliseconds}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 抖音入口详情获取完成: aweme_id={awemeId}, phases={string.Join(",", phases)}, elapsed_ms={entryStopwatch.ElapsedMilliseconds}");
             var result = ParseAwemeDetail(detail, awemeId, sourceUrl);
+            result = await TryApplyGalleryMediaDetailAsync(result, cancellationToken);
             result = await TryApplyUserProfileAsync(result, cancellationToken);
             result = await TryApplyPublishCoverAsync(result, cancellationToken);
             result = await TryApplySearchCoverAsync(result, cancellationToken);
@@ -98,9 +99,17 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
         DouyinParseResult enriched,
         string source)
     {
-        var images = enriched.Images.Count > 0 ? enriched.Images : original.Images;
+        var images = enriched.Images.Count > 0
+            ? enriched.Images.Select(image => image with
+            {
+                ClipType = image.ClipType ?? original.Images.FirstOrDefault(previous =>
+                    ImageIdentity(previous.Url) == ImageIdentity(image.Url))?.ClipType,
+                LivePhotoUrl = image.LivePhotoUrl ?? original.Images.FirstOrDefault(previous =>
+                    ImageIdentity(previous.Url) == ImageIdentity(image.Url))?.LivePhotoUrl,
+            }).ToList()
+            : original.Images;
         var livePhotoCount = images.Count(image => !string.IsNullOrWhiteSpace(image.LivePhotoUrl));
-        BotLog.Info($"MyParser 抖音图文媒体详情补全: aweme_id={original.AwemeId}, source={source}, live_photos={livePhotoCount}, music={!string.IsNullOrWhiteSpace(enriched.MusicUrl)}");
+        global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 抖音图文媒体详情补全: aweme_id={original.AwemeId}, source={source}, live_photos={livePhotoCount}, music={!string.IsNullOrWhiteSpace(enriched.MusicUrl)}");
         return original with
         {
             Images = images,
@@ -113,28 +122,50 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
         };
     }
 
+    private static string ImageIdentity(string url) => Uri.TryCreate(url, UriKind.Absolute, out var uri)
+        ? uri.AbsolutePath.Split('~', 2)[0] : url;
+
+    private async Task<DouyinParseResult> TryApplyGalleryMediaDetailAsync(DouyinParseResult result, CancellationToken cancellationToken)
+    {
+        if (!result.IsGallery || string.IsNullOrWhiteSpace(MyParserRuntime.DouyinCookie)
+            || result.Images.All(image => !string.IsNullOrWhiteSpace(image.LivePhotoUrl))) return result;
+        try
+        {
+            using var detail = await FetchAwemeDetailAsync(result.AwemeId,
+                result.SourceUrl ?? $"https://www.douyin.com/note/{result.AwemeId}", [], cancellationToken);
+            var enriched = ParseAwemeDetail(detail, result.AwemeId, result.SourceUrl!);
+            return enriched.IsGallery ? MergeGalleryMediaDetail(result, enriched, "detail") : result;
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested &&
+                                   ex is DouyinParseException or HttpRequestException or IOException or TaskCanceledException or JsonException)
+        {
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser 抖音图文动态详情补全失败，保留已有图片: aweme_id={result.AwemeId}, error={ex.GetType().Name}");
+            return result;
+        }
+    }
+
     private async Task<DouyinParseResult> TryApplyCommentsAsync(
         DouyinParseResult result,
         CancellationToken cancellationToken)
     {
         var requestedCount = Math.Clamp(config.DouyinCommentCount, 0, 50);
         var hasCookie = !string.IsNullOrWhiteSpace(MyParserRuntime.DouyinCookie);
-        BotLog.Info($"MyParser 抖音评论解析检查: aweme_id={result.AwemeId}, enabled={config.DouyinFetchComments}, requested={requestedCount}, cookie_present={hasCookie}");
+        global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 抖音评论解析检查: aweme_id={result.AwemeId}, enabled={config.DouyinFetchComments}, requested={requestedCount}, cookie_present={hasCookie}");
         if (!config.DouyinFetchComments)
         {
-            BotLog.Info($"MyParser 抖音评论解析跳过: aweme_id={result.AwemeId}, reason=disabled");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 抖音评论解析跳过: aweme_id={result.AwemeId}, reason=disabled");
             return result;
         }
 
         if (requestedCount == 0)
         {
-            BotLog.Info($"MyParser 抖音评论解析跳过: aweme_id={result.AwemeId}, reason=count_zero");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 抖音评论解析跳过: aweme_id={result.AwemeId}, reason=count_zero");
             return result;
         }
 
         if (!hasCookie)
         {
-            BotLog.Info($"MyParser 抖音评论解析跳过: aweme_id={result.AwemeId}, reason=missing_cookie");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 抖音评论解析跳过: aweme_id={result.AwemeId}, reason=missing_cookie");
             return result;
         }
 
@@ -142,13 +173,13 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
         {
             var commentService = new DouyinCommentService(http, _guestSession, _msTokenProvider);
             var comments = await commentService.FetchAsync(result, requestedCount, cancellationToken);
-            BotLog.Info($"MyParser 抖音评论解析完成: aweme_id={result.AwemeId}, requested={requestedCount}, parsed={comments.Count}, with_images={comments.Count(comment => comment.ImageUrls.Count > 0)}, total_images={comments.Sum(comment => comment.ImageUrls.Count)}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 抖音评论解析完成: aweme_id={result.AwemeId}, requested={requestedCount}, parsed={comments.Count}, with_images={comments.Count(comment => comment.ImageUrls.Count > 0)}, total_images={comments.Sum(comment => comment.ImageUrls.Count)}");
             return result with { Comments = comments };
         }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested
                                    && ex is HttpRequestException or IOException or JsonException or DouyinParseException or TaskCanceledException)
         {
-            BotLog.Warning($"MyParser 抖音评论获取失败，继续发送作品: aweme_id={result.AwemeId}, error={ex.Message}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser 抖音评论获取失败，继续发送作品: aweme_id={result.AwemeId}, error={ex.Message}");
             return result;
         }
     }
@@ -203,7 +234,7 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
         var verifyFp = TryGetCookieValue("s_v_web_id") ?? TryGetCookieValue("verifyFp") ?? TryGetCookieValue("fp");
         if (string.IsNullOrWhiteSpace(msToken))
         {
-            BotLog.Warning($"MyParser 抖音动态 msToken 不可用，使用随机回退: has_ttwid={!string.IsNullOrWhiteSpace(ttwid)}, has_verifyFp={!string.IsNullOrWhiteSpace(verifyFp)}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser 抖音动态 msToken 不可用，使用随机回退: has_ttwid={!string.IsNullOrWhiteSpace(ttwid)}, has_verifyFp={!string.IsNullOrWhiteSpace(verifyFp)}");
         }
 
         var query = BuildHjDetailQuery(
@@ -256,7 +287,7 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
         }
         catch (DouyinParseException ex)
         {
-            BotLog.Warning($"MyParser 抖音分享页备用解析失败: aweme_id={awemeId}, error={ex.Message}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser 抖音分享页备用解析失败: aweme_id={awemeId}, error={ex.Message}");
         }
 
         throw new DouyinParseException("抖音游客解析失败：" + string.Join("; ", phases) + "; detail=未返回作品数据。请稍后重试或配置有效 DouyinCookie。");
@@ -272,12 +303,12 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
                 return doc;
             }
 
-            BotLog.Warning($"MyParser 抖音详情接口响应缺少作品数据: aweme_id={awemeId}, source={source}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser 抖音详情接口响应缺少作品数据: aweme_id={awemeId}, source={source}");
             doc.Dispose();
         }
         catch (DouyinParseException ex)
         {
-            BotLog.Warning($"MyParser 抖音详情接口失败，尝试备用解析: aweme_id={awemeId}, source={source}, error={ex.Message}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser 抖音详情接口失败，尝试备用解析: aweme_id={awemeId}, source={source}, error={ex.Message}");
         }
 
         return null;
@@ -309,11 +340,11 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
             _guestSession.CaptureHtml(html);
             if (response.IsSuccessStatusCode && TryExtractShareAweme(html, awemeId, out var doc))
             {
-                BotLog.Info($"MyParser 抖音分享页命中: aweme_id={awemeId}, endpoint={SafeEndpoint(shareUrl)}, elapsed_ms={stopwatch.ElapsedMilliseconds}");
+                global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 抖音分享页命中: aweme_id={awemeId}, endpoint={SafeEndpoint(shareUrl)}, elapsed_ms={stopwatch.ElapsedMilliseconds}");
                 return (html, doc);
             }
 
-            BotLog.Info($"MyParser 抖音分享页未命中: aweme_id={awemeId}, endpoint={SafeEndpoint(shareUrl)}, http={(int)response.StatusCode}, elapsed_ms={stopwatch.ElapsedMilliseconds}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 抖音分享页未命中: aweme_id={awemeId}, endpoint={SafeEndpoint(shareUrl)}, http={(int)response.StatusCode}, elapsed_ms={stopwatch.ElapsedMilliseconds}");
         }
         throw new DouyinParseException("分享页未命中作品数据");
     }
@@ -388,7 +419,7 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
             var followerCount = GetLong(user, "follower_count");
             var region = GetString(user, "ip_location") ?? GetString(user, "region");
             var avatar = ExtractAuthorAvatarUrl(user);
-            BotLog.Info($"MyParser 抖音作者资料补全: aweme_id={result.AwemeId}, follower={followerCount}, region={region ?? ""}, avatar={(string.IsNullOrWhiteSpace(avatar) ? "" : "ok")}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 抖音作者资料补全: aweme_id={result.AwemeId}, follower={followerCount}, region={region ?? ""}, avatar={(string.IsNullOrWhiteSpace(avatar) ? "" : "ok")}");
             return result with
             {
                 AuthorFollowerCount = followerCount > 0 ? followerCount : result.AuthorFollowerCount,
@@ -398,7 +429,7 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
         }
         catch (Exception ex) when (ex is HttpRequestException or IOException or JsonException or DouyinParseException or TaskCanceledException)
         {
-            BotLog.Warning($"MyParser 抖音作者资料补全失败: aweme_id={result.AwemeId}, error={ex.Message}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser 抖音作者资料补全失败: aweme_id={result.AwemeId}, error={ex.Message}");
             return result;
         }
     }
@@ -407,7 +438,7 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
     {
         if (string.IsNullOrWhiteSpace(result.AuthorId) || !result.AuthorId.StartsWith("MS4w", StringComparison.Ordinal))
         {
-            BotLog.Info($"MyParser 抖音发布列表封面跳过: aweme_id={result.AwemeId}, reason=missing_sec_uid");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 抖音发布列表封面跳过: aweme_id={result.AwemeId}, reason=missing_sec_uid");
             return result;
         }
 
@@ -416,7 +447,7 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
             var publishAweme = await TryFetchPublishAwemeAsync(result.AuthorId, result.AwemeId, cancellationToken);
             if (publishAweme is null)
             {
-                BotLog.Info($"MyParser 抖音发布列表封面未命中: aweme_id={result.AwemeId}, sec_uid={result.AuthorId}");
+                global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 抖音发布列表封面未命中: aweme_id={result.AwemeId}, sec_uid={result.AuthorId}");
                 return result;
             }
 
@@ -442,22 +473,22 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
 
             if (string.Equals(publishCover, mergedResult.CoverUrl, StringComparison.Ordinal))
             {
-                BotLog.Info($"MyParser 抖音发布列表封面已是当前封面: aweme_id={result.AwemeId}, url={publishCover}");
+                global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 抖音发布列表封面已是当前封面: aweme_id={result.AwemeId}, url={publishCover}");
                 return mergedResult;
             }
 
             if (!string.IsNullOrWhiteSpace(mergedResult.CoverUrl))
             {
-                BotLog.Info($"MyParser 抖音发布列表封面命中但保留详情封面: aweme_id={result.AwemeId}, keep={mergedResult.CoverUrl}, publish={publishCover}");
+                global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 抖音发布列表封面命中但保留详情封面: aweme_id={result.AwemeId}, keep={mergedResult.CoverUrl}, publish={publishCover}");
                 return mergedResult with { CoverSource = "detail" };
             }
 
-            BotLog.Info($"MyParser 抖音详情封面为空，使用发布列表封面: aweme_id={result.AwemeId}, new={publishCover}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 抖音详情封面为空，使用发布列表封面: aweme_id={result.AwemeId}, new={publishCover}");
             return mergedResult with { CoverUrl = publishCover, CoverSource = "publish" };
         }
         catch (Exception ex) when (ex is HttpRequestException or IOException or JsonException or DouyinParseException or TaskCanceledException)
         {
-            BotLog.Warning($"MyParser 抖音发布列表封面获取失败: aweme_id={result.AwemeId}, error={ex.Message}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser 抖音发布列表封面获取失败: aweme_id={result.AwemeId}, error={ex.Message}");
             return result;
         }
     }
@@ -471,7 +502,7 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
 
         if (!string.IsNullOrWhiteSpace(result.CoverSource) && result.CoverSource.StartsWith("publish", StringComparison.Ordinal))
         {
-            BotLog.Info($"MyParser 抖音默认使用发布列表封面: aweme_id={result.AwemeId}, source={result.CoverSource}, skip_search_override=true, url={result.CoverUrl}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 抖音默认使用发布列表封面: aweme_id={result.AwemeId}, source={result.CoverSource}, skip_search_override=true, url={result.CoverUrl}");
             return result;
         }
 
@@ -480,22 +511,22 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
             var searchCover = await TryFetchSearchCoverUrlAsync(result.Title, result.AwemeId, cancellationToken);
             if (string.IsNullOrWhiteSpace(searchCover))
             {
-                BotLog.Info($"MyParser 抖音搜索封面未命中: aweme_id={result.AwemeId}");
+                global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 抖音搜索封面未命中: aweme_id={result.AwemeId}");
                 return result;
             }
 
             if (CoverUrlScore(searchCover) <= CoverUrlScore(result.CoverUrl))
             {
-                BotLog.Info($"MyParser 抖音搜索封面未优于当前封面: aweme_id={result.AwemeId}, current_score={CoverUrlScore(result.CoverUrl)}, search_score={CoverUrlScore(searchCover)}");
+                global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 抖音搜索封面未优于当前封面: aweme_id={result.AwemeId}, current_score={CoverUrlScore(result.CoverUrl)}, search_score={CoverUrlScore(searchCover)}");
                 return result;
             }
 
-            BotLog.Info($"MyParser 抖音封面使用搜索高清图: aweme_id={result.AwemeId}, old={result.CoverUrl}, new={searchCover}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 抖音封面使用搜索高清图: aweme_id={result.AwemeId}, old={result.CoverUrl}, new={searchCover}");
             return result with { CoverUrl = searchCover, CoverSource = "search" };
         }
         catch (Exception ex) when (ex is HttpRequestException or IOException or JsonException or DouyinParseException or TaskCanceledException)
         {
-            BotLog.Warning($"MyParser 抖音搜索封面获取失败: aweme_id={result.AwemeId}, error={ex.Message}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser 抖音搜索封面获取失败: aweme_id={result.AwemeId}, error={ex.Message}");
             return result;
         }
     }
@@ -559,14 +590,14 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
                 var value = webId.GetString();
                 if (!string.IsNullOrWhiteSpace(value))
                 {
-                    BotLog.Info($"MyParser 抖音 webid 获取成功: webid={value}");
+                    global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 抖音 webid 获取成功: webid={value}");
                     return value;
                 }
             }
         }
         catch (Exception ex) when (ex is HttpRequestException or IOException or JsonException or TaskCanceledException)
         {
-            BotLog.Warning($"MyParser 抖音 webid 获取失败: error={ex.Message}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser 抖音 webid 获取失败: error={ex.Message}");
         }
 
         return null;
@@ -590,7 +621,7 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
         var statusCode = GetInt(root, "status_code");
         if (statusCode != 0)
         {
-            BotLog.Warning($"MyParser 抖音搜索封面接口异常: aweme_id={awemeId}, status_code={statusCode}, status_msg={GetString(root, "status_msg") ?? GetString(root, "message") ?? string.Empty}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser 抖音搜索封面接口异常: aweme_id={awemeId}, status_code={statusCode}, status_msg={GetString(root, "status_msg") ?? GetString(root, "message") ?? string.Empty}");
             return null;
         }
 
@@ -612,7 +643,7 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
             }
 
             var cover = ExtractSearchCoverUrl(aweme);
-            BotLog.Info($"MyParser 抖音搜索封面命中: aweme_id={awemeId}, keyword={keyword}, cover={cover ?? string.Empty}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 抖音搜索封面命中: aweme_id={awemeId}, keyword={keyword}, cover={cover ?? string.Empty}");
             return cover;
         }
 
@@ -635,7 +666,7 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
             var statusCode = GetInt(root, "status_code");
             if (statusCode != 0)
             {
-                BotLog.Warning($"MyParser 抖音发布列表封面接口异常: aweme_id={awemeId}, page={page}, status_code={statusCode}, status_msg={GetString(root, "status_msg") ?? GetString(root, "message") ?? string.Empty}");
+                global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser 抖音发布列表封面接口异常: aweme_id={awemeId}, page={page}, status_code={statusCode}, status_msg={GetString(root, "status_msg") ?? GetString(root, "message") ?? string.Empty}");
                 return null;
             }
 
@@ -650,7 +681,7 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
                     }
 
                     var publishCover = ExtractPublishCoverUrl(item);
-                    BotLog.Info($"MyParser 抖音发布列表作品命中: aweme_id={awemeId}, page={page}, cover={publishCover ?? string.Empty}");
+                    global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 抖音发布列表作品命中: aweme_id={awemeId}, page={page}, cover={publishCover ?? string.Empty}");
                     return item.Clone();
                 }
             }
@@ -670,7 +701,7 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
 
     private async Task<JsonDocument> GetJsonAsync(string url, string referer, CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        using var request = new HttpRequestMessage(HttpMethod.Get, DouyinWebSignature.Apply(url, _guestSession));
         ApplyDefaultHeaders(request, referer);
         var session = _guestSession;
         var requestCookie = session.BuildCookieHeader();
@@ -721,7 +752,7 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
     private static void LogNonJsonResponse(string url, string referer, HttpResponseMessage response, string contentType, string? whaleAbortText, string? whaleAbortData, string body)
     {
         var forceLogin = IsForceLoginAbort(whaleAbortText) || IsForceLoginAbort(whaleAbortData);
-        BotLog.Warning(
+        global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning(
             "MyParser 抖音接口返回非 JSON: "
             + $"endpoint={SafeEndpoint(url)}, referer={SafeEndpoint(referer)}, http={(int)response.StatusCode}, content_type={contentType}, body_length={body.Length}, whale_abort_present={!string.IsNullOrWhiteSpace(whaleAbortText) || !string.IsNullOrWhiteSpace(whaleAbortData)}, whale_force_login={forceLogin}");
     }
@@ -810,12 +841,12 @@ public sealed class DouyinParseService(HttpClient http, IReadOnlyList<IDouyinWor
                 ? images.GetArrayLength()
                 : 0;
             var hasVideo = aweme.TryGetProperty("video", out var video) && video.ValueKind == JsonValueKind.Object;
-            BotLog.Warning($"MyParser 抖音作品类型暂不支持: aweme_id={fallbackAwemeId}, aweme_type={awemeType}, media_type={mediaType}, has_video={hasVideo}, image_count={imageCount}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser 抖音作品类型暂不支持: aweme_id={fallbackAwemeId}, aweme_type={awemeType}, media_type={mediaType}, has_video={hasVideo}, image_count={imageCount}");
             throw new DouyinUnsupportedWorkTypeException("暂不支持的抖音作品类型。");
         }
 
         var result = parser.Parse(aweme, fallbackAwemeId, sourceUrl);
-        BotLog.Info($"MyParser 抖音作品类型解析: aweme_id={result.AwemeId}, parser={parser.GetType().Name}, is_video={result.IsVideo}, is_gallery={result.IsGallery}");
+        global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 抖音作品类型解析: aweme_id={result.AwemeId}, parser={parser.GetType().Name}, is_video={result.IsVideo}, is_gallery={result.IsGallery}");
         return result;
     }
 

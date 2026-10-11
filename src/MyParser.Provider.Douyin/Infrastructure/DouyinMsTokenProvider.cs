@@ -38,7 +38,7 @@ public sealed class DouyinMsTokenProvider(HttpClient http)
         }
         catch (Exception ex) when (ex is HttpRequestException or IOException or TaskCanceledException)
         {
-            BotLog.Warning($"MyParser 抖音动态 msToken 获取失败: {ex.GetType().Name}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser 抖音动态 msToken 获取失败: {ex.GetType().Name}");
         }
 
         return null;

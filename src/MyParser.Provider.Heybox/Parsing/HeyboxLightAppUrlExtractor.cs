@@ -60,7 +60,7 @@ internal static partial class HeyboxLightAppUrlExtractor
             var urls = ExtractUrls(payload).Take(20).ToArray();
             if (string.IsNullOrWhiteSpace(payload))
             {
-                BotLog.Info("MyParser 小黑盒轻应用: empty payload");
+                global::Shirobot.Plugin.MyParser.DiagnosticLog.Info("MyParser 小黑盒轻应用: empty payload");
                 return;
             }
 
@@ -71,7 +71,7 @@ internal static partial class HeyboxLightAppUrlExtractor
                 : [];
             var interesting = new List<string>();
             CollectInterestingFields(root, null, interesting, 40);
-            BotLog.Info(
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info(
                 "MyParser 小黑盒轻应用信息: "
                 + $"payload_bytes={payload.Length}, "
                 + $"root_keys=[{string.Join(',', rootKeys)}], "
@@ -80,7 +80,7 @@ internal static partial class HeyboxLightAppUrlExtractor
         }
         catch (Exception ex)
         {
-            BotLog.Info($"MyParser 小黑盒轻应用信息: payload_bytes={app.JsonPayload?.Length ?? 0}, parse_error={ex.GetType().Name}: {ex.Message}, urls=[{string.Join("; ", ExtractUrls(app.JsonPayload ?? string.Empty).Take(20).Select(TrimLogValue))}]");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 小黑盒轻应用信息: payload_bytes={app.JsonPayload?.Length ?? 0}, parse_error={ex.GetType().Name}: {ex.Message}, urls=[{string.Join("; ", ExtractUrls(app.JsonPayload ?? string.Empty).Take(20).Select(TrimLogValue))}]");
         }
     }
 

@@ -35,7 +35,7 @@ internal sealed class ProviderDownloadService
                 }
             }
 
-            throw new InvalidOperationException($"{request.PlatformDisplayName} 视频下载失败：{lastError?.Message ?? "无可用地址"}");
+            throw new InvalidOperationException($"{request.PlatformDisplayName} 视频下载失败：{lastError?.Message ?? "无可用地址"}", lastError);
         });
     }
 
@@ -59,10 +59,11 @@ internal sealed class ProviderDownloadService
     public async Task<string> MuxLoopingVideoWithAudioAsync(
         PluginConfig config,
         string videoPath,
-        string audioPath,
-        CancellationToken cancellationToken = default)
+        string? audioPath,
+        CancellationToken cancellationToken = default,
+        int loopCount = 3)
     {
-        return await CreateGalleryVideoWithAudioAsync(config, videoPath, audioPath, false, cancellationToken);
+        return await CreateGalleryVideoWithAudioAsync(config, videoPath, audioPath, false, cancellationToken, loopCount);
     }
 
     public Task<string> CreateStillImageVideoWithAudioAsync(
@@ -77,10 +78,12 @@ internal sealed class ProviderDownloadService
     private static async Task<string> CreateGalleryVideoWithAudioAsync(
         PluginConfig config,
         string visualPath,
-        string audioPath,
+        string? audioPath,
         bool stillImage,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        int loopCount = 3)
     {
+        if (loopCount < 1) throw new ArgumentOutOfRangeException(nameof(loopCount));
         var outputPath = Path.Combine(
             MyParserRuntime.CreateTempDirectory(),
             $"{Path.GetFileNameWithoutExtension(visualPath)}_music_{Guid.NewGuid():N}.mp4");
@@ -88,12 +91,12 @@ internal sealed class ProviderDownloadService
         {
             try
             {
-                await Task.Run(() => SharpMp4MediaService.MuxLoopingVideoWithAudio(visualPath, audioPath, outputPath, cancellationToken), cancellationToken);
+                await Task.Run(() => SharpMp4MediaService.MuxLoopingVideoWithAudio(visualPath, audioPath, outputPath, cancellationToken, loopCount), cancellationToken);
                 await ValidateMuxedVideoAsync(outputPath, cancellationToken);
                 if (config.MaxVideoDownloadMegabytes > 0
                     && new FileInfo(outputPath).Length > config.MaxVideoDownloadMegabytes * 1024L * 1024L)
                     throw new InvalidOperationException($"Live Photo 音乐合成文件超过 {config.MaxVideoDownloadMegabytes}MB 限制。");
-                BotLog.Info($"MyParser SharpMP4 循环 Live Photo 并合成音乐完成: video={visualPath}, audio={audioPath}, output={outputPath}");
+                global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser SharpMP4 循环 Live Photo 并合成音乐完成: video={visualPath}, audio={audioPath}, output={outputPath}");
                 return outputPath;
             }
             catch (OperationCanceledException)
@@ -102,13 +105,14 @@ internal sealed class ProviderDownloadService
             }
             catch (Exception ex)
             {
-                BotLog.Warning($"MyParser SharpMP4 循环 Live Photo 失败，回退 ffmpeg: error={ex.Message}");
+                global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser SharpMP4 循环 Live Photo 失败，回退 ffmpeg: error={ex.Message}");
             }
         }
 
         var ffmpeg = ResolveFfmpegPath(config)
                      ?? throw new InvalidOperationException("图文合成音乐需要 ffmpeg；请配置 FfmpegPath 或将 ffmpeg 加入 PATH。");
-        var duration = await ProbeAudioDurationAsync(ffmpeg, audioPath, cancellationToken);
+        var duration = await ProbeMediaDurationAsync(ffmpeg, stillImage ? audioPath! : visualPath, cancellationToken, video: !stillImage);
+        if (!stillImage) duration *= loopCount;
         var psi = new ProcessStartInfo
         {
             FileName = ffmpeg,
@@ -128,13 +132,20 @@ internal sealed class ProviderDownloadService
         else
         {
             psi.ArgumentList.Add("-stream_loop");
-            psi.ArgumentList.Add("-1");
+            psi.ArgumentList.Add((loopCount - 1).ToString(CultureInfo.InvariantCulture));
         }
 
         psi.ArgumentList.Add("-i");
         psi.ArgumentList.Add(visualPath);
-        foreach (var argument in new[] { "-i", audioPath, "-map", "0:v:0", "-map", "1:a:0" })
-            psi.ArgumentList.Add(argument);
+        if (audioPath is not null)
+        {
+            foreach (var argument in new[] { "-i", audioPath, "-map", "0:v:0", "-map", "1:a:0", "-af", "apad" })
+                psi.ArgumentList.Add(argument);
+        }
+        else
+        {
+            foreach (var argument in new[] { "-map", "0:v:0", "-an" }) psi.ArgumentList.Add(argument);
+        }
         if (stillImage)
         {
             foreach (var argument in new[]
@@ -180,7 +191,7 @@ internal sealed class ProviderDownloadService
                 throw new InvalidOperationException($"图文音乐合成文件超过 {config.MaxVideoDownloadMegabytes}MB 限制。");
             }
 
-            BotLog.Info($"MyParser 图文合成音乐完成: visual={visualPath}, still_image={stillImage}, audio={audioPath}, output={outputPath}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 图文合成音乐完成: visual={visualPath}, still_image={stillImage}, audio={audioPath}, output={outputPath}");
             return outputPath;
         }
         finally
@@ -197,7 +208,7 @@ internal sealed class ProviderDownloadService
         }
     }
 
-    private static async Task<double> ProbeAudioDurationAsync(string ffmpeg, string audioPath, CancellationToken cancellationToken)
+    private static async Task<double> ProbeMediaDurationAsync(string ffmpeg, string mediaPath, CancellationToken cancellationToken, bool video = false)
     {
         var probeName = OperatingSystem.IsWindows() ? "ffprobe.exe" : "ffprobe";
         var ffprobe = Path.Combine(Path.GetDirectoryName(ffmpeg) ?? "", probeName);
@@ -213,7 +224,12 @@ internal sealed class ProviderDownloadService
             UseShellExecute = false,
             CreateNoWindow = true,
         };
-        foreach (var argument in new[] { "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", audioPath })
+        if (video)
+        {
+            psi.ArgumentList.Add("-select_streams");
+            psi.ArgumentList.Add("v:0");
+        }
+        foreach (var argument in new[] { "-v", "error", "-show_entries", video ? "stream=duration" : "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", mediaPath })
             psi.ArgumentList.Add(argument);
 
         using var process = Process.Start(psi) ?? throw new InvalidOperationException("ffprobe 启动失败。");
@@ -227,7 +243,7 @@ internal sealed class ProviderDownloadService
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            throw new TimeoutException("探测图文音乐时长超时。");
+            throw new TimeoutException("探测图文媒体时长超时。");
         }
         finally
         {
@@ -239,7 +255,7 @@ internal sealed class ProviderDownloadService
         if (process.ExitCode != 0
             || !double.TryParse(stdout.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var duration)
             || !double.IsFinite(duration) || duration <= 0)
-            throw new InvalidDataException("无法获取图文音乐时长：" + stderr[^Math.Min(stderr.Length, 500)..]);
+            throw new InvalidDataException("无法获取图文媒体时长：" + stderr[^Math.Min(stderr.Length, 500)..]);
         return duration;
     }
 
@@ -288,7 +304,7 @@ internal sealed class ProviderDownloadService
         var (video, audio, estimatedBytes) = await SelectMuxedDownloadStreamsAsync(config, request, cancellationToken);
         if (estimatedBytes is not null)
         {
-            BotLog.Info($"MyParser {request.PlatformDisplayName} 下载前大小预估: {request.IdentifierName}={request.MediaId}, video={FormatSize(video.EstimatedBytes)}, audio={FormatSize(audio.EstimatedBytes)}, total={FormatSize(estimatedBytes.Value)}, limit={config.MaxVideoDownloadMegabytes}MB");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser {request.PlatformDisplayName} 下载前大小预估: {request.IdentifierName}={request.MediaId}, video={FormatSize(video.EstimatedBytes)}, audio={FormatSize(audio.EstimatedBytes)}, total={FormatSize(estimatedBytes.Value)}, limit={config.MaxVideoDownloadMegabytes}MB");
         }
 
         var cacheKey = $"{request.CacheKeyPrefix}:v{video.Stream.QualityId}:{video.Stream.CodecName}:a{audio.Stream.StreamId}";
@@ -340,7 +356,7 @@ internal sealed class ProviderDownloadService
             catch (InvalidOperationException ex)
             {
                 lastVideoError = ex;
-                BotLog.Warning($"MyParser {request.PlatformDisplayName} 视频流不可用，尝试下一条: stream={video.StreamId}, error={ex.Message}");
+                global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser {request.PlatformDisplayName} 视频流不可用，尝试下一条: stream={video.StreamId}, error={ex.Message}");
                 continue;
             }
             firstVideoProbe ??= videoProbe;
@@ -351,7 +367,7 @@ internal sealed class ProviderDownloadService
             {
                 if (!ReferenceEquals(videoProbe.Stream, videos[0]) || !ReferenceEquals(audioProbe.Stream, audios[0]))
                 {
-                    BotLog.Info($"MyParser {request.PlatformDisplayName} 因文件大小自动降级: {request.IdentifierName}={request.MediaId}, quality={videoProbe.Stream.QualityName}, fps={videoProbe.Stream.Fps}, size={videoProbe.Stream.Width}x{videoProbe.Stream.Height}, codec={videoProbe.Stream.CodecName}, estimated_total={FormatSize(estimated)}");
+                    global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser {request.PlatformDisplayName} 因文件大小自动降级: {request.IdentifierName}={request.MediaId}, quality={videoProbe.Stream.QualityName}, fps={videoProbe.Stream.Fps}, size={videoProbe.Stream.Width}x{videoProbe.Stream.Height}, codec={videoProbe.Stream.CodecName}, estimated_total={FormatSize(estimated)}");
                 }
 
                 return (videoProbe, audioProbe, estimated);
@@ -363,7 +379,7 @@ internal sealed class ProviderDownloadService
             }
         }
 
-        var fallbackVideo = firstVideoProbe ?? throw new InvalidOperationException($"{request.PlatformDisplayName} 没有可下载的视频流：{lastVideoError?.Message ?? "所有地址均不可用"}");
+        var fallbackVideo = firstVideoProbe ?? throw new InvalidOperationException($"{request.PlatformDisplayName} 没有可下载的视频流：{lastVideoError?.Message ?? "所有地址均不可用"}", lastVideoError);
         ThrowMuxedTooLarge(request, fallbackVideo, audioProbe, EstimateTotalBytes(fallbackVideo.EstimatedBytes, audioProbe.EstimatedBytes), maxBytes);
         throw new UnreachableException();
     }
@@ -387,7 +403,7 @@ internal sealed class ProviderDownloadService
             catch (InvalidOperationException ex)
             {
                 lastAudioError = ex;
-                BotLog.Warning($"MyParser {request.PlatformDisplayName} 音频流不可用，尝试下一条: stream={audio.StreamId}, error={ex.Message}");
+                global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser {request.PlatformDisplayName} 音频流不可用，尝试下一条: stream={audio.StreamId}, error={ex.Message}");
                 continue;
             }
             firstProbe ??= probe;
@@ -402,7 +418,7 @@ internal sealed class ProviderDownloadService
             }
         }
 
-        return firstProbe ?? throw new InvalidOperationException($"{request.PlatformDisplayName} 没有可下载的音频流：{lastAudioError?.Message ?? "所有地址均不可用"}");
+        return firstProbe ?? throw new InvalidOperationException($"{request.PlatformDisplayName} 没有可下载的音频流：{lastAudioError?.Message ?? "所有地址均不可用"}", lastAudioError);
     }
 
     private async Task<MuxedStreamProbe> ProbeMuxedStreamAsync(
@@ -434,7 +450,7 @@ internal sealed class ProviderDownloadService
             }
         }
 
-        throw new InvalidOperationException($"{request.PlatformDisplayName} {label}大小探测失败：{lastError?.Message ?? "无可用地址"}");
+        throw new InvalidOperationException($"{request.PlatformDisplayName} {label}大小探测失败：{lastError?.Message ?? "无可用地址"}", lastError);
     }
 
     private async Task<(string FileUri, string LocalPath)> DownloadMuxedProviderVideoCoreAsync(
@@ -452,7 +468,7 @@ internal sealed class ProviderDownloadService
         var audioPath = Path.Combine(dir, $"{unique}_audio.m4s");
         var outputPath = GetAvailableOutputPath(dir, $"{title}.mp4");
 
-        BotLog.Info($"MyParser {request.PlatformDisplayName} 音视频流并发下载开始: {request.IdentifierName}={request.MediaId}, video={Path.GetFileName(videoPath)}, audio={Path.GetFileName(audioPath)}, output={Path.GetFileName(outputPath)}");
+        global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser {request.PlatformDisplayName} 音视频流并发下载开始: {request.IdentifierName}={request.MediaId}, video={Path.GetFileName(videoPath)}, audio={Path.GetFileName(audioPath)}, output={Path.GetFileName(outputPath)}");
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var videoTask = DownloadMuxedStreamAsync(config, request, video, videoPath, "视频流", linkedCts.Token);
         var audioTask = DownloadMuxedStreamAsync(config, request, audio, audioPath, "音频流", linkedCts.Token);
@@ -475,7 +491,7 @@ internal sealed class ProviderDownloadService
             throw;
         }
 
-        BotLog.Info($"MyParser {request.PlatformDisplayName} 音视频流并发下载完成，开始 SharpMP4 合并: {request.IdentifierName}={request.MediaId}");
+        global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser {request.PlatformDisplayName} 音视频流并发下载完成，开始 SharpMP4 合并: {request.IdentifierName}={request.MediaId}");
         await MuxAsync(config, videoPath, audioPath, outputPath, cancellationToken);
         await ValidateMuxedVideoAsync(outputPath, cancellationToken);
 
@@ -526,7 +542,7 @@ internal sealed class ProviderDownloadService
             }
         }
 
-        throw new InvalidOperationException($"{request.PlatformDisplayName} {label}下载失败：{lastError?.Message ?? "无可用地址"}");
+        throw new InvalidOperationException($"{request.PlatformDisplayName} {label}下载失败：{lastError?.Message ?? "无可用地址"}", lastError);
     }
 
     private HttpRangeDownloadRequest CreateMuxedRangeRequest(
@@ -554,7 +570,7 @@ internal sealed class ProviderDownloadService
             (index, contentRange) => new InvalidOperationException($"{request.PlatformDisplayName} {label}分片 {index} Content-Range 不匹配：{contentRange}"),
             (index, copied, expected) => new InvalidOperationException($"{request.PlatformDisplayName} {label}分片 {index} 大小不匹配：{copied} != {expected}"),
             (total, expected) => new InvalidOperationException($"{request.PlatformDisplayName} {label}分片合并大小不一致：{total} != {expected}"),
-            ex => BotLog.Warning($"MyParser {request.PlatformDisplayName} {label}并发下载失败，回退普通下载: {request.IdentifierName}={request.MediaId}, quality={stream.QualityName}, error={ex.Message}"),
+            ex => global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser {request.PlatformDisplayName} {label}并发下载失败，回退普通下载: {request.IdentifierName}={request.MediaId}, quality={stream.QualityName}, error={ex.Message}"),
             config.HttpProxy,
             request.PlatformId.Equals("youtube", StringComparison.OrdinalIgnoreCase));
     }
@@ -632,7 +648,7 @@ internal sealed class ProviderDownloadService
         }
 
         File.Move(tempSilkPath, outputSilkPath, overwrite: true);
-        BotLog.Info($"MyParser {request.PlatformDisplayName} SILK 编码完成: input={request.LocalAudioPath}, output={outputSilkPath}, silk_rate={silkRate}, size_kb={new FileInfo(outputSilkPath).Length / 1024d:F1}, encoder=SilkCodec.NET");
+        global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser {request.PlatformDisplayName} SILK 编码完成: input={request.LocalAudioPath}, output={outputSilkPath}, silk_rate={silkRate}, size_kb={new FileInfo(outputSilkPath).Length / 1024d:F1}, encoder=SilkCodec.NET");
     }
 
     private async Task<(string FileUri, string LocalPath)> DownloadProviderVideoCandidateAsync(
@@ -665,7 +681,7 @@ internal sealed class ProviderDownloadService
             (index, contentRange) => new InvalidOperationException($"分片 {index} Content-Range 不匹配：{contentRange}"),
             (index, copied, expected) => new InvalidOperationException($"分片 {index} 大小不匹配：{copied} != {expected}"),
             (total, expected) => new InvalidOperationException($"分片合并大小不一致：{total} != {expected}"),
-            ex => BotLog.Warning($"MyParser {request.PlatformDisplayName} 下载进度: {request.IdentifierName}={request.MediaId}, 并发下载失败，回退普通下载：{ex.Message}"),
+            ex => global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser {request.PlatformDisplayName} 下载进度: {request.IdentifierName}={request.MediaId}, 并发下载失败，回退普通下载：{ex.Message}"),
             config.HttpProxy);
 
         var total = await DownloadAsync(downloadRequest, config.LogDownloadProgress, 2, "MyParser", request.IdentifierName, cancellationToken);
@@ -766,14 +782,14 @@ internal sealed class ProviderDownloadService
             catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
-                BotLog.Warning($"MyParser ffmpeg 音视频合并失败，回退 SharpMP4: error={ex.Message}");
+                global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser ffmpeg 音视频合并失败，回退 SharpMP4: error={ex.Message}");
             }
         }
 
         try
         {
             await Task.Run(() => SharpMp4MediaService.Mux(videoPath, audioPath, outputPath), cancellationToken).ConfigureAwait(false);
-            BotLog.Info($"MyParser SharpMP4 音视频合并完成: output={outputPath}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser SharpMP4 音视频合并完成: output={outputPath}");
             return;
         }
         catch (OperationCanceledException)
@@ -784,7 +800,7 @@ internal sealed class ProviderDownloadService
         {
             if (preferredFfmpeg is not null)
                 throw; // Both backends failed; do not retry the same ffmpeg command.
-            BotLog.Warning($"MyParser SharpMP4 音视频合并失败，回退 ffmpeg: error={ex.Message}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser SharpMP4 音视频合并失败，回退 ffmpeg: error={ex.Message}");
         }
 
         var ffmpeg = ResolveFfmpegPath(config)

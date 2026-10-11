@@ -144,7 +144,7 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
             ? $"{mainTitle} - P{selectedPage} {partTitle}"
             : mainTitle;
         var mainCover = view.GetStringOrDefault("pic");
-        var pageCover = FirstNonEmpty(pageJson.GetStringOrDefault("first_frame"), mainCover);
+        var pageCover = FirstNonEmpty(mainCover, pageJson.GetStringOrDefault("first_frame"));
         var result = new BilibiliParseResult
         {
             Bvid = bvid,
@@ -209,7 +209,7 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
                 PartTitle = item.GetStringOrDefault("part"),
                 DurationSeconds = item.GetInt64OrDefault("duration"),
                 SourceUrl = $"https://www.bilibili.com/video/{bvid}/?p={index + 1}",
-                CoverUrl = FirstNonEmpty(item.GetStringOrDefault("first_frame"), coverUrl),
+                CoverUrl = FirstNonEmpty(coverUrl, item.GetStringOrDefault("first_frame")),
             }).ToList(),
         };
     }
@@ -312,7 +312,7 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
         }
         catch (Exception ex) when (ex is HttpRequestException or JsonException or BilibiliParseException or OperationCanceledException)
         {
-            BotLog.Warning($"MyParser Bilibili 补充卡片数据加载失败: endpoint={url}, error={ex.GetType().Name}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser Bilibili 补充卡片数据加载失败: endpoint={url}, error={ex.GetType().Name}");
             return null;
         }
     }

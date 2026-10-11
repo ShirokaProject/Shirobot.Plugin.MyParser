@@ -56,14 +56,15 @@ internal static class SharpMp4MediaService
 
     public static void MuxLoopingVideoWithAudio(
         string videoPath,
-        string audioPath,
+        string? audioPath,
         string outputPath,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        int loopCount = 3)
     {
         using var videoStream = OpenRead(videoPath);
-        using var audioStream = OpenRead(audioPath);
+        using var audioStream = audioPath is null ? null : OpenRead(audioPath);
         using var outputStream = new BufferedStream(new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.Read));
-        LoopingVideoAudioMuxer.Mux(videoStream, audioStream, outputStream, cancellationToken, new HostTemporaryStorageFactory());
+        LoopingVideoAudioMuxer.Mux(videoStream, audioStream, outputStream, cancellationToken, new HostTemporaryStorageFactory(), loopCount);
     }
 
     public static void Validate(string path)

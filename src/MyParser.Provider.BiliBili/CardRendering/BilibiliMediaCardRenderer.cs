@@ -24,50 +24,51 @@ internal sealed class BilibiliMediaCardRenderer(ProviderCardRenderContext contex
 
         if (purpose != ProviderCardPurpose.Main || media.Kind is not (ParsedMediaKind.Video or ParsedMediaKind.Collection)) return null;
 
-        Bitmap? cover = null;
-        Bitmap? avatar = null;
+        var coverTask = LoadImageAsync(media.CoverUrl, media, "cover", cancellationToken);
+        var avatarTask = media.ProviderId == "bilibili-bangumi"
+            ? Task.FromResult<Bitmap?>(null)
+            : LoadVideoAvatarAsync(media, cancellationToken);
         try
         {
-            if (!string.IsNullOrWhiteSpace(media.CoverUrl))
-            {
-                var image = await context.HostServices.BuildProviderImageAsync(new ProviderImageBuildRequest(
-                    media.ProviderName, media.CoverUrl, media.SourceUrl, $"bilibili_{media.MediaId}_cover", PersistLocalFile: true), cancellationToken).ConfigureAwait(false);
-                cover = !string.IsNullOrWhiteSpace(image.LocalPath)
-                    ? context.HostServices.DecodeImageFileForRender(image.LocalPath)
-                    : context.HostServices.DecodeBase64ImageForRender(image.Uri);
-            }
+            await Task.WhenAll(coverTask, avatarTask).ConfigureAwait(false);
+            var cover = await coverTask.ConfigureAwait(false);
+            var avatar = await avatarTask.ConfigureAwait(false);
 
             if (media.ProviderId == "bilibili-bangumi")
             {
                 var model = CreateBangumiViewModel(media, cover);
                 var image = await context.BotContext.RenderControlPngAsync<BiliBangumiCard>(model,
-                    new ControlRenderOptions(RenderTheme.Auto)).ConfigureAwait(false);
+                    new ControlRenderOptions(RenderTheme.Auto), cancellationToken).ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
-                return "base64://" + Convert.ToBase64String(image);
-            }
-
-            try
-            {
-                avatar = await LoadImageAsync(Value(media, "author_avatar_url"), media, "video_avatar", cancellationToken, avatarSize: 32).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                BotLog.Warning($"MyParser Bilibili 视频头像加载失败: media_id={media.MediaId}, error={ex.GetType().Name}");
+                return await context.HostServices.BuildRenderedCardUriAsync(image, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
             }
 
             var viewModel = CreateVideoViewModel(media, cover, avatar);
-            var png = await context.BotContext.RenderControlPngAsync<BiliCard>(viewModel, new ControlRenderOptions(RenderTheme.Auto)).ConfigureAwait(false);
+            var png = await context.BotContext.RenderControlPngAsync<BiliCard>(viewModel, new ControlRenderOptions(RenderTheme.Auto), cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
-            return "base64://" + Convert.ToBase64String(png);
+            return await context.HostServices.BuildRenderedCardUriAsync(png, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
-            cover?.Dispose();
-            avatar?.Dispose();
+            if (coverTask.IsCompletedSuccessfully) coverTask.Result?.Dispose();
+            if (avatarTask.IsCompletedSuccessfully) avatarTask.Result?.Dispose();
+        }
+    }
+
+    private async Task<Bitmap?> LoadVideoAvatarAsync(ParsedMedia media, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await LoadImageAsync(Value(media, "author_avatar_url"), media, "video_avatar", cancellationToken, avatarSize: 32).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser Bilibili 视频头像加载失败: media_id={media.MediaId}, error={ex.GetType().Name}");
+            return null;
         }
     }
 
@@ -146,9 +147,9 @@ internal sealed class BilibiliMediaCardRenderer(ProviderCardRenderContext contex
                 LiveStartTimeText = Value(media, "live_start"),
                 LiveDurationText = Value(media, "duration"),
             };
-            var png = await context.BotContext.RenderControlPngAsync<BiliLiveCard>(model, new ControlRenderOptions(RenderTheme.Auto)).ConfigureAwait(false);
+            var png = await context.BotContext.RenderControlPngAsync<BiliLiveCard>(model, new ControlRenderOptions(RenderTheme.Auto), cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
-            return "base64://" + Convert.ToBase64String(png);
+            return await context.HostServices.BuildRenderedCardUriAsync(png, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -204,9 +205,9 @@ internal sealed class BilibiliMediaCardRenderer(ProviderCardRenderContext contex
                 StatsText = $"阅读 {Value(media, "views")}  ·  点赞 {Value(media, "likes")}",
                 Blocks = blocks,
             };
-            var png = await context.BotContext.RenderControlPngAsync<BiliArticleDocument>(model, new ControlRenderOptions(RenderTheme.Auto)).ConfigureAwait(false);
+            var png = await context.BotContext.RenderControlPngAsync<BiliArticleDocument>(model, new ControlRenderOptions(RenderTheme.Auto), cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
-            return "base64://" + Convert.ToBase64String(png);
+            return await context.HostServices.BuildRenderedCardUriAsync(png, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
         }
         finally
         {

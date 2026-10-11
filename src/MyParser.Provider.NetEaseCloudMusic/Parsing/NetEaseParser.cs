@@ -83,7 +83,7 @@ public sealed class NetEaseParser : IParserHttpClientAccessor, IDisposable
             {
                 if (offset > 0)
                 {
-                    BotLog.Info($"MyParser 网易云音乐候选回退: start_index={startIndex + 1}, try_index={index + 1}, song_id={songId}");
+                    global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 网易云音乐候选回退: start_index={startIndex + 1}, try_index={index + 1}, song_id={songId}");
                 }
 
                 return await ParseSongByIdAsync(songId, cancellationToken).ConfigureAwait(false);
@@ -141,12 +141,12 @@ public sealed class NetEaseParser : IParserHttpClientAccessor, IDisposable
         try
         {
             var result = await action().ConfigureAwait(false);
-            BotLog.Info($"MyParser 网易云音乐接口完成: {name}, elapsed={stopwatch.Elapsed:mm\\:ss}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 网易云音乐接口完成: {name}, elapsed={stopwatch.Elapsed:mm\\:ss}");
             return result;
         }
         catch (Exception ex)
         {
-            BotLog.Warning($"MyParser 网易云音乐接口失败: {name}, elapsed={stopwatch.Elapsed:mm\\:ss}, error={ex.GetType().Name}: {ex.Message}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser 网易云音乐接口失败: {name}, elapsed={stopwatch.Elapsed:mm\\:ss}, error={ex.GetType().Name}: {ex.Message}");
             throw;
         }
     }
@@ -212,7 +212,7 @@ public sealed class NetEaseParser : IParserHttpClientAccessor, IDisposable
                 return result;
             }
 
-            BotLog.Info($"MyParser 网易云音乐跳过非 MP3 音频: song_id={songId}, quality={quality}, type={result.FileType ?? "null"}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 网易云音乐跳过非 MP3 音频: song_id={songId}, quality={quality}, type={result.FileType ?? "null"}");
         }
 
         return (string.Empty, null, null, null, null);

@@ -204,7 +204,7 @@ internal sealed class ParseTaskManager
                 if (_parseTasks.TryRemove(pair.Key, out var state))
                 {
                     state.Cancellation.Cancel();
-                    BotLog.Info($"MyParser 清除解析任务: reason={reason}, channel={pair.Key.ChannelId}, message_id={pair.Key.MessageId}");
+                    global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 清除解析任务: reason={reason}, channel={pair.Key.ChannelId}, message_id={pair.Key.MessageId}");
                 }
             }
         }

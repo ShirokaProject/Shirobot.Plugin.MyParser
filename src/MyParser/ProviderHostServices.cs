@@ -21,6 +21,7 @@ internal sealed class ProviderHostServices : IProviderHostServices, IDisposable
     private readonly ProviderFailureReporter _failureReporter;
     private readonly ProviderLocalFileService _localFiles;
     private LocalVideoHttpServer? _localVideoHttpServer;
+    private readonly Lock _localMediaHttpLock = new();
 
     public ProviderHostServices(IBotContext context, PluginConfig pluginConfig)
     {
@@ -91,6 +92,21 @@ internal sealed class ProviderHostServices : IProviderHostServices, IDisposable
 
     public void UnregisterLocalVideoFile(string? path) => _localVideoHttpServer?.UnregisterFile(path);
 
+    public async Task<string> BuildRenderedCardUriAsync(
+        byte[] png, string providerId, string mediaId, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (pluginConfig.FileProtocol == 0) return "base64://" + Convert.ToBase64String(png);
+        if (pluginConfig.FileProtocol is not (1 or 2))
+            throw new InvalidOperationException("FileProtocol 必须为 0（Base64）、1（File）或 2（Http）。");
+        var prefix = RemoteImageFetchService.SanitizeLocalFileName($"{providerId}_{mediaId}_card");
+        var path = Path.Combine(MyParserRuntime.CreateTempDirectory(), $"{prefix}_{Guid.NewGuid():N}.png");
+        await File.WriteAllBytesAsync(path, png, cancellationToken).ConfigureAwait(false);
+        return pluginConfig.FileProtocol == 1
+            ? new Uri(Path.GetFullPath(path)).AbsoluteUri
+            : GetLocalVideoHttpServer().RegisterFile(path);
+    }
+
     public async Task<ProviderImageBuildResult> BuildProviderImageAsync(
         ProviderImageBuildRequest request,
         CancellationToken cancellationToken = default)
@@ -98,18 +114,28 @@ internal sealed class ProviderHostServices : IProviderHostServices, IDisposable
         if (request.FilePrefix.Contains("cover", StringComparison.OrdinalIgnoreCase)
             && !pluginConfig.IsCoverEnabled(request.PlatformDisplayName))
             return new ProviderImageBuildResult(string.Empty, null);
-        var (uri, localPath) = await RemoteImageFetchService.BuildRemoteImageAsync(
-            request.PlatformDisplayName,
-            request.ImageUrl,
-            request.Referer,
-            request.FilePrefix,
-            request.ConfigureRequest,
-            request.MaxBytes,
-            request.PersistLocalFile,
-            pluginConfig.HttpProxy,
-            cancellationToken,
-            preferFileUri: pluginConfig.FileProtocol == 1).ConfigureAwait(false);
-        return new ProviderImageBuildResult(uri, localPath);
+        try
+        {
+            var (uri, localPath) = await NetworkRetry.ExecuteAsync(token => RemoteImageFetchService.BuildRemoteImageAsync(
+                request.PlatformDisplayName,
+                request.ImageUrl,
+                request.Referer,
+                request.FilePrefix,
+                request.ConfigureRequest,
+                request.MaxBytes,
+                request.PersistLocalFile || pluginConfig.FileProtocol is 1 or 2,
+                pluginConfig.HttpProxy,
+                token,
+                preferFileUri: pluginConfig.FileProtocol is 1 or 2), pluginConfig.NetworkRetryCount, cancellationToken).ConfigureAwait(false);
+            if (pluginConfig.FileProtocol == 2 && localPath is not null)
+                uri = GetLocalVideoHttpServer().RegisterFile(localPath);
+            return new ProviderImageBuildResult(uri, localPath);
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested && NetworkRetry.IsTransient(ex))
+        {
+            BotLog.Warning($"MyParser 图片网络重试已用尽，跳过图片: prefix={request.FilePrefix}, error={ex.Message}");
+            return new ProviderImageBuildResult(string.Empty, null);
+        }
     }
 
     public async Task<ProviderLocalVideoSegmentResult> BuildLocalVideoSegmentAsync(
@@ -143,7 +169,7 @@ internal sealed class ProviderHostServices : IProviderHostServices, IDisposable
             throw new InvalidOperationException("FileProtocol 必须为 0（Base64）、1（File）或 2（Http）。");
         }
 
-        BotLog.Info($"MyParser {request.PlatformDisplayName} VideoSegment URI 模式：{uriMode}, {request.IdentifierName}={request.MediaId}, file_mb={fileSize / 1024d / 1024d:F2}, uri_preview={PreviewUri(videoUri)}");
+        global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser {request.PlatformDisplayName} VideoSegment URI 模式：{uriMode}, {request.IdentifierName}={request.MediaId}, file_mb={fileSize / 1024d / 1024d:F2}, uri_preview={PreviewUri(videoUri)}");
         var segment = new VideoOutgoingSegment(videoUri)
         {
             ThumbnailUri = config.IsCoverEnabled(request.PlatformDisplayName)
@@ -236,10 +262,11 @@ internal sealed class ProviderHostServices : IProviderHostServices, IDisposable
     public Task<string> MuxLoopingVideoWithAudioAsync(
         PluginConfig config,
         string videoPath,
-        string audioPath,
-        CancellationToken cancellationToken = default)
+        string? audioPath,
+        CancellationToken cancellationToken = default,
+        int loopCount = 3)
     {
-        return _downloadService.MuxLoopingVideoWithAudioAsync(config, videoPath, audioPath, cancellationToken);
+        return _downloadService.MuxLoopingVideoWithAudioAsync(config, videoPath, audioPath, cancellationToken, loopCount);
     }
 
     public Task<string> CreateStillImageVideoWithAudioAsync(
@@ -300,7 +327,7 @@ internal sealed class ProviderHostServices : IProviderHostServices, IDisposable
 
     private LocalVideoHttpServer GetLocalVideoHttpServer()
     {
-        return _localVideoHttpServer ??= new LocalVideoHttpServer();
+        lock (_localMediaHttpLock) return _localVideoHttpServer ??= new LocalVideoHttpServer();
     }
 
     public void Dispose()

@@ -26,7 +26,7 @@ public sealed class ParseProviderRegistry(IEnumerable<IParseProvider> providers)
                 continue;
             }
 
-            BotLog.Info($"MyParser 入站 provider 选中: provider={provider.Id}, normalized={TrimLogValue(candidate)}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 入站 provider 选中: provider={provider.Id}, normalized={TrimLogValue(candidate)}");
             parseText = candidate;
             return provider;
         }
@@ -51,7 +51,7 @@ public sealed class ParseProviderRegistry(IEnumerable<IParseProvider> providers)
                 continue;
             }
 
-            BotLog.Info($"MyParser 入站消息 provider 选中: provider={provider.Id}, normalized={TrimLogValue(candidate)}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 入站消息 provider 选中: provider={provider.Id}, normalized={TrimLogValue(candidate)}");
             parseText = candidate;
             return provider;
         }

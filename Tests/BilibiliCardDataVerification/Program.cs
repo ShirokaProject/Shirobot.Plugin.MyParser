@@ -70,6 +70,7 @@ try
     await (Task)handlerType.GetMethod("PresentAsync", BindingFlags.NonPublic|BindingFlags.Instance)!
         .Invoke(presenter, [source, collection with { CoverUrl="https://example.com/cover.jpg" }, false, CancellationToken.None])!;
     Check(recorder.Messages.SequenceEqual(new[]{"image"}), "Multi-P overview sent additional text/link messages.");
+    await MediaConcurrencyVerification.RunAsync(handlerType, source, provider, selectedPart);
     var module = new BilibiliProviderModule();
     var numeric = source with { MessageId="pick", Segments=[new QuoteSegment("card-1"),new TextSegment("2")] };
     var selectedUrl = module.TryBuildParseText(numeric);
@@ -85,7 +86,7 @@ try
     recorder.Messages.Clear();
     await (Task)handlerType.GetMethod("PresentAsync", BindingFlags.NonPublic|BindingFlags.Instance)!
         .Invoke(presenter,[source,selectedReplyPart with { CoverUrl="https://example.com/cover.jpg" },false,CancellationToken.None])!;
-    Check(recorder.Messages.SequenceEqual(new[]{"image", "download", "video"}), "Native multi-P reply did not send the chosen video.");
+    Check(recorder.Messages.SequenceEqual(new[]{"download", "image", "video"}), "Native multi-P reply did not send the chosen video.");
     playRequests = handler.PlayRequests;
     var preview = await provider.ParseAsync(selectedUrl! + "#myparser-preview");
     Check(preview.Attributes["preview_only"] == "true" && preview.Assets.Count == 0 && handler.PlayRequests == playRequests,
@@ -123,6 +124,14 @@ try
     var textPresenter = (IDisposable)Activator.CreateInstance(handlerType,
         [new ProviderMessageHandlerContext(bot, new PluginConfig { SendCoverImages=false }, provider, fakeServices,
             new PreviewCardRenderer(), (reply, url) => { previews.Add(url); return Task.CompletedTask; })])!;
+    recorder.Messages.Clear();
+    await (Task)handlerType.GetMethod("PresentAsync", BindingFlags.NonPublic|BindingFlags.Instance)!
+        .Invoke(textPresenter, [source, media with { Attributes = new Dictionary<string, string> { ["pages"] = "1" } }, false, CancellationToken.None])!;
+    Check(recorder.Messages.SequenceEqual(new[]{"download", "video"}), "Disabled single-video cover must not send title/link text.");
+    recorder.Messages.Clear();
+    await (Task)handlerType.GetMethod("PresentAsync", BindingFlags.NonPublic|BindingFlags.Instance)!
+        .Invoke(textPresenter, [source, media with { Attributes = new Dictionary<string, string> { ["pages"] = "1", ["preview_only"] = "true" } }, false, CancellationToken.None])!;
+    Check(recorder.Messages.Count == 0, "Disabled single-video preview must not send title/link text or download video.");
     foreach (var textMedia in new[] { collection, preview })
     {
         recorder.Messages.Clear();
@@ -195,7 +204,7 @@ try
         await (Task)handlerType.GetMethod("PresentAsync", BindingFlags.NonPublic|BindingFlags.Instance)!
             .Invoke(bangumiPresenter,[source,item with { CoverUrl="https://example.com/cover.jpg" },false,CancellationToken.None])!;
         var expectedMessages = item.Attributes.GetValueOrDefault("preview_only") == "true"
-            ? new[]{"image"} : new[]{"image", "download", "video"};
+            ? new[]{"image"} : new[]{"download", "image", "video"};
         Check(recorder.Messages.SequenceEqual(expectedMessages), "Bangumi did not deliver the first episode or sent per-episode link messages.");
         await subscriptions.Handler!(numeric with { Segments=[new QuoteSegment("card-1"),new TextSegment("2")] });
     }
@@ -207,11 +216,11 @@ try
     recorder.Messages.Clear();
     await (Task)handlerType.GetMethod("PresentAsync", BindingFlags.NonPublic|BindingFlags.Instance)!
         .Invoke(bangumiPresenter,[source,replyEpisode,false,CancellationToken.None])!;
-    Check(recorder.Messages.SequenceEqual(new[]{"image", "download", "video"}), "Bangumi selection reply did not download and send the chosen episode.");
+    Check(recorder.Messages.SequenceEqual(new[]{"download", "image", "video"}), "Bangumi selection reply did not download and send the chosen episode.");
     recorder.Messages.Clear();
     await (Task)handlerType.GetMethod("PresentAsync", BindingFlags.NonPublic|BindingFlags.Instance)!
         .Invoke(bangumiPresenter,[source,directEpisode,false,CancellationToken.None])!;
-    Check(recorder.Messages.SequenceEqual(new[]{"image", "download", "video"}), "Direct ep did not download and deliver video after its cover.");
+    Check(recorder.Messages.SequenceEqual(new[]{"download", "image", "video"}), "Direct ep did not download and deliver video after its cover.");
     bangumiConfig.SendCoverImages = false;
     recorder.Messages.Clear();
     await (Task)handlerType.GetMethod("PresentAsync", BindingFlags.NonPublic|BindingFlags.Instance)!
@@ -341,10 +350,14 @@ sealed class MetadataHandler : HttpMessageHandler
 public class RecordingHostServices : DispatchProxy
 {
     public List<string> Messages { get; } = [];
+    public Func<CancellationToken, Task<(string, string)>>? Download { get; set; }
+    public bool FailImage { get; set; }
     protected override object? Invoke(MethodInfo? method, object?[]? args)
     {
-        if (method!.Name == "SendImageAsync") { Messages.Add("image"); return Task.FromResult(new SentMessage("card-1")); }
-        if (method.Name == "DownloadMuxedProviderVideoAsync") { Messages.Add("download"); return Task.FromResult(("file:///verification.mp4", "/verification.mp4")); }
+        if (method!.Name == "SendImageAsync") { if (FailImage) throw new IOException("image-send-failed"); Messages.Add("image"); return Task.FromResult(new SentMessage("card-1")); }
+        if (method.Name is "DownloadMuxedProviderVideoAsync" or "DownloadProviderAudioAsync") { Messages.Add("download"); return Download?.Invoke((CancellationToken)args![2]!) ?? Task.FromResult(("file:///verification.mp4", "/verification.mp4")); }
+        if (method.Name == "BuildRecordUriAsync") return Task.FromResult("file:///verification.audio");
+        if (method.Name == "SendSegmentsAsync" && ((IReadOnlyList<MessageSegment>)args![1]!).Any(segment => segment is AudioSegment)) { Messages.Add("audio"); return Task.FromResult(new SentMessage("audio-1")); }
         if (method.Name == "BuildLocalVideoSegmentAsync") return Task.FromResult(new ProviderLocalVideoSegmentResult(new VideoSegment("file:///verification.mp4"), "file", "file:///verification.mp4", 1, false));
         if (method.Name == "SendSegmentsAsync" && ((IReadOnlyList<MessageSegment>)args![1]!).Any(segment => segment is VideoSegment)) { Messages.Add("video"); return Task.FromResult(new SentMessage("video-1")); }
         if (method.Name is "ReplyTextAsync" or "SendSegmentsAsync") { Messages.Add("text"); return Task.FromResult(new SentMessage("text-1")); }

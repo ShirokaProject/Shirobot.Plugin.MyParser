@@ -38,7 +38,7 @@ internal sealed class DouyinCommentService(
         var commentIds = new HashSet<string>(StringComparer.Ordinal);
         long cursor = 0;
         var pageCount = 0;
-        BotLog.Info($"MyParser 抖音评论接口请求开始: aweme_id={result.AwemeId}, max_count={maxCount}, ms_token_present={!string.IsNullOrWhiteSpace(msToken)}, web_id={webId}");
+        global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 抖音评论接口请求开始: aweme_id={result.AwemeId}, max_count={maxCount}, ms_token_present={!string.IsNullOrWhiteSpace(msToken)}, web_id={webId}");
 
         while (comments.Count < maxCount && pageCount++ < 5)
         {
@@ -54,7 +54,7 @@ internal sealed class DouyinCommentService(
             var root = doc.RootElement;
             TryGetProperty(root, "comments", out var items);
             var responseCount = items.ValueKind == JsonValueKind.Array ? items.GetArrayLength() : 0;
-            BotLog.Info($"MyParser 抖音评论接口分页返回: aweme_id={result.AwemeId}, page={pageCount}, cursor={cursor}, response_count={responseCount}, has_more={GetBool(root, "has_more")}, next_cursor={GetLong(root, "cursor")}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 抖音评论接口分页返回: aweme_id={result.AwemeId}, page={pageCount}, cursor={cursor}, response_count={responseCount}, has_more={GetBool(root, "has_more")}, next_cursor={GetLong(root, "cursor")}");
 
             foreach (var item in items.EnumerateArray())
             {
@@ -62,7 +62,7 @@ internal sealed class DouyinCommentService(
                 if (comment is not null
                     && (string.IsNullOrWhiteSpace(comment.CommentId) || commentIds.Add(comment.CommentId)))
                 {
-                    BotLog.Info($"MyParser 抖音评论模型解析: aweme_id={result.AwemeId}, comment_id={comment.CommentId}, user={comment.UserName}, images={comment.ImageUrls.Count}, likes={comment.LikeCount}, replies={comment.ReplyCount}, create_time={comment.CreateTimeUnixSeconds}");
+                    global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 抖音评论模型解析: aweme_id={result.AwemeId}, comment_id={comment.CommentId}, user={comment.UserName}, images={comment.ImageUrls.Count}, likes={comment.LikeCount}, replies={comment.ReplyCount}, create_time={comment.CreateTimeUnixSeconds}");
                     comments.Add(comment);
                     if (comments.Count >= maxCount)
                     {
@@ -234,7 +234,7 @@ internal sealed class DouyinCommentService(
                 .Select(image => image.ValueKind == JsonValueKind.Object
                     ? string.Join(',', image.EnumerateObject().Select(property => property.Name))
                     : image.ValueKind.ToString());
-            BotLog.Warning($"MyParser 抖音评论附图字段存在但 URL 未命中: image_count={images.GetArrayLength()}, image_shapes={string.Join('|', shapes)}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser 抖音评论附图字段存在但 URL 未命中: image_count={images.GetArrayLength()}, image_shapes={string.Join('|', shapes)}");
         }
 
         return result;

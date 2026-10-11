@@ -42,6 +42,7 @@ public sealed class DouyinParseProvider(DouyinParser parser) : IParseProviderWit
         };
         for (var index = 0; index < result.Images.Count; index++)
         {
+            attributes[$"gallery_clip_type_{index}"] = result.Images[index].ClipType?.ToString() ?? string.Empty;
             if (!string.IsNullOrWhiteSpace(result.Images[index].LivePhotoUrl))
                 attributes[$"gallery_live_photo_{index}"] = result.Images[index].LivePhotoUrl!;
         }

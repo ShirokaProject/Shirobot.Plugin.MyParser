@@ -52,9 +52,9 @@ internal sealed class XMediaCardRenderer(ProviderCardRenderContext context) : IP
                 ViewCount = FormatCount(media.Attributes.GetValueOrDefault("浏览")),
                 SourceUrl = FormatSourceUrl(media.SourceUrl),
             };
-            var png = await context.BotContext.RenderControlPngAsync<XCard>(model, new ControlRenderOptions(RenderTheme.Auto)).ConfigureAwait(false);
+            var png = await context.BotContext.RenderControlPngAsync<XCard>(model, new ControlRenderOptions(RenderTheme.Auto), cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
-            return "base64://" + Convert.ToBase64String(png);
+            return await context.HostServices.BuildRenderedCardUriAsync(png, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
         }
         finally
         {

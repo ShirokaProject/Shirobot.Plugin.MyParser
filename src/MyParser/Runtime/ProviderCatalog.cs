@@ -227,13 +227,13 @@ internal sealed class ProviderCatalog(IBotContext botContext, PluginConfig confi
             return;
         }
 
-        BotLog.Info($"MyParser provider 能力概览：modules={_modules.Count}, providers={_providers.Count}");
+        global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser provider 能力概览：modules={_modules.Count}, providers={_providers.Count}");
         foreach (var module in _modules.OrderBy(module => module.Id, StringComparer.OrdinalIgnoreCase))
         {
             var moduleProviders = _providers.Where(provider =>
                     string.Equals(GetModuleId(provider.Id), module.Id, StringComparison.OrdinalIgnoreCase))
                 .OrderBy(GetProviderOrder).ThenBy(provider => provider.Id, StringComparer.OrdinalIgnoreCase).ToArray();
-            BotLog.Info($"MyParser provider module：id={module.Id}, type={module.GetType().FullName}, capabilities=[{string.Join(", ", GetCapabilitySummary(module))}]");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser provider module：id={module.Id}, type={module.GetType().FullName}, capabilities=[{string.Join(", ", GetCapabilitySummary(module))}]");
             if (moduleProviders.Length == 0)
             {
                 BotLog.Warning($"MyParser provider module 未注册解析器：id={module.Id}");
@@ -242,7 +242,7 @@ internal sealed class ProviderCatalog(IBotContext botContext, PluginConfig confi
 
             foreach (var provider in moduleProviders)
             {
-                BotLog.Info($"MyParser provider：id={provider.Id}, name={provider.Name}, type={provider.GetType().FullName}, capabilities=[{string.Join(", ", GetCapabilitySummary(provider))}]");
+                global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser provider：id={provider.Id}, name={provider.Name}, type={provider.GetType().FullName}, capabilities=[{string.Join(", ", GetCapabilitySummary(provider))}]");
             }
         }
     }
@@ -286,7 +286,7 @@ internal sealed class ProviderCatalog(IBotContext botContext, PluginConfig confi
             .Select(type =>
             {
                 var id = type.GetCustomAttribute<MyParserProviderAttribute>()!.Id;
-                BotLog.Info($"MyParser 发现 provider module 类型：id={id}, type={type.FullName}");
+                global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 发现 provider module 类型：id={id}, type={type.FullName}");
                 return (IMyParserProviderModule)Activator.CreateInstance(type)!;
             })
             .ToArray();

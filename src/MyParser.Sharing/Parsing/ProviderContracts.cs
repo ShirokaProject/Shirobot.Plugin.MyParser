@@ -166,6 +166,8 @@ public interface IProviderHostServices
     string GetUriMode(string uri);
     string PreviewUri(string? uri, int maxLength = 180);
     void UnregisterLocalVideoFile(string? path);
+    Task<string> BuildRenderedCardUriAsync(
+        byte[] png, string providerId, string mediaId, CancellationToken cancellationToken = default);
     Task<ProviderImageBuildResult> BuildProviderImageAsync(
         ProviderImageBuildRequest request,
         CancellationToken cancellationToken = default);
@@ -192,8 +194,9 @@ public interface IProviderHostServices
     Task<string> MuxLoopingVideoWithAudioAsync(
         PluginConfig config,
         string videoPath,
-        string audioPath,
-        CancellationToken cancellationToken = default);
+        string? audioPath,
+        CancellationToken cancellationToken = default,
+        int loopCount = 3);
     Task<string> CreateStillImageVideoWithAudioAsync(
         PluginConfig config,
         string imagePath,

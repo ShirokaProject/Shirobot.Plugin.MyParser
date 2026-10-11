@@ -34,7 +34,7 @@ internal sealed class LiveReplayClipDownloader(PluginConfig config, ProviderDown
         }
         await ValidateClipAsync(outputPath, cancellationToken);
 
-        BotLog.Info($"MyParser {request.PlatformDisplayName} 直播回看片段生成完成: {request.IdentifierName}={request.MediaId}, requested_duration={durationSeconds}s, actual_seconds={playlist.ActualSeconds:F1}, segments={playlist.SelectedSegments}/{playlist.TotalSegments}, stream={stream.Protocol}/{stream.Format}/{stream.Codec}, qn={stream.CurrentQn}, file_mb={new FileInfo(outputPath).Length / 1024d / 1024d:F2}, file={outputPath}");
+        global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser {request.PlatformDisplayName} 直播回看片段生成完成: {request.IdentifierName}={request.MediaId}, requested_duration={durationSeconds}s, actual_seconds={playlist.ActualSeconds:F1}, segments={playlist.SelectedSegments}/{playlist.TotalSegments}, stream={stream.Protocol}/{stream.Format}/{stream.Codec}, qn={stream.CurrentQn}, file_mb={new FileInfo(outputPath).Length / 1024d / 1024d:F2}, file={outputPath}");
         return new ProviderLiveReplayClipDownloadResult(new Uri(outputPath).AbsoluteUri, outputPath, stream, playlist.SelectedSegments, playlist.TotalSegments, playlist.ActualSeconds, playlist.Path);
     }
 
@@ -84,7 +84,7 @@ internal sealed class LiveReplayClipDownloader(PluginConfig config, ProviderDown
         staticPlaylist.AppendLine("#EXT-X-ENDLIST");
         var path = Path.Combine(dir, $"live_static_{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}.m3u8");
         await File.WriteAllTextAsync(path, staticPlaylist.ToString(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), cancellationToken);
-        BotLog.Info($"MyParser {request.PlatformDisplayName} 直播回溯 m3u8 已冻结: source={PreviewUrl(playlistUrl)}, segments={selected.Count}/{parsed.Segments.Count}, seconds={totalSeconds:F1}/{durationSeconds}, path={path}");
+        global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser {request.PlatformDisplayName} 直播回溯 m3u8 已冻结: source={PreviewUrl(playlistUrl)}, segments={selected.Count}/{parsed.Segments.Count}, seconds={totalSeconds:F1}/{durationSeconds}, path={path}");
         return new LiveStaticPlaylistResult(path, selected.Count, parsed.Segments.Count, totalSeconds);
     }
 
@@ -149,7 +149,7 @@ internal sealed class LiveReplayClipDownloader(PluginConfig config, ProviderDown
             }
 
             var waitSeconds = Math.Clamp(durationSeconds - totalSeconds, 2, 5);
-            BotLog.Info($"MyParser {request.PlatformDisplayName} 直播回溯分片不足，等待更多分片: requested={durationSeconds}s, available={totalSeconds:F1}s, collected={collectedSegments.Count}, latest_window={parsed.Segments.Count}, new={newSegments}, wait={waitSeconds:F1}s");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser {request.PlatformDisplayName} 直播回溯分片不足，等待更多分片: requested={durationSeconds}s, available={totalSeconds:F1}s, collected={collectedSegments.Count}, latest_window={parsed.Segments.Count}, new={newSegments}, wait={waitSeconds:F1}s");
             await Task.Delay(TimeSpan.FromSeconds(waitSeconds), cancellationToken);
         }
     }
@@ -304,7 +304,7 @@ internal sealed class LiveReplayClipDownloader(PluginConfig config, ProviderDown
             }
 
             await Task.Run(() => SharpMp4MediaService.Validate(outputPath), cancellationToken);
-            BotLog.Info($"MyParser {request.PlatformDisplayName} SharpMP4 fMP4 直播片段拼接完成: segments={segmentPaths.Length}, output={outputPath}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser {request.PlatformDisplayName} SharpMP4 fMP4 直播片段拼接完成: segments={segmentPaths.Length}, output={outputPath}");
             return true;
         }
         catch (OperationCanceledException)
