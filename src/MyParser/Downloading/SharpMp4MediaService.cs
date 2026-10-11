@@ -34,7 +34,7 @@ internal static class SharpMp4MediaService
                             ?? throw new InvalidDataException("SharpMP4 未在音频输入中找到音频轨道元数据。");
         var audioMetadata = GetTrackMetadata(audioTrackBox, audioTrack);
 
-        var builder = new Mp4Builder(new SingleStreamOutput(outputStream))
+        using var builder = new Mp4Builder(new SingleStreamOutput(outputStream))
         {
             TemporaryStorageFactory = new HostTemporaryStorageFactory(),
         };
