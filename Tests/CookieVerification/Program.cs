@@ -52,6 +52,11 @@ try
         var monitor = Activator.CreateInstance(monitorType, allInstance, null, [null, runningConfig], null)!;
         monitorType.GetField("_cookieDescriptors", allInstance)!.SetValue(monitor, descriptors);
         var pluginType = assembly.GetType("Shirobot.Plugin.MyParser.MyParserPlugin", throwOnError: true)!;
+        var metadata = pluginType.GetCustomAttributesData().Single(attribute => attribute.AttributeType.Name == "BotPluginAttribute");
+        var metadataVersion = (string)metadata.NamedArguments.Single(argument => argument.MemberName == "Version").TypedValue.Value!;
+        var packageVersion = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion.Split('+')[0];
+        Check(metadataVersion == packageVersion,
+            $"Plugin metadata version {metadataVersion} differs from package version {packageVersion}.");
         var plugin = Activator.CreateInstance(pluginType)!;
         pluginType.GetField("_config", allInstance)!.SetValue(plugin, runningConfig);
         pluginType.GetField("_settingsMonitor", allInstance)!.SetValue(plugin, monitor);
