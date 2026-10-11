@@ -103,6 +103,8 @@ if (args is ["--live-cookie-file", var cookiePath])
     return;
 }
 
+if (args is ["--record", var inputAudio]) { await RecordEncodingVerification.RunAsync(inputAudio); return; }
+
 if (args is ["--mix"]) { await AudioMixVerification.RunAsync(); return; }
 
 if (args is ["--mux"]) await LoopMuxVerification.RunAsync();

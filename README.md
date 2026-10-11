@@ -1,6 +1,6 @@
 # Shirobot.Plugin.MyParser
 
-当前发布：`v0.6.9`。本版本使用 SDK `1.0.0`，需要宿主 `1.0.0` 的临时目录 API。
+当前发布：`v0.6.10`。本版本使用 SDK `1.0.0`，需要宿主 `1.0.0` 的临时目录 API。
 
 <p align="center"><img src="./Assets/icon.png" alt="MyParser" width="160" /></p>
 

@@ -295,7 +295,7 @@ internal sealed class ProviderDownloadService
         var pc = new ProviderRecordVariant(
             "pc-best",
             "电脑最优",
-            "mp3_rate=24000 silk_rate=35000 max=24000 tencent=true profile=Flat encoder=SilkCodec.NET/1.2.0",
+            "pcm_rate=24000 silk_rate=35000 max=24000 tencent=true profile=Flat encoder=SilkCodec.NET/1.2.0",
             Path.Combine(directory, safeBaseName + "_pc_24k_35000_silkcodecnet_120.silk"),
             35000);
 
@@ -638,6 +638,20 @@ internal sealed class ProviderDownloadService
             throw new InvalidDataException($"{request.PlatformDisplayName} 音频下载到空文件。");
         }
 
+        // Douyin can return an MP4 AAC container from a URL named .mp3.
+        // Preserve its actual container extension for fallback file uploads.
+        bool isMp4Audio;
+        using (var input = File.OpenRead(path))
+        {
+            var header = new byte[12];
+            isMp4Audio = input.Read(header) == header.Length && header.AsSpan(4, 4).SequenceEqual("ftyp"u8);
+        }
+        if (isMp4Audio)
+        {
+            var actualPath = Path.ChangeExtension(path, ".m4a");
+            File.Move(path, actualPath, overwrite: true);
+            path = actualPath;
+        }
         return (new Uri(path).AbsoluteUri, path);
     }
 
@@ -661,7 +675,17 @@ internal sealed class ProviderDownloadService
         await using (var silk = File.Create(tempSilkPath))
         {
             await Task.Run(
-                () => encoder.EncodeMp3(mp3, silk, SilkMp3AudioProfile.Flat),
+                () =>
+                {
+                    if (SharpMP4.Readers.MP3Reader.IsMP3(mp3))
+                        encoder.EncodeMp3(mp3, silk, SilkMp3AudioProfile.Flat);
+                    else
+                    {
+                        using var pcm = new MemoryStream();
+                        SharpMP4.Audio.ManagedAudioDecoder.DecodeMonoPcm16(mp3, pcm, 24000, cancellationToken);
+                        silk.Write(encoder.EncodePcm16LittleEndian(pcm.GetBuffer().AsSpan(0, checked((int)pcm.Length))));
+                    }
+                },
                 cancellationToken).ConfigureAwait(false);
             await silk.FlushAsync(cancellationToken).ConfigureAwait(false);
         }

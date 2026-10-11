@@ -29,7 +29,7 @@ public sealed class PluginConfig
     [ConfigField("可选 HTTP/HTTPS 代理地址，例如 http://127.0.0.1:7890；留空使用系统网络设置。", Label = "HTTP 代理", Placeholder = "http://127.0.0.1:7890")]
     public string HttpProxy { get; set; } = string.Empty;
 
-    [ConfigField("图片、卡片和视频发送 URI 协议：0 = Base64，1 = File（默认），2 = Http。", Label = "图片/视频发送协议", Min = 0, Max = 2)]
+    [ConfigField("图片、卡片、视频和语音发送 URI 协议：0 = Base64，1 = File（默认），2 = Http。", Label = "媒体发送协议", Min = 0, Max = 2)]
     public int FileProtocol { get; set; } = 1;
 
     [ConfigField("单个视频最大下载大小，单位 MB。", Label = "最大视频下载 MB", Min = 1, Max = 51200)]

@@ -288,7 +288,14 @@ internal sealed class ProviderHostServices : IProviderHostServices, IDisposable
 
     public Task<string> BuildRecordUriAsync(string localPath, CancellationToken cancellationToken = default)
     {
-        return ProviderDownloadService.BuildRecordUriAsync(localPath, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        return pluginConfig.FileProtocol switch
+        {
+            0 => ProviderDownloadService.BuildRecordUriAsync(localPath, cancellationToken),
+            1 => Task.FromResult(new Uri(Path.GetFullPath(localPath)).AbsoluteUri),
+            2 => Task.FromResult(GetLocalVideoHttpServer().RegisterFile(localPath)),
+            _ => throw new InvalidOperationException("FileProtocol 必须为 0（Base64）、1（File）或 2（Http）。"),
+        };
     }
 
     public Task<IReadOnlyList<TResult>> SelectParallelOrderedAsync<TSource, TResult>(

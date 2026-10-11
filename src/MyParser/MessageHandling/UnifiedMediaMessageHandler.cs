@@ -424,8 +424,8 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
             try
             {
                 var upload = await HostServices.UploadLocalFileAsync(Config, message, localAudioPath,
-                    media.ProviderName, media.MediaId, preferBase64: true).ConfigureAwait(false);
-                await ReplyAsync(message, $"音频发送失败，已回退文件上传：{upload}").ConfigureAwait(false);
+                    media.ProviderName, media.MediaId, preferBase64: Config.FileProtocol == 0).ConfigureAwait(false);
+                global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 音频已回退文件上传: media_id={media.MediaId}, {upload}");
                 await ReactAsync(message, "426", ReactionPlatformName).ConfigureAwait(false);
                 return true;
             }
