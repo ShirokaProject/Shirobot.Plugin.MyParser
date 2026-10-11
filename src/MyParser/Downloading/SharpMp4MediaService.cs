@@ -86,7 +86,7 @@ internal static class SharpMp4MediaService
     private static Container ReadContainer(Stream stream)
     {
         var container = new Container();
-        container.Read(new IsoStream(stream));
+        container.Read(new IsoStream(stream, new HostTemporaryStorageFactory()));
         return container;
     }
 
