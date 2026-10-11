@@ -44,9 +44,7 @@ public static class SafeHttpTransport
             return false;
         }
 
-        return uri.Scheme == Uri.UriSchemeHttp
-            ? uri.Port == 80
-            : uri.Port == 443;
+        return true;
     }
 
     public static async Task<bool> IsPublicHttpTargetAsync(Uri uri, CancellationToken cancellationToken)
@@ -215,10 +213,9 @@ public static class SafeHttpTransport
                     var nextUri = response.Headers.Location.IsAbsoluteUri
                         ? response.Headers.Location
                         : new Uri(currentUri, response.Headers.Location);
-                    if (!IsAllowedUri(nextUri)
-                        || (currentUri.Scheme == Uri.UriSchemeHttps && nextUri.Scheme != Uri.UriSchemeHttps))
+                    if (!IsAllowedUri(nextUri))
                     {
-                        throw new HttpRequestException("拒绝无效重定向或 HTTPS 降级重定向。");
+                        throw new HttpRequestException("拒绝无效 HTTP 重定向地址。");
                     }
 
                     var statusCode = response.StatusCode;

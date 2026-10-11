@@ -29,6 +29,8 @@
         <PackageReference Include="ShiroBot.SDK" Condition="'$(UseShiroBotSource)' != 'true'" />
         <PackageReference Include="SilkCodec.NET" />
         <PackageReference Include="LightDl" />
+        <PackageReference Include="SharpJaad.AAC" />
+        <PackageReference Include="NLayer" />
     </ItemGroup>
 
     <ItemGroup>

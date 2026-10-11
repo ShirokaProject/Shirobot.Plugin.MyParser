@@ -27,6 +27,8 @@ if (args is ["--live-cookie-file", var cookiePath])
     return;
 }
 
+if (args is ["--mix"]) { await AudioMixVerification.RunAsync(); return; }
+
 if (args is ["--mux"]) await LoopMuxVerification.RunAsync();
 if (args is ["--mux-video", var sourceVideo]) await LoopMuxVerification.RunAsync(sourceVideo);
 if (args is ["--mux-media", var videoPath, var audioPath]) await LoopMuxVerification.RunAsync(videoPath, audioPath);

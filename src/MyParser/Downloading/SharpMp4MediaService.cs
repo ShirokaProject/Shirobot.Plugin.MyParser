@@ -64,7 +64,13 @@ internal static class SharpMp4MediaService
         using var videoStream = OpenRead(videoPath);
         using var audioStream = audioPath is null ? null : OpenRead(audioPath);
         using var outputStream = new BufferedStream(new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.Read));
-        LoopingVideoAudioMuxer.Mux(videoStream, audioStream, outputStream, cancellationToken, new HostTemporaryStorageFactory(), loopCount);
+        LoopingVideoAudioMuxer.MuxMixingEmbeddedAudio(videoStream, audioStream, outputStream, cancellationToken, new HostTemporaryStorageFactory(), loopCount);
+    }
+
+    public static bool HasEmbeddedAudio(string path)
+    {
+        using var stream = OpenRead(path);
+        return GetTrackBox(ReadContainer(stream), "soun") is not null;
     }
 
     public static void Validate(string path)

@@ -87,6 +87,16 @@ internal sealed class ProviderDownloadService
         var outputPath = Path.Combine(
             MyParserRuntime.CreateTempDirectory(),
             $"{Path.GetFileNameWithoutExtension(visualPath)}_music_{Guid.NewGuid():N}.mp4");
+        var keepEmbeddedAudio = false;
+        if (!stillImage)
+        {
+            try { keepEmbeddedAudio = SharpMp4MediaService.HasEmbeddedAudio(visualPath); }
+            catch (Exception ex)
+            {
+                global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser Live Photo 原声音轨检查失败: error={ex.Message}");
+            }
+        }
+        var mixAudio = keepEmbeddedAudio && audioPath is not null;
         if (!stillImage)
         {
             try
@@ -137,7 +147,19 @@ internal sealed class ProviderDownloadService
 
         psi.ArgumentList.Add("-i");
         psi.ArgumentList.Add(visualPath);
-        if (audioPath is not null)
+        if (mixAudio)
+        {
+            foreach (var argument in new[] { "-i", audioPath!, "-filter_complex",
+                "[0:a:0]apad[original];[1:a:0]apad[music];[original][music]amix=inputs=2:duration=longest:dropout_transition=0:normalize=1[mixed]",
+                "-map", "0:v:0", "-map", "[mixed]" })
+                psi.ArgumentList.Add(argument);
+        }
+        else if (keepEmbeddedAudio)
+        {
+            foreach (var argument in new[] { "-map", "0:v:0", "-map", "0:a:0", "-af", "apad" })
+                psi.ArgumentList.Add(argument);
+        }
+        else if (audioPath is not null)
         {
             foreach (var argument in new[] { "-i", audioPath, "-map", "0:v:0", "-map", "1:a:0", "-af", "apad" })
                 psi.ArgumentList.Add(argument);

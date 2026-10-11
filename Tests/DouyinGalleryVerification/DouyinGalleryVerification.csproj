@@ -8,5 +8,7 @@
   <ItemGroup>
     <ProjectReference Include="../../src/MyParser/Shirobot.Plugin.MyParser.csproj"
                       AdditionalProperties="ShiroBotPluginPackagingEnabled=false" />
+    <Reference Include="SharpISOBMFF" HintPath="../../src/SharpMP4/src/SharpISOBMFF/bin/$(Configuration)/net10.0/SharpISOBMFF.dll" />
+    <Reference Include="SharpMP4" HintPath="../../src/SharpMP4/src/SharpMP4/bin/$(Configuration)/net10.0/SharpMP4.dll" />
   </ItemGroup>
 </Project>

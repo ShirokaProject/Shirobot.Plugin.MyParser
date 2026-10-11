@@ -7,6 +7,50 @@ using ShiroBot.SDK.Plugin;
 using Shirobot.Plugin.MyParser;
 using Shirobot.Plugin.MyParser.Parsing;
 
+foreach (var (url, allowed) in new[]
+{
+    ("https://2485d7fb.ydycdn.com:58001/video", true),
+    ("https://2485d7fb.YDYCDN.COM:58001/video", true),
+    ("https://example.com:58001/video", true),
+    ("https://other-cdn.example:8443/video", true),
+    ("http://other-cdn.example:8080/video", true),
+    ("https://2485d7fb.ydycdn.com:58002/video", true),
+    ("http://2485d7fb.ydycdn.com:58001/video", true),
+    ("https://user:password@2485d7fb.ydycdn.com:58001/video", false),
+    ("https://127.0.0.1:58001/video", true),
+    ("file:///tmp/video.mp4", false),
+    ("ftp://example.com/video", false),
+    ("https://example.com/video", true),
+})
+    if (SafeHttpTransport.IsAllowedUri(new Uri(url)) != allowed)
+        throw new Exception("HTTP target URI policy mismatch: " + url);
+foreach (var target in new[] { "http://127.0.0.1:8080/", "https://10.0.0.1:58001/", "http://[::1]:8080/" })
+{
+    try
+    {
+        if (await SafeHttpTransport.IsPublicHttpTargetAsync(new Uri(target), CancellationToken.None))
+            throw new Exception("Private target was accepted: " + target);
+    }
+    catch (HttpRequestException) { }
+}
+Console.WriteLine("HTTP/HTTPS targets accept CDN domains and nonstandard ports; private addresses, unsupported schemes and embedded credentials remain rejected.");
+
+var redirectType = typeof(SafeHttpTransport).GetNestedType("SafeRedirectHandler", BindingFlags.NonPublic)!;
+var redirectFixture = new CdnRedirectFixture();
+using (var redirects = (HttpMessageHandler)Activator.CreateInstance(redirectType,
+    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance, null, [redirectFixture], null)!)
+using (var client = new HttpClient(redirects))
+using (var request = new HttpRequestMessage(HttpMethod.Get, "https://media.example/play"))
+{
+    request.Headers.TryAddWithoutValidation("Cookie", "sessionid=test");
+    request.Headers.TryAddWithoutValidation("Authorization", "Bearer test");
+    request.Headers.TryAddWithoutValidation("Range", "bytes=0-0");
+    using var response = await client.SendAsync(request);
+    if (response.StatusCode != HttpStatusCode.PartialContent || redirectFixture.Calls != 3)
+        throw new Exception("HTTP/HTTPS CDN redirects were not followed across nonstandard ports.");
+}
+Console.WriteLine("HTTPS CDN redirect on port 58001 and subsequent HTTP redirect on port 8080 are followed; cross-origin credentials are stripped and Range is preserved.");
+
 var source = new MessageEvent { Platform = "qq", InstanceId = "test", MessageId = "source", Sender = new User("tester"), Channel = new Channel("test", ChannelType.Group), Segments = [] };
 foreach (var (retries, failures, expectedCalls, expectedFailures) in new[] { (2, 2, 3, 0), (2, 9, 3, 1), (0, 2, 1, 1) })
 {
@@ -103,4 +147,28 @@ public class RetryHost : DispatchProxy
 public class RetryBot : DispatchProxy
 {
     protected override object? Invoke(MethodInfo? method, object?[]? args) => throw new NotSupportedException();
+}
+
+internal sealed class CdnRedirectFixture : HttpMessageHandler
+{
+    public int Calls { get; private set; }
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        var expected = Calls switch
+        {
+            0 => "https://media.example/play",
+            1 => "https://other-cdn.example:58001/video",
+            _ => "http://third-cdn.example:8080/video",
+        };
+        if (request.RequestUri!.AbsoluteUri != expected) throw new Exception("Unexpected redirect target.");
+        if (Calls > 0 && (request.Headers.Contains("Cookie") || request.Headers.Contains("Authorization")))
+            throw new Exception("Credentials leaked to another CDN origin.");
+        if (request.Headers.Range?.ToString() != "bytes=0-0") throw new Exception("Redirect lost the byte range.");
+        Calls++;
+        var response = new HttpResponseMessage(Calls < 3 ? HttpStatusCode.Redirect : HttpStatusCode.PartialContent)
+        { Content = new ByteArrayContent([1]), RequestMessage = request };
+        if (Calls < 3) response.Headers.Location = new Uri(Calls == 1
+            ? "https://other-cdn.example:58001/video" : "http://third-cdn.example:8080/video");
+        return Task.FromResult(response);
+    }
 }

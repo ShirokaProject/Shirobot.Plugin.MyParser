@@ -36,6 +36,8 @@ internal static class LoopMuxVerification
             var originalStream = original.RootElement.GetProperty("streams")[0];
             var originalFrames = int.Parse(originalStream.GetProperty("nb_read_frames").GetString()!, CultureInfo.InvariantCulture);
             var originalDuration = double.Parse(originalStream.GetProperty("duration").GetString()!, CultureInfo.InvariantCulture);
+            using var originalAudio = JsonDocument.Parse(await RunAsync("ffprobe", "-v", "error", "-select_streams", "a:0", "-show_streams", "-of", "json", video));
+            var hasEmbeddedAudio = originalAudio.RootElement.GetProperty("streams").GetArrayLength() > 0;
             await RunAsync("ffmpeg", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=0.5", shortMp3);
             await RunAsync("ffmpeg", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=5", longMp3);
             await RunAsync("ffmpeg", "-v", "error", "-i", longMp3, "-c:a", "aac", aac);
@@ -54,7 +56,7 @@ internal static class LoopMuxVerification
                 var path = Path.Combine(directory, Guid.NewGuid().ToString("N") + ".mp4");
                 assembly.GetType("Shirobot.Plugin.MyParser.Downloading.SharpMp4MediaService", true)!
                     .GetMethod("MuxLoopingVideoWithAudio")!.Invoke(null, [video, audio, path, CancellationToken.None, loops]);
-                if (audio == longMp3 && loops == 3)
+                if (audio == longMp3 && loops == 3 && !hasEmbeddedAudio)
                 {
                     // Verify the plugin entry point with no external executable on PATH.
                     var originalSearchPath = Environment.GetEnvironmentVariable("PATH");
@@ -74,16 +76,20 @@ internal static class LoopMuxVerification
                 var frames = int.Parse(visual.GetProperty("nb_read_frames").GetString()!, CultureInfo.InvariantCulture);
                 var duration = double.Parse(visual.GetProperty("duration").GetString()!, CultureInfo.InvariantCulture);
                 if (frames != loops * originalFrames || Math.Abs(duration - loops * originalDuration) > .1) throw new Exception($"Incorrect looping: frames={frames}, duration={duration}, loops={loops}");
-                if (streams.Count(s => s.GetProperty("codec_type").GetString() == "audio") != (audio is null ? 0 : 1)) throw new Exception("Incorrect audio track count.");
-                if (audio is not null && Path.GetExtension(audio) == ".mp3")
+                if (streams.Count(s => s.GetProperty("codec_type").GetString() == "audio") != (audio is null && !hasEmbeddedAudio ? 0 : 1)) throw new Exception("Incorrect audio track count.");
+                if (hasEmbeddedAudio && audio is null || !hasEmbeddedAudio && audio is not null && Path.GetExtension(audio) == ".mp3")
                 {
                     var sound = streams.Single(s => s.GetProperty("codec_type").GetString() == "audio");
-                    if (sound.GetProperty("codec_name").GetString() != "mp3") throw new Exception("MP3 was unexpectedly re-encoded.");
-                    using var sourcePackets = JsonDocument.Parse(await RunAsync("ffprobe", "-v", "error", "-select_streams", "a:0", "-show_packets", "-show_data_hash", "sha256", "-of", "json", audio));
+                    var expectedCodec = hasEmbeddedAudio ? originalAudio.RootElement.GetProperty("streams")[0].GetProperty("codec_name").GetString() : "mp3";
+                    if (sound.GetProperty("codec_name").GetString() != expectedCodec) throw new Exception("Original audio was replaced or re-encoded.");
+                    if (hasEmbeddedAudio && Math.Abs(double.Parse(sound.GetProperty("duration").GetString()!, CultureInfo.InvariantCulture) - duration) > .1)
+                        throw new Exception("Embedded audio did not loop with the video.");
+                    using var sourcePackets = JsonDocument.Parse(await RunAsync("ffprobe", "-v", "error", "-select_streams", "a:0", "-show_packets", "-show_data_hash", "sha256", "-of", "json", hasEmbeddedAudio ? video : audio!));
                     using var targetPackets = JsonDocument.Parse(await RunAsync("ffprobe", "-v", "error", "-select_streams", "a:0", "-show_packets", "-show_data_hash", "sha256", "-of", "json", path));
                     var expected = sourcePackets.RootElement.GetProperty("packets").EnumerateArray().Select(p => p.GetProperty("data_hash").GetString()).ToArray();
                     var actual = targetPackets.RootElement.GetProperty("packets").EnumerateArray().Select(p => p.GetProperty("data_hash").GetString()).ToArray();
-                    if (actual.Length == 0 || !actual.SequenceEqual(expected.Take(actual.Length))) throw new Exception("MP3 frames were not copied intact.");
+                    var expectedOutput = hasEmbeddedAudio ? Enumerable.Range(0, actual.Length).Select(index => expected[index % expected.Length]) : expected.Take(actual.Length);
+                    if (actual.Length == 0 || !actual.SequenceEqual(expectedOutput)) throw new Exception("Audio frames were not copied intact.");
                 }
                 await RunAsync("ffmpeg", "-v", "error", "-i", path, "-f", "null", "-");
                 Console.WriteLine($"Loop mux verified: audio={Path.GetFileName(audio) ?? "none"}, loops={loops}, frames={frames}, duration={duration}");
