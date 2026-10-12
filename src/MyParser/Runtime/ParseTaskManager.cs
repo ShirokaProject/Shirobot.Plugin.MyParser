@@ -15,6 +15,28 @@ internal sealed class ParseTaskManager
     private readonly Lock _backgroundTasksLock = new();
     private readonly HashSet<Task> _backgroundTasks = [];
     private bool _isStopping;
+    private readonly Timer _expiryTimer;
+
+    public int MaxPendingTasks { get; set; } = 64;
+
+    public ParseTaskManager()
+    {
+        _expiryTimer = new Timer(_ => PruneExpiredEntries(), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+    }
+
+    private void PruneExpiredEntries()
+    {
+        var now = DateTimeOffset.UtcNow;
+        Prune(_providerCooldowns, now);
+        Prune(_mutedChannels, now);
+        Prune(_mutedMembers, now);
+    }
+
+    private static void Prune<TKey>(ConcurrentDictionary<TKey, DateTimeOffset> entries, DateTimeOffset now) where TKey : notnull
+    {
+        foreach (var entry in entries)
+            if (entry.Value <= now) entries.TryRemove(entry);
+    }
 
     public bool TryEnterProviderCooldown(string platform, Channel channel, string providerId, string parseText, out string workIdentity, out TimeSpan remaining)
     {
@@ -77,6 +99,11 @@ internal sealed class ParseTaskManager
         lock (_backgroundTasksLock)
         {
             if (_isStopping) return Task.CompletedTask;
+            if (_backgroundTasks.Count >= Math.Clamp(MaxPendingTasks, 1, 4096))
+            {
+                BotLog.Warning("MyParser 待处理解析任务已达上限，跳过本条消息。");
+                return Task.CompletedTask;
+            }
             var cancellation = CancellationTokenSource.CreateLinkedTokenSource(MyParserRuntime.BackgroundCancellationToken);
             state = new ParseTaskState(message.Sender.Id, cancellation);
             if (!_parseTasks.TryAdd(key, state))
@@ -162,6 +189,7 @@ internal sealed class ParseTaskManager
     public async Task StopAsync()
     {
         lock (_backgroundTasksLock) _isStopping = true;
+        await _expiryTimer.DisposeAsync().ConfigureAwait(false);
         MyParserRuntime.BeginUnload();
         CancelTasks(_ => true, "plugin-unload");
         Task[] tasks;

@@ -8,17 +8,29 @@ namespace Shirobot.Plugin.MyParser.Services;
 
 internal sealed class ProviderReactionService(IBotContext context)
 {
-    private static readonly ConcurrentDictionary<string, byte> SentReactions = new(StringComparer.Ordinal);
+    private static readonly ConcurrentDictionary<string, DateTimeOffset> SentReactions = new(StringComparer.Ordinal);
+
+    private static readonly Lock CacheLock = new();
 
     public async Task AddAsync(MessageEvent message, string faceId, string platformName)
     {
         if (!TryGetGroupMessage(message, out var groupApi, out var groupId, out var messageSeq)) return;
-        var key = $"{groupId}:{messageSeq}:{faceId}";
-        if (!SentReactions.TryAdd(key, 0)) return;
+        var key = $"{message.InstanceId}:{message.Platform}:{groupId}:{messageSeq}:{faceId}";
+        lock (CacheLock)
+        {
+            var now = DateTimeOffset.UtcNow;
+            foreach (var entry in SentReactions)
+                if (entry.Value <= now) SentReactions.TryRemove(entry);
+            if (SentReactions.ContainsKey(key)) return;
+            // Deduplication need only cover recent messages; never retain the full message history.
+            if (SentReactions.Count >= 4096)
+                foreach (var entry in SentReactions.OrderBy(entry => entry.Value).Take(SentReactions.Count - 4095)) SentReactions.TryRemove(entry);
+            if (!SentReactions.TryAdd(key, now.AddMinutes(10))) return;
+        }
 
         try
         {
-        await groupApi.SendMessageReactionAsync(groupId, messageSeq, faceId).ConfigureAwait(false);
+            await groupApi.SendMessageReactionAsync(groupId, messageSeq, faceId).ConfigureAwait(false);
             if (!string.Equals(faceId, "351", StringComparison.OrdinalIgnoreCase))
                 await RemoveAsync(message, "351", platformName).ConfigureAwait(false);
         }
@@ -38,7 +50,7 @@ internal sealed class ProviderReactionService(IBotContext context)
     public async Task RemoveAsync(MessageEvent message, string faceId, string platformName)
     {
         if (!TryGetGroupMessage(message, out var groupApi, out var groupId, out var messageSeq)) return;
-        var key = $"{groupId}:{messageSeq}:{faceId}";
+        var key = $"{message.InstanceId}:{message.Platform}:{groupId}:{messageSeq}:{faceId}";
         if (!SentReactions.ContainsKey(key)) return;
 
         try

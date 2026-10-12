@@ -9,16 +9,23 @@ internal sealed class HostTemporaryStorageFactory : ITemporaryStorageFactory
 
     private sealed class Storage : IStorage
     {
+        private readonly string _directory;
+
         public Storage(IMp4Logger? logger)
         {
             Logger = logger ?? new DefaultMp4Logger();
-            Stream = new FileStream(Path.Combine(MyParserRuntime.CreateTempDirectory(), "mp4-storage.bin"),
-                FileMode.CreateNew, FileAccess.ReadWrite, FileShare.Read);
+            _directory = MyParserRuntime.CreateTempDirectory();
+            Stream = new FileStream(Path.Combine(_directory, "mp4-storage.bin"),
+                FileMode.CreateNew, FileAccess.ReadWrite, FileShare.Read, 4096, FileOptions.DeleteOnClose);
         }
 
         public Stream Stream { get; }
         public IMp4Logger Logger { get; set; }
-        public void Dispose() => Stream.Dispose();
+        public void Dispose()
+        {
+            try { Stream.Dispose(); }
+            finally { MyParserRuntime.ForgetTemporaryDirectory(_directory); }
+        }
         public void Flush() => Stream.Flush();
         public long GetLength() => Stream.Length;
         public long GetPosition() => Stream.Position;

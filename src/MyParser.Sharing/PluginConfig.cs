@@ -19,6 +19,9 @@ public sealed class PluginConfig
     [ConfigField("填入请求头 Cookie: 后面的完整值；留空表示不使用。保存后立即生效。Cookie 以明文保存在 config.toml，请勿分享配置文件。", Label = "腾讯元宝（视频号） Cookie", Type = "password", Group = "cookies", GroupLabel = "Cookie", GroupDescription = "各平台登录凭据；网页默认隐藏，保存后自动重载。")]
     public string WeixinChannelsYuanbaoCookie { get; set; } = string.Empty;
 
+    [ConfigField("同时保留的解析任务上限（包括等待下载的任务）。达到上限时跳过新消息，防止持续积压占用内存。", Label = "最大待处理解析任务", Min = 1, Max = 4096)]
+    public int MaxPendingParseTasks { get; set; } = 64;
+
     // 通用设置
     [ConfigField("启用开发模式时显示详细诊断日志，并只解析发送文本/卡片，不下载或发送视频。", Label = "【通用设置】开发模式")]
     public bool DevelopmentMode { get; set; } = false;

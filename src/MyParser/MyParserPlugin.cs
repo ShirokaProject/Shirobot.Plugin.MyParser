@@ -48,6 +48,7 @@ public sealed class MyParserPlugin : PluginBase, IConfigurableComponent<PluginCo
         cancellationToken.ThrowIfCancellationRequested();
         foreach (var property in typeof(PluginConfig).GetProperties())
             if (property.CanRead && property.CanWrite) property.SetValue(_config, property.GetValue(current));
+        if (_parseTaskManager is not null) _parseTaskManager.MaxPendingTasks = _config.MaxPendingParseTasks;
         _settingsMonitor?.ReloadCookies();
         BotLog.Info("MyParser 配置已热重载。");
         return Task.CompletedTask;
@@ -82,7 +83,7 @@ public sealed class MyParserPlugin : PluginBase, IConfigurableComponent<PluginCo
         _providerCatalog.LoadRuntimeModules();
         _providerCatalog.LogCapabilities();
 
-        _parseTaskManager = new ParseTaskManager();
+        _parseTaskManager = new ParseTaskManager { MaxPendingTasks = _config.MaxPendingParseTasks };
         _messageCoordinator = new MessageParseCoordinator(Context, _config, _providerCatalog, _parseTaskManager);
         _providerCatalog.CreateMessageHandlers(_messageCoordinator.HandleReplyPreviewAsync);
         foreach (var command in _providerCatalog.CreateCommands())

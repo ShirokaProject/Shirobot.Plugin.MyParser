@@ -30,7 +30,14 @@ public static class AvatarBitmapResizer
         if (!double.IsFinite(displaySize) || displaySize <= 0) throw new ArgumentOutOfRangeException(nameof(displaySize));
         if (!double.IsFinite(dpi) || dpi <= 0) throw new ArgumentOutOfRangeException(nameof(dpi));
         var pixels = checked((int)Math.Ceiling(displaySize * dpi / 96));
-        using var decoded = SKBitmap.Decode(stream) ?? throw new InvalidDataException("无法解码头像图片。");
+        using var codec = SKCodec.Create(stream) ?? throw new InvalidDataException("无法解码头像图片。");
+        // Ask JPEG/WebP decoders to downsample before allocating pixels. Keep
+        // twice the target size for the existing anti-aliasing/crop pass.
+        var scale = Math.Min(1f, pixels * 2f / Math.Min(codec.Info.Width, codec.Info.Height));
+        var size = codec.GetScaledDimensions(scale);
+        using var decoded = new SKBitmap(size.Width, size.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
+        if (codec.GetPixels(decoded.Info, decoded.GetPixels()) != SKCodecResult.Success)
+            throw new InvalidDataException("无法解码头像图片。");
         var current = SKImage.FromBitmap(decoded);
         try
         {

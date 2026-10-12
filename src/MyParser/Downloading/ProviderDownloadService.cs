@@ -291,6 +291,7 @@ internal sealed class ProviderDownloadService
         ProviderRecordBuildRequest request,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var directory = MyParserRuntime.CreateTempDirectory();
         Directory.CreateDirectory(directory);
         var safeBaseName = SanitizeFileName($"{request.FileNamePrefix}_{request.MediaId}", 120);
@@ -304,17 +305,21 @@ internal sealed class ProviderDownloadService
 
         var variants = new[] { pc };
 
-        foreach (var variant in variants)
+        try
         {
-            if (File.Exists(variant.Path) && new FileInfo(variant.Path).Length > 0)
+            foreach (var variant in variants)
             {
-                continue;
+                if (File.Exists(variant.Path) && new FileInfo(variant.Path).Length > 0)
+                    continue;
+                await EncodeSilkAsync(config, request, variant.Path, variant.SilkRate, cancellationToken).ConfigureAwait(false);
             }
-
-            await EncodeSilkAsync(request, variant.Path, variant.SilkRate, cancellationToken).ConfigureAwait(false);
+            return variants;
         }
-
-        return variants;
+        catch
+        {
+            CleanupEncodingDirectory(directory);
+            throw;
+        }
     }
 
     public static async Task<string> BuildRecordUriAsync(string localPath, CancellationToken cancellationToken = default)
@@ -658,68 +663,137 @@ internal sealed class ProviderDownloadService
         return (new Uri(path).AbsoluteUri, path);
     }
 
-    private async Task EncodeSilkAsync(ProviderRecordBuildRequest request, string outputSilkPath, int silkRate, CancellationToken cancellationToken)
+    private async Task EncodeSilkAsync(PluginConfig config, ProviderRecordBuildRequest request, string outputSilkPath, int silkRate, CancellationToken cancellationToken)
     {
         await AudioEncodingGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var workDirectory = MyParserRuntime.CreateTempDirectory();
-            Directory.CreateDirectory(workDirectory);
-            var tempBaseName = request.PlatformId + "_" + Guid.NewGuid().ToString("N");
-            var tempSilkPath = Path.Combine(workDirectory, tempBaseName + ".silk");
-
             cancellationToken.ThrowIfCancellationRequested();
-            var encoder = new SilkEncoder(new SilkEncoderOptions
-            {
-                SampleRate = 24000,
-                BitRate = silkRate,
-                MaxInternalSampleRate = 24000,
-                Tencent = true,
-                Complexity = 2,
-            });
+            var workDirectory = MyParserRuntime.CreateTempDirectory();
             try
             {
-                await using (var mp3 = File.OpenRead(request.LocalAudioPath))
+                Directory.CreateDirectory(workDirectory);
+                var tempSilkPath = Path.Combine(workDirectory, request.PlatformId + "_" + Guid.NewGuid().ToString("N") + ".silk");
+                var encoder = new SilkEncoder(new SilkEncoderOptions
+                {
+                    SampleRate = 24000,
+                    BitRate = silkRate,
+                    MaxInternalSampleRate = 24000,
+                    Tencent = true,
+                    Complexity = 2,
+                });
+                var pcmPath = Path.Combine(workDirectory, "audio.pcm");
+                await using (var pcm = new FileStream(pcmPath, FileMode.CreateNew, FileAccess.ReadWrite,
+                    FileShare.Read, 4096, FileOptions.DeleteOnClose))
                 await using (var silk = File.Create(tempSilkPath))
                 {
-                    await Task.Run(
-                        () =>
-                        {
-                            if (SharpMP4.Readers.MP3Reader.IsMP3(mp3))
-                                encoder.EncodeMp3(mp3, silk, SilkMp3AudioProfile.Flat, cancellationToken);
-                            else
-                            {
-                                // AAC decoding writes bounded PCM chunks; keep the intermediate on disk,
-                                // then feed SILK one frame at a time instead of buffering the whole track.
-                                using var pcm = new FileStream(Path.Combine(workDirectory, tempBaseName + ".pcm"),
-                                    FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 65536,
-                                    FileOptions.DeleteOnClose | FileOptions.SequentialScan);
-                                SharpMP4.Audio.ManagedAudioDecoder.DecodeMonoPcm16(mp3, pcm, 24000, cancellationToken);
-                                pcm.Position = 0;
-                                encoder.EncodePcm16LittleEndian(pcm, silk, cancellationToken);
-                            }
-                        },
-                        cancellationToken).ConfigureAwait(false);
+                    await DecodeSilkPcmAsync(config, request.LocalAudioPath, pcm, cancellationToken).ConfigureAwait(false);
+                    await pcm.FlushAsync(cancellationToken).ConfigureAwait(false);
+                    await Task.Run(() => MappedPcmEncoder.Encode(encoder, pcm, silk, cancellationToken), cancellationToken).ConfigureAwait(false);
                     await silk.FlushAsync(cancellationToken).ConfigureAwait(false);
                 }
-
+                cancellationToken.ThrowIfCancellationRequested();
                 if (!File.Exists(tempSilkPath) || new FileInfo(tempSilkPath).Length == 0)
-                {
                     throw new InvalidDataException("SILK 编码输出为空。");
-                }
-
                 File.Move(tempSilkPath, outputSilkPath, overwrite: true);
                 global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser {request.PlatformDisplayName} SILK 编码完成: input={request.LocalAudioPath}, output={outputSilkPath}, silk_rate={silkRate}, size_kb={new FileInfo(outputSilkPath).Length / 1024d:F1}, encoder=SilkCodec.NET");
             }
             finally
             {
-                File.Delete(tempSilkPath);
+                CleanupEncodingDirectory(workDirectory);
             }
         }
         finally
         {
             AudioEncodingGate.Release();
         }
+    }
+
+    private static async Task DecodeSilkPcmAsync(PluginConfig config, string path, Stream pcm, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Run(() =>
+            {
+                using var input = File.OpenRead(path);
+                SharpMP4.Audio.ManagedAudioDecoder.DecodeMonoPcm16(input, pcm, 24000, cancellationToken);
+            }, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception error) when (error is InvalidDataException or NotSupportedException
+            || error.GetType().FullName == "SharpJaad.AAC.AACException")
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var ffmpeg = ResolveFfmpegPath(config);
+            if (ffmpeg is null)
+                throw new InvalidDataException("当前音频原生解码失败，且未找到 ffmpeg 解码回退程序。", error);
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser 原生音频解码失败，回退 ffmpeg: error={error.Message}");
+            pcm.SetLength(0);
+            pcm.Position = 0;
+            await DecodePcmWithFfmpegAsync(ffmpeg, path, pcm, cancellationToken).ConfigureAwait(false);
+        }
+        if (pcm.Length == 0 || (pcm.Length & 1) != 0)
+            throw new InvalidDataException("音频解码输出为空或 PCM 长度无效。");
+    }
+
+    private static async Task DecodePcmWithFfmpegAsync(string ffmpeg, string path, Stream output, CancellationToken cancellationToken)
+    {
+        var info = new ProcessStartInfo(ffmpeg)
+        {
+            RedirectStandardOutput = true, RedirectStandardError = true,
+            UseShellExecute = false, CreateNoWindow = true,
+        };
+        foreach (var argument in new[] { "-nostdin", "-hide_banner", "-loglevel", "error", "-i", path,
+            "-map", "0:a:0", "-vn", "-ac", "1", "-ar", "24000", "-f", "s16le", "-acodec", "pcm_s16le", "pipe:1" })
+            info.ArgumentList.Add(argument);
+        using var process = Process.Start(info) ?? throw new InvalidOperationException("ffmpeg 启动失败。");
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromMinutes(5));
+        var copy = process.StandardOutput.BaseStream.CopyToAsync(output, timeout.Token);
+        var errors = DrainAudioDecoderErrorsAsync(process.StandardError);
+        try
+        {
+            try { await Task.WhenAll(copy, process.WaitForExitAsync(timeout.Token)).ConfigureAwait(false); }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            { throw new TimeoutException("音频解码超过 5 分钟。"); }
+            var detail = await errors.ConfigureAwait(false);
+            if (process.ExitCode != 0) throw new InvalidDataException("ffmpeg 音频解码失败：" + detail);
+        }
+        finally
+        {
+            if (!process.HasExited)
+            {
+                try { process.Kill(entireProcessTree: true); }
+                catch (InvalidOperationException) { }
+            }
+            await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
+            try { await copy.ConfigureAwait(false); }
+            catch (OperationCanceledException) { }
+            await errors.ConfigureAwait(false);
+        }
+    }
+
+    private static async Task<string> DrainAudioDecoderErrorsAsync(StreamReader reader)
+    {
+        var tail = new StringBuilder();
+        var buffer = new char[1024];
+        int count;
+        while ((count = await reader.ReadAsync(buffer).ConfigureAwait(false)) > 0)
+        {
+            tail.Append(buffer, 0, count);
+            if (tail.Length > 4096) tail.Remove(0, tail.Length - 4096);
+        }
+        return tail.ToString();
+    }
+
+    private static void CleanupEncodingDirectory(string directory)
+    {
+        try { Directory.Delete(directory, recursive: true); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            // The host's independent expiry cleanup remains responsible if a
+            // file cannot be removed immediately; never mask the encoding error.
+        }
+        finally { MyParserRuntime.ForgetTemporaryDirectory(directory); }
     }
 
     private async Task<(string FileUri, string LocalPath)> DownloadProviderVideoCandidateAsync(
@@ -841,22 +915,6 @@ internal sealed class ProviderDownloadService
 
     private static async Task MuxAsync(PluginConfig config, string videoPath, string audioPath, string outputPath, CancellationToken cancellationToken)
     {
-        // Keep per-sample media allocations out of the long-lived host when ffmpeg is available.
-        var preferredFfmpeg = ResolveFfmpegPath(config);
-        if (preferredFfmpeg is not null)
-        {
-            try
-            {
-                await MuxWithFfmpegAsync(preferredFfmpeg, videoPath, audioPath, outputPath, cancellationToken).ConfigureAwait(false);
-                return;
-            }
-            catch (OperationCanceledException) { throw; }
-            catch (Exception ex)
-            {
-                global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser ffmpeg 音视频合并失败，回退 SharpMP4: error={ex.Message}");
-            }
-        }
-
         try
         {
             await Task.Run(() => SharpMp4MediaService.Mux(videoPath, audioPath, outputPath), cancellationToken).ConfigureAwait(false);
@@ -869,8 +927,6 @@ internal sealed class ProviderDownloadService
         }
         catch (Exception ex)
         {
-            if (preferredFfmpeg is not null)
-                throw; // Both backends failed; do not retry the same ffmpeg command.
             global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser SharpMP4 音视频合并失败，回退 ffmpeg: error={ex.Message}");
         }
 

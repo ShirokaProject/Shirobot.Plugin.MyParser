@@ -4,6 +4,7 @@
     <Version>0.6.13</Version>
         <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <ImplicitUsings>enable</ImplicitUsings>
         <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
         <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
