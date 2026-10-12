@@ -9,9 +9,6 @@ namespace Shirobot.Plugin.MyParser.Downloading;
 
 internal sealed class ProviderDownloadService
 {
-    // Keep simultaneous music requests from running multiple CPU-intensive
-    // encoders and allocating their scratch buffers at the same time.
-    private static readonly SemaphoreSlim AudioEncodingGate = new(1, 1);
     public Task<(string FileUri, string LocalPath)> DownloadProviderVideoAsync(
         PluginConfig config,
         ProviderVideoDownloadRequest request,
@@ -300,7 +297,7 @@ internal sealed class ProviderDownloadService
             "pc-best",
             "电脑最优",
             "pcm_rate=24000 silk_rate=35000 max=24000 tencent=true profile=Flat encoder=SilkCodec.NET/1.2.2",
-            Path.Combine(directory, safeBaseName + "_pc_24k_35000_silkcodecnet_120.silk"),
+            Path.Combine(directory, safeBaseName + "_pc_24k_35000_silkcodecnet_122.silk"),
             35000);
 
         var variants = new[] { pc };
@@ -665,47 +662,39 @@ internal sealed class ProviderDownloadService
 
     private async Task EncodeSilkAsync(PluginConfig config, ProviderRecordBuildRequest request, string outputSilkPath, int silkRate, CancellationToken cancellationToken)
     {
-        await AudioEncodingGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        var workDirectory = MyParserRuntime.CreateTempDirectory();
         try
         {
+            Directory.CreateDirectory(workDirectory);
+            var tempSilkPath = Path.Combine(workDirectory, request.PlatformId + "_" + Guid.NewGuid().ToString("N") + ".silk");
+            var encoder = new SilkEncoder(new SilkEncoderOptions
+            {
+                SampleRate = 24000,
+                BitRate = silkRate,
+                MaxInternalSampleRate = 24000,
+                Tencent = true,
+                Complexity = 2,
+            });
+            var pcmPath = Path.Combine(workDirectory, "audio.pcm");
+            await using (var pcm = new FileStream(pcmPath, FileMode.CreateNew, FileAccess.ReadWrite,
+                FileShare.Read, 4096, FileOptions.DeleteOnClose))
+            await using (var silk = File.Create(tempSilkPath))
+            {
+                await DecodeSilkPcmAsync(config, request.LocalAudioPath, pcm, cancellationToken).ConfigureAwait(false);
+                await pcm.FlushAsync(cancellationToken).ConfigureAwait(false);
+                await Task.Run(() => MappedPcmEncoder.Encode(encoder, pcm, silk, cancellationToken), cancellationToken).ConfigureAwait(false);
+                await silk.FlushAsync(cancellationToken).ConfigureAwait(false);
+            }
             cancellationToken.ThrowIfCancellationRequested();
-            var workDirectory = MyParserRuntime.CreateTempDirectory();
-            try
-            {
-                Directory.CreateDirectory(workDirectory);
-                var tempSilkPath = Path.Combine(workDirectory, request.PlatformId + "_" + Guid.NewGuid().ToString("N") + ".silk");
-                var encoder = new SilkEncoder(new SilkEncoderOptions
-                {
-                    SampleRate = 24000,
-                    BitRate = silkRate,
-                    MaxInternalSampleRate = 24000,
-                    Tencent = true,
-                    Complexity = 2,
-                });
-                var pcmPath = Path.Combine(workDirectory, "audio.pcm");
-                await using (var pcm = new FileStream(pcmPath, FileMode.CreateNew, FileAccess.ReadWrite,
-                    FileShare.Read, 4096, FileOptions.DeleteOnClose))
-                await using (var silk = File.Create(tempSilkPath))
-                {
-                    await DecodeSilkPcmAsync(config, request.LocalAudioPath, pcm, cancellationToken).ConfigureAwait(false);
-                    await pcm.FlushAsync(cancellationToken).ConfigureAwait(false);
-                    await Task.Run(() => MappedPcmEncoder.Encode(encoder, pcm, silk, cancellationToken), cancellationToken).ConfigureAwait(false);
-                    await silk.FlushAsync(cancellationToken).ConfigureAwait(false);
-                }
-                cancellationToken.ThrowIfCancellationRequested();
-                if (!File.Exists(tempSilkPath) || new FileInfo(tempSilkPath).Length == 0)
-                    throw new InvalidDataException("SILK 编码输出为空。");
-                File.Move(tempSilkPath, outputSilkPath, overwrite: true);
-                global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser {request.PlatformDisplayName} SILK 编码完成: input={request.LocalAudioPath}, output={outputSilkPath}, silk_rate={silkRate}, size_kb={new FileInfo(outputSilkPath).Length / 1024d:F1}, encoder=SilkCodec.NET");
-            }
-            finally
-            {
-                CleanupEncodingDirectory(workDirectory);
-            }
+            if (!File.Exists(tempSilkPath) || new FileInfo(tempSilkPath).Length == 0)
+                throw new InvalidDataException("SILK 编码输出为空。");
+            File.Move(tempSilkPath, outputSilkPath, overwrite: true);
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser {request.PlatformDisplayName} SILK 编码完成: input={request.LocalAudioPath}, output={outputSilkPath}, silk_rate={silkRate}, size_kb={new FileInfo(outputSilkPath).Length / 1024d:F1}, encoder=SilkCodec.NET");
         }
         finally
         {
-            AudioEncodingGate.Release();
+            CleanupEncodingDirectory(workDirectory);
         }
     }
 
