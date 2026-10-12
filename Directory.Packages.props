@@ -7,7 +7,7 @@
     <PackageVersion Include="NLayer" Version="3.0.0" />
     <PackageVersion Include="VideoLibrary" Version="3.3.2" />
     <PackageVersion Include="LightDl" Version="0.4.3" />
-    <PackageVersion Include="SilkCodec.NET" Version="1.2.1" />
+    <PackageVersion Include="SilkCodec.NET" Version="1.2.2" />
     <PackageVersion Include="ShiroBot.SDK" Version="1.0.0" />
   </ItemGroup>
 </Project>

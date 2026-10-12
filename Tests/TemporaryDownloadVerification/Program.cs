@@ -67,6 +67,24 @@ try
     catch (Exception ex) when (ex is not InvalidOperationException || ex.Message != "Invalid audio unexpectedly encoded.") { }
     Check(!File.Exists(Path.Combine(fixtures,"invalid.silk")) && Directory.GetFiles(root,"*.pcm",SearchOption.AllDirectories).Length == 0,
         "Failed encoding retained output or intermediate PCM.");
+    // A request queued behind another encoder must honor cancellation and
+    // must not allocate temporary output before it acquires the slot.
+    var encodingGate = (SemaphoreSlim)service.GetType().GetField("AudioEncodingGate",BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
+    await encodingGate.WaitAsync();
+    try
+    {
+        using var queuedCancellation = new CancellationTokenSource();
+        var beforeQueued = context.Allocated.Count;
+        var queuedOutput = Path.Combine(fixtures,"queued.silk");
+        var queued = (Task)service.GetType().GetMethod("EncodeSilkAsync",BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(service,
+            [new ProviderRecordBuildRequest("test","test","queued",renewed.LocalPath,"queued"),queuedOutput,35000,queuedCancellation.Token])!;
+        Check(!queued.IsCompleted, "Queued encoding ignored the concurrency slot.");
+        queuedCancellation.Cancel();
+        try { await queued; throw new InvalidOperationException("Queued encoding ignored cancellation."); }
+        catch(OperationCanceledException) when(queuedCancellation.IsCancellationRequested) { }
+        Check(context.Allocated.Count == beforeQueued && !File.Exists(queuedOutput), "Canceled queued encoding allocated output.");
+    }
+    finally { encodingGate.Release(); }
     var combined = await (Task<string>)service.GetType().GetMethod("CreateStillImageVideoWithAudioAsync")!.Invoke(service,
         [config,image.LocalPath,renewed.LocalPath,CancellationToken.None])!;
     Check(File.Exists(combined) && combined.StartsWith(root + Path.DirectorySeparatorChar), "Gallery synthesis escaped host temporary storage.");
