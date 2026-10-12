@@ -44,9 +44,7 @@ internal sealed class ProviderMediaCardRenderer(IBotContext context, IProviderHo
                 Description = media.Description ?? string.Empty,
                 Metadata = string.Join("  ·  ", metadata),
             };
-            var png = await context.RenderControlPngAsync<MediaCard>(viewModel, new ControlRenderOptions(RenderTheme.Auto), cancellationToken).ConfigureAwait(false);
-            cancellationToken.ThrowIfCancellationRequested();
-            return await hostServices.BuildRenderedCardUriAsync(png, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
+            return await hostServices.RenderCardUriAsync<MediaCard>(viewModel, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

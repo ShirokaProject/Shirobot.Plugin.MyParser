@@ -41,9 +41,7 @@ internal sealed class HeyboxMediaCardRenderer(ProviderCardRenderContext context)
                 LinkId = media.MediaId,
                 SourceText = Value(media, "source_kind"),
             };
-            var png = await context.BotContext.RenderControlPngAsync<HeyboxCard>(model, new ControlRenderOptions(RenderTheme.Auto), cancellationToken).ConfigureAwait(false);
-            cancellationToken.ThrowIfCancellationRequested();
-            return await context.HostServices.BuildRenderedCardUriAsync(png, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
+            return await context.HostServices.RenderCardUriAsync<HeyboxCard>(model, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -107,9 +105,8 @@ internal sealed class HeyboxMediaCardRenderer(ProviderCardRenderContext context)
                     Pair("收藏", Value(media, "favorites")), Pair("评论", Value(media, "comments")) }.Where(value => value.Length > 0)),
                 Blocks = blocks,
             };
-            var png = await context.BotContext.RenderControlPngAsync<HeyboxArticleDocument>(model,
-                new ControlRenderOptions(RenderTheme.Dark), cancellationToken).ConfigureAwait(false);
-            return await context.HostServices.BuildRenderedCardUriAsync(png, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
+            return await context.HostServices.RenderCardUriAsync<HeyboxArticleDocument>(model, media.ProviderId,
+                media.MediaId, cancellationToken, new ControlRenderOptions(RenderTheme.Dark)).ConfigureAwait(false);
         }
         finally { foreach (var bitmap in bitmaps) bitmap.Dispose(); }
     }

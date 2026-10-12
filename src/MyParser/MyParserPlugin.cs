@@ -14,10 +14,10 @@ namespace Shirobot.Plugin.MyParser;
 
 [BotPlugin(id: "MyParser",
     Name = "MyParser",
-    Version = "0.6.12",
-    Author = "PVPGood",
+    Version = "0.6.13",
+    Author = "ShirokaProject",
     Category = PluginCategory.Utility,
-    Description = "面向 Shirobot 的学习型内容消息处理插件。",
+    Description = "解析多平台视频、图文和音乐链接，生成预览卡片并发送视频、图片或音频。",
     GithubRepo = "ShirokaProject/Shirobot.Plugin.MyParser",
     IsPluginSingleFile = true,
     SharedAssemblies = "ShiroBot.Model.QQ")

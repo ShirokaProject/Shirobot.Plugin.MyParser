@@ -42,10 +42,7 @@ internal sealed class NetEaseMediaCardRenderer(ProviderCardRenderContext context
                 BitrateText = FormatBitrate(media.Attributes.GetValueOrDefault("bitrate", string.Empty)),
                 SongIdText = media.MediaId,
             };
-            var png = await context.BotContext.RenderControlPngAsync<NetEaseMusicCard>(viewModel, new ControlRenderOptions(RenderTheme.Auto), cancellationToken).ConfigureAwait(false);
-
-            cancellationToken.ThrowIfCancellationRequested();
-            return await context.HostServices.BuildRenderedCardUriAsync(png, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
+            return await context.HostServices.RenderCardUriAsync<NetEaseMusicCard>(viewModel, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
         }
         finally
         {

@@ -49,6 +49,33 @@ try
     var image = await (Task<(string Uri,string? LocalPath)>)imageService.GetMethod("BuildRemoteImageAsync")!.Invoke(null,
         ["test",server.Url + "image",null,"test-image",null,10*1024L*1024L,true,server.Url,CancellationToken.None,true])!;
     Check(image.LocalPath is not null && File.Exists(image.LocalPath) && image.LocalPath.StartsWith(root + Path.DirectorySeparatorChar), "Image escaped host temporary storage.");
+    var expectedImage = await File.ReadAllBytesAsync(imagePath);
+    var actualImage = await File.ReadAllBytesAsync(image.LocalPath!);
+    Check(actualImage.SequenceEqual(expectedImage), "Streamed image changed bytes.");
+    var largeImage = new byte[4 * 1024 * 1024];
+    new Random(12345).NextBytes(largeImage);
+    using var largeImageServer = new FixtureServer([], [], largeImage);
+    long imageAllocations = 0;
+    for (int i = 0; i < 3; i++)
+    {
+        var beforeImage = GC.GetTotalAllocatedBytes(true);
+        var downloaded = await (Task<(string Uri,string? LocalPath)>)imageService.GetMethod("BuildRemoteImageAsync")!.Invoke(null,
+            ["test",largeImageServer.Url + "image?round=" + i,null,"large-image",null,10*1024L*1024L,true,largeImageServer.Url,CancellationToken.None,true])!;
+        imageAllocations += GC.GetTotalAllocatedBytes(true) - beforeImage;
+        Check(downloaded.Uri.StartsWith("file:") && downloaded.LocalPath is not null
+            && (await File.ReadAllBytesAsync(downloaded.LocalPath)).SequenceEqual(largeImage), "Large streamed image changed bytes or URI mode.");
+    }
+    // This includes allocations in the in-process HTTP fixture; benchmark separately.
+    Console.WriteLine($"PASS streamed image download: three 4 MiB images, fixture-process allocations={imageAllocations}; output bytes identical.");
+    var beforeOversize = context.Allocated.Count;
+    var oversize = await (Task<(string Uri,string? LocalPath)>)imageService.GetMethod("BuildRemoteImageAsync")!.Invoke(null,
+        ["test",largeImageServer.Url + "image-chunked",null,"oversize",null,1024L,true,largeImageServer.Url,CancellationToken.None,true])!;
+    Check(string.IsNullOrEmpty(oversize.Uri) && oversize.LocalPath is null, "Oversized chunked image was accepted.");
+    Check(context.Allocated.Skip(beforeOversize).All(item => Directory.GetFiles(item.Path).Length == 0), "Rejected image left a partial file.");
+    var base64Image = await (Task<(string Uri,string? LocalPath)>)imageService.GetMethod("BuildRemoteImageAsync")!.Invoke(null,
+        ["test",server.Url + "image?base64",null,"base64-image",null,10*1024L*1024L,true,server.Url,CancellationToken.None,false])!;
+    Check(Convert.FromBase64String(base64Image.Uri[9..]).SequenceEqual(expectedImage)
+        && base64Image.LocalPath is not null && File.Exists(base64Image.LocalPath), "Base64 image or persisted fallback changed.");
     var records = await (Task<IReadOnlyList<ProviderRecordVariant>>)service.GetType().GetMethod("BuildSilkRecordVariantsAsync")!.Invoke(service,
         [config,new ProviderRecordBuildRequest("neteasecloudmusic","网易云音乐","test",renewed.LocalPath,"test"),CancellationToken.None])!;
     Check(records.Count == 1 && records[0].SilkRate == 35000 && records.All(record => File.Exists(record.Path) && record.Path.StartsWith(root + Path.DirectorySeparatorChar)), "Silk escaped host temporary storage.");
@@ -157,9 +184,10 @@ sealed class FixtureServer : IDisposable
                 {
                     var route = request.Request.Url!.AbsolutePath;
                     if(route == "/bad") {request.Response.StatusCode=500;request.Response.Close();continue;}
-                    var bytes = route == "/video" ? video : route == "/image" ? image : audio;
+                    var bytes = route == "/video" ? video : route.StartsWith("/image", StringComparison.Ordinal) ? image : audio;
                     request.Response.ContentType = route == "/image" ? "image/png" : "application/octet-stream";
-                    request.Response.ContentLength64 = bytes.Length;
+                    if (route == "/image-chunked") request.Response.SendChunked = true;
+                    else request.Response.ContentLength64 = bytes.Length;
                     if(request.Request.HttpMethod != "HEAD") await request.Response.OutputStream.WriteAsync(bytes);
                     request.Response.Close();
                 } catch { request.Response.Abort(); }

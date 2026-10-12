@@ -1,4 +1,6 @@
 using Avalonia.Media.Imaging;
+using Avalonia.Controls;
+using ShiroBot.AvaloniaSdk;
 using System.Net;
 using Shirobot.Plugin.MyParser.MessageHandling;
 using Shirobot.Plugin.MyParser.Parsing;
@@ -91,6 +93,38 @@ internal sealed class ProviderHostServices : IProviderHostServices, IDisposable
     public string PreviewUri(string? uri, int maxLength = 180) => MediaUriFormatter.PreviewUri(uri, maxLength);
 
     public void UnregisterLocalVideoFile(string? path) => _localVideoHttpServer?.UnregisterFile(path);
+
+    public async Task<string> RenderCardUriAsync<TControl>(object? model, string providerId, string mediaId,
+        CancellationToken cancellationToken = default, ControlRenderOptions? options = null) where TControl : Control, new()
+    {
+        options ??= new ControlRenderOptions(RenderTheme.Auto);
+        if (pluginConfig.FileProtocol == 0)
+        {
+            var png = await context.RenderControlPngAsync<TControl>(model, options, cancellationToken).ConfigureAwait(false);
+            return await BuildRenderedCardUriAsync(png, providerId, mediaId, cancellationToken).ConfigureAwait(false);
+        }
+        if (pluginConfig.FileProtocol is not (1 or 2)) throw new InvalidOperationException("无效的 FileProtocol。");
+        var rendered = await context.RenderControlPngToFileUriAsync<TControl>(model, options, cancellationToken).ConfigureAwait(false);
+        var source = new Uri(rendered).LocalPath;
+        string? destination = null;
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var prefix = RemoteImageFetchService.SanitizeLocalFileName($"{providerId}_{mediaId}_card");
+            destination = Path.Combine(MyParserRuntime.CreateTempDirectory(), $"{prefix}_{Guid.NewGuid():N}.png");
+            File.Move(source, destination);
+            var uri = pluginConfig.FileProtocol == 1
+                ? new Uri(Path.GetFullPath(destination)).AbsoluteUri
+                : GetLocalVideoHttpServer().RegisterFile(destination);
+            return uri;
+        }
+        catch
+        {
+            if (destination is not null) File.Delete(destination);
+            throw;
+        }
+        finally { File.Delete(source); }
+    }
 
     public async Task<string> BuildRenderedCardUriAsync(
         byte[] png, string providerId, string mediaId, CancellationToken cancellationToken = default)

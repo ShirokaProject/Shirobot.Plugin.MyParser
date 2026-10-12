@@ -66,30 +66,6 @@ internal static class RemoteImageFetchService
             }
 
             await using var input = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            using var output = new MemoryStream();
-            var buffer = new byte[64 * 1024];
-            long total = 0;
-            while (true)
-            {
-                var read = await input.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
-                if (read == 0)
-                {
-                    break;
-                }
-
-                total += read;
-                if (total > maxBytes)
-                {
-                    global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser {platformName} 图片下载超过限制，已跳过远程图片: url={imageUrl}, limit_mb={maxBytes / 1024d / 1024d:F0}");
-                    return (string.Empty, null);
-                }
-
-                output.Write(buffer, 0, read);
-            }
-
-            // Encode/write directly from the stream's backing buffer instead of copying the image.
-            var bytes = output.GetBuffer();
-            var byteCount = checked((int)output.Length);
             var contentType = response.Content.Headers.ContentType?.MediaType;
             string? localPath = null;
             if (persistLocalFile || preferFileUri)
@@ -100,22 +76,63 @@ internal static class RemoteImageFetchService
                     Directory.CreateDirectory(cacheDirectory);
                     var extension = ResolveImageExtension(contentType);
                     var safePrefix = SanitizeLocalFileName(filePrefix);
-                    localPath = Path.Combine(cacheDirectory, $"{safePrefix}_{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}_{Guid.NewGuid():N}.{extension}");
-                    await using var file = new FileStream(localPath, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
-                    await file.WriteAsync(bytes.AsMemory(0, byteCount), cancellationToken).ConfigureAwait(false);
+                    localPath = Path.Combine(cacheDirectory, $"{safePrefix}_{Guid.NewGuid():N}.{extension}");
                 }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-                catch (Exception ex)
+                catch (Exception ex) when (!preferFileUri)
                 {
-                    if (preferFileUri) throw;
-                    global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser {platformName} 图片缓存落盘失败，继续使用 base64: prefix={filePrefix}, error={ex.Message}");
-                    localPath = null;
+                    global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser 图片缓存目录创建失败，继续使用 base64: {ex.Message}");
                 }
             }
 
+            // File/HTTP transport never needs a payload-sized managed buffer.
+            using var memory = preferFileUri ? null : new MemoryStream(
+                contentLength is > 0 && contentLength <= maxBytes && contentLength <= int.MaxValue
+                    ? (int)contentLength.Value : 0);
+            long total = 0;
+            try
+            {
+                await using var file = !preferFileUri || localPath is null ? null : new FileStream(localPath,
+                    FileMode.CreateNew, FileAccess.Write, FileShare.Read, 65536, FileOptions.Asynchronous);
+                var buffer = new byte[65536];
+                while (true)
+                {
+                    var read = await input.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
+                    if (read == 0) break;
+                    total += read;
+                    if (total > maxBytes) throw new InvalidDataException("图片下载超过大小限制。");
+                    if (file is not null) await file.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+                    memory?.Write(buffer, 0, read);
+                }
+            }
+            catch
+            {
+                if (localPath is not null) File.Delete(localPath);
+                throw;
+            }
+            var bytes = memory?.GetBuffer();
+            var byteCount = checked((int)total);
+            if (!preferFileUri && localPath is not null)
+            {
+                try
+                {
+                    await using var file = new FileStream(localPath, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
+                    await file.WriteAsync(bytes!.AsMemory(0, byteCount), cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    File.Delete(localPath);
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    File.Delete(localPath);
+                    localPath = null;
+                    global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser 图片缓存落盘失败，继续使用 base64: {ex.Message}");
+                }
+            }
             var uri = preferFileUri && localPath is not null
                 ? new Uri(Path.GetFullPath(localPath)).AbsoluteUri
-                : "base64://" + Convert.ToBase64String(bytes, 0, byteCount);
+                : "base64://" + Convert.ToBase64String(bytes!, 0, byteCount);
             var uriMode = preferFileUri && localPath is not null ? "file" : "base64";
             global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser {platformName} 图片下载完成: source_url={imageUrl}, content_type={contentType}, bytes={total}, mode={uriMode}, physical_path={localPath ?? "<none>"}");
             TryCacheImage(cacheKey, uri, localPath);

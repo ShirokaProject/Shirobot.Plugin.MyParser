@@ -37,16 +37,11 @@ internal sealed class BilibiliMediaCardRenderer(ProviderCardRenderContext contex
             if (media.ProviderId == "bilibili-bangumi")
             {
                 var model = CreateBangumiViewModel(media, cover);
-                var image = await context.BotContext.RenderControlPngAsync<BiliBangumiCard>(model,
-                    new ControlRenderOptions(RenderTheme.Auto), cancellationToken).ConfigureAwait(false);
-                cancellationToken.ThrowIfCancellationRequested();
-                return await context.HostServices.BuildRenderedCardUriAsync(image, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
+                return await context.HostServices.RenderCardUriAsync<BiliBangumiCard>(model, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
             }
 
             var viewModel = CreateVideoViewModel(media, cover, avatar);
-            var png = await context.BotContext.RenderControlPngAsync<BiliCard>(viewModel, new ControlRenderOptions(RenderTheme.Auto), cancellationToken).ConfigureAwait(false);
-            cancellationToken.ThrowIfCancellationRequested();
-            return await context.HostServices.BuildRenderedCardUriAsync(png, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
+            return await context.HostServices.RenderCardUriAsync<BiliCard>(viewModel, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -147,9 +142,7 @@ internal sealed class BilibiliMediaCardRenderer(ProviderCardRenderContext contex
                 LiveStartTimeText = Value(media, "live_start"),
                 LiveDurationText = Value(media, "duration"),
             };
-            var png = await context.BotContext.RenderControlPngAsync<BiliLiveCard>(model, new ControlRenderOptions(RenderTheme.Auto), cancellationToken).ConfigureAwait(false);
-            cancellationToken.ThrowIfCancellationRequested();
-            return await context.HostServices.BuildRenderedCardUriAsync(png, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
+            return await context.HostServices.RenderCardUriAsync<BiliLiveCard>(model, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -205,9 +198,7 @@ internal sealed class BilibiliMediaCardRenderer(ProviderCardRenderContext contex
                 StatsText = $"阅读 {Value(media, "views")}  ·  点赞 {Value(media, "likes")}",
                 Blocks = blocks,
             };
-            var png = await context.BotContext.RenderControlPngAsync<BiliArticleDocument>(model, new ControlRenderOptions(RenderTheme.Auto), cancellationToken).ConfigureAwait(false);
-            cancellationToken.ThrowIfCancellationRequested();
-            return await context.HostServices.BuildRenderedCardUriAsync(png, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
+            return await context.HostServices.RenderCardUriAsync<BiliArticleDocument>(model, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
         }
         finally
         {

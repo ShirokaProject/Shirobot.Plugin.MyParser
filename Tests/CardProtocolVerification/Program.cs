@@ -44,6 +44,8 @@ try
             ("Shirobot.Plugin.MyParser.MessageHandling.ProviderMediaCardRenderer", "other", ParsedMediaKind.Other, ProviderCardPurpose.Main),
         })
         {
+            var beforeArrays = ((CardRender)renderer).ArrayRenders;
+            var beforeFiles = ((CardRender)renderer).FileRenders;
             var media = new ParsedMedia { ProviderId = id, ProviderName = id, MediaId = "test", Kind = kind, Title = "test",
                 Content = [new MediaContentBlock { Kind = MediaContentKind.Text, Text = "test comment", Attributes = new Dictionary<string, string> { ["category"] = "comment" } }] };
             var type = assembly.GetType(name, true)!;
@@ -80,8 +82,25 @@ try
                 actual = await response.Content.ReadAsByteArrayAsync();
             }
             if (!actual.SequenceEqual(CardRender.Png)) throw new Exception("Card bytes changed.");
+            var renderProbe = (CardRender)renderer;
+            if (protocol == 0 && renderProbe.FileRenders != beforeFiles || protocol != 0 && renderProbe.ArrayRenders != beforeArrays)
+                throw new Exception("Card used the buffered renderer for File/HTTP transport.");
+            if (renderProbe.RenderedFiles.Any(File.Exists)) throw new Exception("Renderer temporary file was not consumed.");
             await services.SendImageAsync(new MessageEvent { Platform = "qq", InstanceId = "test", MessageId = "source", Sender = new User("tester"), Channel = new Channel("test", ChannelType.Group), Segments = [] }, new ImageSegment(uri));
             if (((CardMessages)messages).LastUri != uri) throw new Exception("Sender changed the selected protocol.");
+        }
+        if (protocol != 0)
+        {
+            using var lateCancellation = new CancellationTokenSource();
+            CardRender.CancelAfterFileRender = lateCancellation;
+            try
+            {
+                await services.RenderCardUriAsync<Avalonia.Controls.Border>(null, "test", "late-cancel", lateCancellation.Token);
+                throw new Exception("Post-render cancellation ignored.");
+            }
+            catch (OperationCanceledException) when (lateCancellation.IsCancellationRequested) { }
+            finally { CardRender.CancelAfterFileRender = null; }
+            if (((CardRender)renderer).RenderedFiles.Any(File.Exists)) throw new Exception("Canceled file rendering left output.");
         }
         if (protocol == 2)
         {
@@ -140,7 +159,29 @@ public class CardRender : DispatchProxy
 {
     public static bool FailRender;
     public static readonly byte[] Png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j4iUAAAAASUVORK5CYII=");
-    protected override object? Invoke(MethodInfo? method, object?[]? args) => method!.Name == "RenderControlPngAsync" ? (FailRender ? Task.FromException<byte[]>(new IOException("render-failed")) : Task.FromResult(Png)) : throw new NotSupportedException(method.Name);
+    public static CancellationTokenSource? CancelAfterFileRender { get; set; }
+    public int ArrayRenders { get; private set; }
+    public int FileRenders { get; private set; }
+    public List<string> RenderedFiles { get; } = [];
+    protected override object? Invoke(MethodInfo? method, object?[]? args)
+    {
+        if (method!.Name == "RenderControlPngAsync")
+        {
+            ArrayRenders++;
+            return FailRender ? Task.FromException<byte[]>(new IOException("render-failed")) : Task.FromResult(Png);
+        }
+        if (method.Name == "RenderControlPngToFileUriAsync")
+        {
+            FileRenders++;
+            if (FailRender) return Task.FromException<string>(new IOException("render-failed"));
+            var path = Path.Combine(Path.GetTempPath(), "myparser-card-probe-" + Guid.NewGuid().ToString("N") + ".png");
+            File.WriteAllBytes(path, Png);
+            RenderedFiles.Add(path);
+            CancelAfterFileRender?.Cancel();
+            return Task.FromResult(new Uri(path).AbsoluteUri);
+        }
+        throw new NotSupportedException(method.Name);
+    }
 }
 public class CardBot : DispatchProxy
 {

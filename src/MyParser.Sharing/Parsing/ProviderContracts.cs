@@ -1,5 +1,7 @@
 using System.Net;
 using Avalonia.Media.Imaging;
+using Avalonia.Controls;
+using ShiroBot.AvaloniaSdk;
 using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Plugin;
 
@@ -166,6 +168,8 @@ public interface IProviderHostServices
     string GetUriMode(string uri);
     string PreviewUri(string? uri, int maxLength = 180);
     void UnregisterLocalVideoFile(string? path);
+    Task<string> RenderCardUriAsync<TControl>(object? model, string providerId, string mediaId,
+        CancellationToken cancellationToken = default, ControlRenderOptions? options = null) where TControl : Control, new();
     Task<string> BuildRenderedCardUriAsync(
         byte[] png, string providerId, string mediaId, CancellationToken cancellationToken = default);
     Task<ProviderImageBuildResult> BuildProviderImageAsync(

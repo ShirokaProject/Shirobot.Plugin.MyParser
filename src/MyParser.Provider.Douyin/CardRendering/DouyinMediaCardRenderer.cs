@@ -52,9 +52,7 @@ internal sealed class DouyinMediaCardRenderer(ProviderCardRenderContext context)
                 MusicText = $"{Value(media, "music_title")} - {Value(media, "music_author")}".Trim(' ', '-'),
                 TagsText = string.Join(' ', media.Tags.Select(tag => tag.StartsWith('#') ? tag : "#" + tag)),
             };
-            var png = await context.BotContext.RenderControlPngAsync<DouyinCard>(model, new ControlRenderOptions(RenderTheme.Auto), cancellationToken).ConfigureAwait(false);
-            cancellationToken.ThrowIfCancellationRequested();
-            return await context.HostServices.BuildRenderedCardUriAsync(png, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
+            return await context.HostServices.RenderCardUriAsync<DouyinCard>(model, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -120,9 +118,7 @@ internal sealed class DouyinMediaCardRenderer(ProviderCardRenderContext context)
                 Comments = comments,
                 CanvasHeight = Math.Clamp(92 + comments.Sum(comment => comment.EstimatedHeight + 1), 400, 9000),
             };
-            var png = await context.BotContext.RenderControlPngAsync<DouyinCommentCard>(model, new ControlRenderOptions(RenderTheme.Auto), cancellationToken).ConfigureAwait(false);
-            cancellationToken.ThrowIfCancellationRequested();
-            return await context.HostServices.BuildRenderedCardUriAsync(png, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
+            return await context.HostServices.RenderCardUriAsync<DouyinCommentCard>(model, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
