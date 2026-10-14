@@ -81,7 +81,7 @@ internal sealed class BilibiliMediaCardRenderer(ProviderCardRenderContext contex
             Avatar = avatar,
             Title = media.Title ?? "Bilibili 视频",
             Description = media.Description ?? string.Empty,
-            DescriptionMaxLines = hasMultiPages ? 4 : 0,
+            DescriptionMaxLines = 0,
             CoverHeight = hasMultiPages ? 245 : 290,
             ContentMargin = new Avalonia.Thickness(14, hasMultiPages ? 210 : 175, 14, 14),
             AuthorName = media.AuthorName ?? "未知 UP",

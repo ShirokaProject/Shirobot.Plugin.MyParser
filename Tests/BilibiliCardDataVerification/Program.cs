@@ -36,7 +36,7 @@ try
     Check(collection.Assets[0].Url.EndsWith("?p=1") && collection.Assets[1].Url.EndsWith("?p=2"),
         "Every collection link must explicitly select its part, including P1.");
     Check(handler.PlayRequests == playRequests, "Multi-P overview must not request playback streams.");
-    Check(collectionModel.DurationText == "共 2 P · 3:20" && collectionModel.DescriptionMaxLines == 4 && collectionModel.ViewCount == "14.8万"
+    Check(collectionModel.DurationText == "共 2 P · 3:20" && collectionModel.DescriptionMaxLines == 0 && collectionModel.ViewCount == "14.8万"
         && collectionModel.AuthorMeta == "IP属地：云南" && collectionModel.Tags.Count == 2,
         "Multi-P overview did not receive Bilibili card metadata.");
     var selectedPart = await provider.ParseAsync("https://www.bilibili.com/video/BV1rxp86jEYH/?p=2");

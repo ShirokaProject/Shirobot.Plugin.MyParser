@@ -35,10 +35,16 @@ public static class AvatarBitmapResizer
         // twice the target size for the existing anti-aliasing/crop pass.
         var scale = Math.Min(1f, pixels * 2f / Math.Min(codec.Info.Width, codec.Info.Height));
         var size = codec.GetScaledDimensions(scale);
-        using var decoded = new SKBitmap(size.Width, size.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
-        if (codec.GetPixels(decoded.Info, decoded.GetPixels()) != SKCodecResult.Success)
-            throw new InvalidDataException("无法解码头像图片。");
-        var current = SKImage.FromBitmap(decoded);
+        SKImage current;
+        using (var decoded = new SKBitmap(size.Width, size.Height, SKColorType.Rgba8888, SKAlphaType.Premul))
+        {
+            if (codec.GetPixels(decoded.Info, decoded.GetPixels()) != SKCodecResult.Success)
+                throw new InvalidDataException("无法解码头像图片。");
+            decoded.SetImmutable();
+            // The image owns a pixel reference. Releasing the bitmap here lets
+            // the full-size pixels be freed after the first reduction.
+            current = SKImage.FromBitmap(decoded);
+        }
         try
         {
             var side = Math.Min(current.Width, current.Height);
