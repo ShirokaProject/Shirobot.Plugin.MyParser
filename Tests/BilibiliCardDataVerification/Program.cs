@@ -21,7 +21,7 @@ try
     using var provider = new BilibiliParseProvider(new BilibiliParser(new PluginConfig(), http));
     var media = await provider.ParseAsync("https://www.bilibili.com/video/BV1rxp86jEYH/?p=1");
     var model = CreateViewModel(media);
-    Check(model.VideoMeta == "10-10 发布 · 搞笑 · BV1rxp86jEYH", "Publish time/category/BVID did not reach the card.");
+    Check(model.VideoMeta == "2026-10-10 发布 · 搞笑 · BV1rxp86jEYH", "Publish time/category/BVID did not reach the card.");
     Check(model.AuthorMeta == "IP属地：云南", "APP pub_location did not reach the card.");
     Check(model.Tags.SequenceEqual(new[] { "#搞笑", "#原创" }), "Actual tags were lost or replaced with stream quality.");
     Check(model.ViewCount == "14.8万" && model.LikeCount == "2.6万" && model.CoinCount == "7,305" && model.CollectCount == "9,142", "Statistics did not reach the card.");
@@ -30,17 +30,27 @@ try
 
     handler.MultiPage = true;
     var playRequests = handler.PlayRequests;
-    var collection = await provider.ParseAsync("https://www.bilibili.com/video/BV1rxp86jEYH/");
-    var collectionModel = CreateViewModel(collection);
-    Check(collection.Kind == ParsedMediaKind.Collection && collection.Assets.Count == 2, "Multi-P overview lost its collection/page links.");
-    Check(collection.Assets[0].Url.EndsWith("?p=1") && collection.Assets[1].Url.EndsWith("?p=2"),
-        "Every collection link must explicitly select its part, including P1.");
-    Check(handler.PlayRequests == playRequests, "Multi-P overview must not request playback streams.");
-    Check(collectionModel.DurationText == "共 2 P · 3:20" && collectionModel.DescriptionMaxLines == 0 && collectionModel.ViewCount == "14.8万"
-        && collectionModel.AuthorMeta == "IP属地：云南" && collectionModel.Tags.Count == 2,
-        "Multi-P overview did not receive Bilibili card metadata.");
+    var defaultPart = await provider.ParseAsync("https://www.bilibili.com/video/BV1rxp86jEYH/");
+    var defaultModel = CreateViewModel(defaultPart);
+    Check(defaultPart.Kind == ParsedMediaKind.Video && defaultPart.Assets.Any(asset => asset.Kind == MediaAssetKind.Video),
+        "A default multi-P link must resolve a playable P1 video.");
+    Check(handler.PlayRequests == playRequests + 1 && handler.LastPlayCid == "42606461174",
+        "A default multi-P link must request P1 playback streams.");
+    Check(defaultModel.DurationText == "2:50" && defaultModel.HasMultiPages && defaultModel.CurrentPageText == "当前解析 P1/2"
+        && defaultModel.ViewCount == "14.8万" && defaultModel.AuthorMeta == "IP属地：云南" && defaultModel.Tags.Count == 2,
+        "Default P1 lost its metadata or multi-P navigation.");
+    foreach (var link in new[] {
+        "【Rust重写的Minecraft 26.3 还支持光影？Horizon试玩】 https://www.bilibili.com/video/BV1afnW6kEfX/?share_source=copy_web&vd_source=f12f1973d4edd97492e05ac5acbe5d10",
+        "https://www.bilibili.com/video/BV1rxp86jEYH/?p=1",
+    })
+    {
+        var firstPart = await provider.ParseAsync(link);
+        Check(firstPart.Kind == ParsedMediaKind.Video && firstPart.Attributes["requested_page"] == "1"
+            && handler.LastPlayCid == "42606461174", "Default share parameters or explicit P1 failed to select P1.");
+    }
+    playRequests = handler.PlayRequests;
     var selectedPart = await provider.ParseAsync("https://www.bilibili.com/video/BV1rxp86jEYH/?p=2");
-    Check(selectedPart.Kind == ParsedMediaKind.Video && handler.PlayRequests == playRequests + 1,
+    Check(selectedPart.Kind == ParsedMediaKind.Video && handler.PlayRequests == playRequests + 1 && handler.LastPlayCid == "42606461175",
         "Explicit part selection must still resolve a playable video.");
     handler.SilentVideo = true;
     var silentVideo = await provider.ParseAsync("https://www.bilibili.com/video/BV1rxp86jEYH/?p=2");
@@ -68,8 +78,8 @@ try
     var presenter = Activator.CreateInstance(handlerType,
         [new ProviderMessageHandlerContext(null!, new PluginConfig(), provider, fakeServices, new PreviewCardRenderer())])!;
     await (Task)handlerType.GetMethod("PresentAsync", BindingFlags.NonPublic|BindingFlags.Instance)!
-        .Invoke(presenter, [source, collection with { CoverUrl="https://example.com/cover.jpg" }, false, CancellationToken.None])!;
-    Check(recorder.Messages.SequenceEqual(new[]{"image"}), "Multi-P overview sent additional text/link messages.");
+        .Invoke(presenter, [source, defaultPart with { CoverUrl="https://example.com/cover.jpg" }, false, CancellationToken.None])!;
+    Check(recorder.Messages.SequenceEqual(new[]{"download", "image", "video"}), "Default multi-P link did not send the P1 card and video.");
     await MediaConcurrencyVerification.RunAsync(handlerType, source, provider, selectedPart);
     var module = new BilibiliProviderModule();
     var numeric = source with { MessageId="pick", Segments=[new QuoteSegment("card-1"),new TextSegment("2")] };
@@ -101,7 +111,7 @@ try
         [new ProviderMessageHandlerContext(bot, new PluginConfig(), provider, fakeServices, new PreviewCardRenderer(),
             (reply, url) => { previews.Add(url); return Task.CompletedTask; })])!;
     await (Task)handlerType.GetMethod("PresentAsync", BindingFlags.NonPublic|BindingFlags.Instance)!
-        .Invoke(subscribedPresenter, [source, collection with { CoverUrl="https://example.com/cover.jpg" }, false, CancellationToken.None])!;
+        .Invoke(subscribedPresenter, [source, defaultPart with { CoverUrl="https://example.com/cover.jpg" }, false, CancellationToken.None])!;
     Check(subscriptions.Subscription!.Reference == new MessageReference("test-bot", source.Channel, "card-1")
         && subscriptions.Duration == TimeSpan.FromMinutes(10) && !subscriptions.DisposeOnReply,
         "Card did not register a reusable, scoped Bot API reply subscription.");
@@ -132,12 +142,13 @@ try
     await (Task)handlerType.GetMethod("PresentAsync", BindingFlags.NonPublic|BindingFlags.Instance)!
         .Invoke(textPresenter, [source, media with { Attributes = new Dictionary<string, string> { ["pages"] = "1", ["preview_only"] = "true" } }, false, CancellationToken.None])!;
     Check(recorder.Messages.Count == 0, "Disabled single-video preview must not send title/link text or download video.");
-    foreach (var textMedia in new[] { collection, preview })
+    foreach (var textMedia in new[] { defaultPart, preview })
     {
         recorder.Messages.Clear();
         await (Task)handlerType.GetMethod("PresentAsync", BindingFlags.NonPublic|BindingFlags.Instance)!
             .Invoke(textPresenter, [source, textMedia, false, CancellationToken.None])!;
-        Check(recorder.Messages.SequenceEqual(new[]{"text"}), "Disabled covers must send exactly one text overview/preview.");
+        Check(recorder.Messages.SequenceEqual(textMedia.Kind == ParsedMediaKind.Video && textMedia.Attributes.GetValueOrDefault("preview_only") != "true"
+            ? new[]{"download", "text", "video"} : new[]{"text"}), "Disabled covers lost P1 playback or duplicated navigation text.");
         Check(subscriptions.Subscription!.Reference.MessageId == "text-1", "Text reply did not register page selection.");
         var before = previews.Count;
         await subscriptions.Handler!(numeric with { Segments=[new QuoteSegment("text-1"),new TextSegment("p1")] });
@@ -241,7 +252,7 @@ try
     model = CreateViewModel(media);
     Check(media.Assets.Count == 2 && model.ViewCount == "14.8万", "Metadata failure broke video parsing.");
     Check(!model.HasTags && !model.HasAuthorMeta, "Unavailable metadata was filled with fabricated tags/location.");
-    Check(model.VideoMeta == "10-10 发布 · BV1rxp86jEYH", "Missing category left an empty separator.");
+    Check(model.VideoMeta == "2026-10-10 发布 · BV1rxp86jEYH", "Missing category left an empty separator.");
 
     handler.FailSupplementary = false;
     handler.CancelSupplementary = true;
@@ -264,8 +275,8 @@ try
             ? "https://www.bilibili.com/video/BV1Pg1SBfE7w/"
             : "https://www.bilibili.com/video/BV1rxp86jEYH/?p=1");
         if (args.Contains("--live-multi"))
-            Check(liveMedia.Kind == ParsedMediaKind.Collection && liveHandler.PlayRequests == 0,
-                "Live multi-P overview unexpectedly requested playback streams.");
+            Check(liveMedia.Kind == ParsedMediaKind.Video && liveMedia.Attributes["requested_page"] == "1" && liveHandler.PlayRequests == 1,
+                "Live default multi-P link did not request P1 playback streams.");
         var liveModel = CreateViewModel(liveMedia);
         Check(liveMedia.Tags.Count > 0, "Live tag endpoint returned no tags.");
         Check(!string.IsNullOrWhiteSpace(liveMedia.Attributes["category"]), "Live APP endpoint returned no category.");
@@ -297,6 +308,7 @@ sealed class MetadataHandler : HttpMessageHandler
     public bool MultiPage { get; set; }
     public bool SilentVideo { get; set; }
     public bool MissingVideo { get; set; }
+    public string? LastPlayCid;
     public int PlayRequests;
     public int AppRequests;
     public int TagRequests;
@@ -304,7 +316,12 @@ sealed class MetadataHandler : HttpMessageHandler
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var path = request.RequestUri!.AbsolutePath;
-        if (path == "/x/player/wbi/playurl") Interlocked.Increment(ref PlayRequests);
+        if (path == "/x/player/wbi/playurl")
+        {
+            Interlocked.Increment(ref PlayRequests);
+            LastPlayCid = request.RequestUri.Query.TrimStart('?').Split('&')
+                .Select(part => part.Split('=', 2)).FirstOrDefault(pair => pair[0] == "cid")?[1];
+        }
         var supplementary = path is "/x/v2/view" or "/x/web-interface/view/detail/tag";
         if (path == "/x/v2/view") Interlocked.Increment(ref AppRequests);
         if (path == "/x/web-interface/view/detail/tag") Interlocked.Increment(ref TagRequests);

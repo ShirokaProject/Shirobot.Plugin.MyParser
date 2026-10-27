@@ -67,15 +67,10 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
     public Task<object> ParseMediaAsync(string text, CancellationToken cancellationToken = default)
     {
         var explicitPage = BilibiliUrlParser.ExtractVideoPage(text);
-        return ParseMediaAsync(text, explicitPage ?? 1, explicitPage is not null, cancellationToken);
+        return ParseMediaAsync(text, explicitPage ?? 1, cancellationToken);
     }
 
-    public Task<object> ParseMediaAsync(string text, int page = 1, CancellationToken cancellationToken = default)
-    {
-        return ParseMediaAsync(text, page, explicitPage: true, cancellationToken);
-    }
-
-    private async Task<object> ParseMediaAsync(string text, int page, bool explicitPage, CancellationToken cancellationToken)
+    public async Task<object> ParseMediaAsync(string text, int page = 1, CancellationToken cancellationToken = default)
     {
         EnsureLoginCookie();
         var bvid = await ResolveBvidAsync(text, cancellationToken);
@@ -86,17 +81,6 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
             throw new BilibiliParseException("视频没有分 P 信息。");
         }
 
-        if (pages.Length > 1 && !explicitPage)
-        {
-            var metadata = await GetVideoMetadataAsync(bvid, view, pages[0].GetInt64OrDefault("cid"), cancellationToken);
-            return BuildMultiPageResult(bvid, view, pages, page) with
-            {
-                CategoryName = metadata.CategoryName,
-                AuthorLocation = metadata.Location,
-                Tags = metadata.Tags,
-            };
-        }
-
         var previewOnly = Uri.TryCreate(BilibiliUrlParser.ExtractStrictBilibiliUrl(text), UriKind.Absolute, out var uri)
             && uri.Fragment == "#myparser-preview";
         return await BuildSinglePageVideoResultAsync(bvid, view, pages, page, cancellationToken, previewOnly);
@@ -105,13 +89,13 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
     public async Task<BilibiliParseResult> ParseAsync(string text, CancellationToken cancellationToken = default)
     {
         var result = await ParseMediaAsync(text, cancellationToken);
-        return result as BilibiliParseResult ?? throw new BilibiliParseException("该视频是分 P 视频，已按分 P 列表解析，不下载视频。");
+        return result as BilibiliParseResult ?? throw new BilibiliParseException("Bilibili 视频解析未返回视频结果。");
     }
 
     public async Task<BilibiliParseResult> ParseAsync(string text, int page = 1, CancellationToken cancellationToken = default)
     {
         var result = await ParseMediaAsync(text, page, cancellationToken);
-        return result as BilibiliParseResult ?? throw new BilibiliParseException("该视频是分 P 视频，已按分 P 列表解析，不下载视频。");
+        return result as BilibiliParseResult ?? throw new BilibiliParseException("Bilibili 视频解析未返回视频结果。");
     }
 
     private async Task<BilibiliParseResult> BuildSinglePageVideoResultAsync(string bvid, JsonElement view, JsonElement[] pages, int page, CancellationToken cancellationToken, bool previewOnly = false)
@@ -176,42 +160,6 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
             AudioStreams = audios,
         };
         return result;
-    }
-
-    private static BilibiliMultiPageParseResult BuildMultiPageResult(string bvid, JsonElement view, JsonElement[] pages, int requestedPage)
-    {
-        var owner = view.GetPropertyOrDefault("owner");
-        var stat = view.GetPropertyOrDefault("stat");
-        var coverUrl = view.GetStringOrDefault("pic");
-        return new BilibiliMultiPageParseResult
-        {
-            Bvid = bvid,
-            Aid = view.GetInt64OrDefault("aid"),
-            PublishTimestamp = view.GetInt64OrDefault("pubdate"),
-            DurationSeconds = pages.Sum(item => item.GetInt64OrDefault("duration")),
-            ViewCount = stat?.GetInt64OrDefault("view") ?? 0,
-            LikeCount = stat?.GetInt64OrDefault("like") ?? 0,
-            CoinCount = stat?.GetInt64OrDefault("coin") ?? 0,
-            FavoriteCount = stat?.GetInt64OrDefault("favorite") ?? 0,
-            ShareCount = stat?.GetInt64OrDefault("share") ?? 0,
-            SourceUrl = $"https://www.bilibili.com/video/{bvid}/",
-            Title = view.GetStringOrDefault("title"),
-            Description = view.GetStringOrDefault("desc"),
-            AuthorName = owner?.GetStringOrDefault("name"),
-            AuthorId = owner?.GetInt64OrDefault("mid").ToString(),
-            AuthorAvatarUrl = owner?.GetStringOrDefault("face"),
-            CoverUrl = coverUrl,
-            RequestedPage = Math.Clamp(requestedPage, 1, pages.Length),
-            Pages = pages.Select((item, index) => new BilibiliVideoPageInfo
-            {
-                Page = index + 1,
-                Cid = item.GetInt64OrDefault("cid"),
-                PartTitle = item.GetStringOrDefault("part"),
-                DurationSeconds = item.GetInt64OrDefault("duration"),
-                SourceUrl = $"https://www.bilibili.com/video/{bvid}/?p={index + 1}",
-                CoverUrl = FirstNonEmpty(coverUrl, item.GetStringOrDefault("first_frame")),
-            }).ToList(),
-        };
     }
 
     private static string? FirstNonEmpty(params string?[] values)

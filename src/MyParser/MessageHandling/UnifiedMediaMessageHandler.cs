@@ -11,6 +11,7 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
 {
     private readonly ProviderMediaCardRenderer _cardRenderer = new(context.BotContext, context.HostServices);
     private readonly Func<MessageEvent, string, Task>? _replyPreviewHandler = context.ReplyPreviewHandler;
+    private readonly ReplyDownloadSubscriptions _audioDownloads = new();
     public override string ProviderId => PrimaryProvider.Id;
 
     protected override async Task PresentAsync(
@@ -219,6 +220,7 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
     public override void Dispose()
     {
         if (ProviderId is "bilibili" or "bilibili-bangumi") BilibiliMultiPageReplyCache.Clear();
+        _audioDownloads.Dispose();
         base.Dispose();
     }
 
@@ -410,6 +412,24 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
                 global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 语音发送开始: media_id={media.MediaId}");
                 var sent = await HostServices.SendSegmentsAsync(message, [record]).ConfigureAwait(false);
                 if (string.IsNullOrWhiteSpace(sent.MessageId)) throw new InvalidOperationException("音频发送没有返回消息 ID。");
+                if (media.ProviderId == "neteasecloudmusic")
+                {
+                    var path = localAudioPath;
+                    _audioDownloads.Register(BotContext.Message, message, sent.MessageId, TimeSpan.FromMinutes(60), async reply =>
+                    {
+                        try
+                        {
+                            await HostServices.UploadLocalFileAsync(Config, reply, path,
+                                media.ProviderName, media.MediaId, preferBase64: Config.FileProtocol == 0).ConfigureAwait(false);
+                        }
+                        catch (Exception error)
+                        {
+                            BotLog.Warning($"MyParser 网易云原音频上传失败: media_id={media.MediaId}, error={error.Message}");
+                            await HostServices.ReplyTextAsync(Config, reply,
+                                File.Exists(path) ? "音频文件上传失败，请稍后重试。" : "音频缓存已过期，请重新解析歌曲后再回复 dl。").ConfigureAwait(false);
+                        }
+                    });
+                }
                 global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 语音发送完成: media_id={media.MediaId}, elapsed_ms={timer.ElapsedMilliseconds}");
             }
             return true;

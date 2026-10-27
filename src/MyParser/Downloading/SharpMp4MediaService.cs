@@ -67,6 +67,72 @@ internal static class SharpMp4MediaService
         LoopingVideoAudioMuxer.MuxMixingEmbeddedAudio(videoStream, audioStream, outputStream, cancellationToken, new HostTemporaryStorageFactory(), loopCount);
     }
 
+    // Extend the final displayed frame without decoding or re-encoding the video.
+    // Decode order can differ from display order for B-frames, so later decoded
+    // samples need adjusted composition offsets to retain their original PTS.
+    public static void HoldLastFrame(string inputPath, string outputPath, double seconds,
+        CancellationToken cancellationToken = default)
+    {
+        using var input = OpenRead(inputPath);
+        var container = ReadContainer(input);
+        var reader = new VideoReader();
+        reader.Parse(container);
+        var video = reader.GetTracks().Single(track => track.HandlerType == "vide");
+        var videoId = video.TrackID;
+        long finalPts = long.MinValue, finalDts = 0;
+        MediaSample? measured;
+        while ((measured = reader.ReadSample(videoId, false)) is not null)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (measured.PTS >= finalPts) { finalPts = measured.PTS; finalDts = measured.DTS; }
+        }
+        if (finalPts == long.MinValue) throw new InvalidDataException("Live Photo 视频轨道为空。");
+        reader = new VideoReader();
+        reader.Parse(container);
+        using var output = new BufferedStream(new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.Read));
+        using var builder = new Mp4Builder(new SingleStreamOutput(output))
+        {
+            TemporaryStorageFactory = new HostTemporaryStorageFactory(),
+        };
+        var movieTimescale = container.Children.OfType<MovieBox>().Single()
+            .Children.OfType<MovieHeaderBox>().Single().Timescale;
+        foreach (var track in reader.GetTracks().Where(track => track.HandlerType is "vide" or "soun"))
+        {
+            var sourceId = track.TrackID;
+            var box = GetTrackBox(container, track.HandlerType)!;
+            var metadata = GetTrackMetadata(box, track);
+            var target = new PassthroughTrack(track, metadata);
+            builder.AddTrack(target);
+            var hold = track.HandlerType == "vide" ? checked((int)Math.Round(seconds * metadata.Timescale)) : 0;
+            long written = 0;
+            MediaSample? sample;
+            byte[] buffer = null!;
+            while ((sample = reader.ReadSample(sourceId, ref buffer, out var bytes)) is not null)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var duration = sample.Duration > 0 ? sample.Duration : metadata.DefaultSampleDuration;
+                var offset = sample.PTS - sample.DTS;
+                if (hold > 0)
+                {
+                    if (sample.DTS == finalDts) duration = checked(duration + hold);
+                    else if (sample.DTS > finalDts) offset -= hold;
+                }
+                builder.ProcessRawSample(target.TrackID, sample.Data, 0, bytes, duration, sample.IsRandomAccessPoint, offset);
+                written += duration;
+            }
+            // Retain the AAC encoder priming edit so the added pause cannot shift sound.
+            var edit = box.Children.OfType<EditBox>().SingleOrDefault()?.Children.OfType<EditListBox>().SingleOrDefault();
+            if (track.HandlerType == "soun" && edit is { EntryCount: 1 } && edit.MediaTime[0] >= 0)
+            {
+                var start = edit.MediaTime[0];
+                var duration = Math.Min(written - start,
+                    checked((long)((decimal)edit.EditDuration[0] * metadata.Timescale / movieTimescale)) + hold);
+                builder.SetPresentationWindow(target.TrackID, start, duration);
+            }
+        }
+        builder.FinalizeMedia();
+    }
+
     public static bool HasEmbeddedAudio(string path)
     {
         using var stream = OpenRead(path);

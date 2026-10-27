@@ -9,6 +9,7 @@ namespace Shirobot.Plugin.MyParser.Downloading;
 
 internal sealed class ProviderDownloadService
 {
+    private const double LivePhotoEndHoldSeconds = 0.8;
     public Task<(string FileUri, string LocalPath)> DownloadProviderVideoAsync(
         PluginConfig config,
         ProviderVideoDownloadRequest request,
@@ -102,6 +103,13 @@ internal sealed class ProviderDownloadService
             try
             {
                 await Task.Run(() => SharpMp4MediaService.MuxLoopingVideoWithAudio(visualPath, audioPath, outputPath, cancellationToken, loopCount), cancellationToken);
+                var heldPath = outputPath + ".hold.mp4";
+                try
+                {
+                    await Task.Run(() => SharpMp4MediaService.HoldLastFrame(outputPath, heldPath, LivePhotoEndHoldSeconds, cancellationToken), cancellationToken);
+                    File.Move(heldPath, outputPath, overwrite: true);
+                }
+                finally { File.Delete(heldPath); }
                 await ValidateMuxedVideoAsync(outputPath, cancellationToken);
                 if (config.MaxVideoDownloadMegabytes > 0
                     && new FileInfo(outputPath).Length > config.MaxVideoDownloadMegabytes * 1024L * 1024L)
@@ -125,6 +133,8 @@ internal sealed class ProviderDownloadService
         var originalDuration = duration;
         if (!stillImage) duration *= loopCount;
         if (mixAudio) duration = Math.Max(duration, await ProbeMediaDurationAsync(ffmpeg, audioPath!, cancellationToken));
+        var motionDuration = duration;
+        if (!stillImage) duration += LivePhotoEndHoldSeconds;
         var psi = new ProcessStartInfo
         {
             FileName = ffmpeg,
@@ -158,12 +168,12 @@ internal sealed class ProviderDownloadService
         }
         else if (keepEmbeddedAudio)
         {
-            foreach (var argument in new[] { "-map", "0:v:0", "-map", "0:a:0", "-af", "apad" })
+            foreach (var argument in new[] { "-map", "0:v:0", "-map", "0:a:0", "-af", $"atrim=duration={motionDuration.ToString(CultureInfo.InvariantCulture)},apad" })
                 psi.ArgumentList.Add(argument);
         }
         else if (audioPath is not null)
         {
-            foreach (var argument in new[] { "-i", audioPath, "-map", "0:v:0", "-map", "1:a:0", "-af", "apad" })
+            foreach (var argument in new[] { "-i", audioPath, "-map", "0:v:0", "-map", "1:a:0", "-af", $"atrim=duration={motionDuration.ToString(CultureInfo.InvariantCulture)},apad" })
                 psi.ArgumentList.Add(argument);
         }
         else
@@ -180,8 +190,12 @@ internal sealed class ProviderDownloadService
         }
         else
         {
-            psi.ArgumentList.Add("-c:v");
-            psi.ArgumentList.Add("copy");
+            foreach (var argument in new[]
+                     {
+                         "-vf", $"trim=duration={motionDuration.ToString(CultureInfo.InvariantCulture)},tpad=stop_mode=clone:stop_duration={LivePhotoEndHoldSeconds.ToString(CultureInfo.InvariantCulture)},scale=trunc(iw/2)*2:trunc(ih/2)*2",
+                         "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+                     })
+                psi.ArgumentList.Add(argument);
         }
 
         foreach (var argument in new[] { "-c:a", "aac", "-b:a", "128k", "-t", duration.ToString("0.###", CultureInfo.InvariantCulture), "-movflags", "+faststart", outputPath })

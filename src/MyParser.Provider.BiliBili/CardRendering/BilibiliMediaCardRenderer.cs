@@ -232,7 +232,7 @@ internal sealed class BilibiliMediaCardRenderer(ProviderCardRenderContext contex
         if (long.TryParse(Value(media, "publish_timestamp"), out var timestamp) && timestamp > 0)
         {
             var published = DateTimeOffset.FromUnixTimeSeconds(timestamp).ToOffset(TimeSpan.FromHours(8));
-            parts.Add(published.ToString("MM-dd", CultureInfo.InvariantCulture) + " 发布");
+            parts.Add(published.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + " 发布");
         }
         var category = Value(media, "category");
         if (!string.IsNullOrWhiteSpace(category)) parts.Add(category);

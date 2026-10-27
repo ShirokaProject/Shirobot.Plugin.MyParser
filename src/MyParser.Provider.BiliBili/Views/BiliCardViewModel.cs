@@ -16,7 +16,7 @@ public sealed class BiliCardViewModel
     public Thickness ContentMargin { get; init; } = new(14, 175, 14, 14);
     public string AuthorName { get; init; } = "UP主名字";
     public string AuthorMeta { get; init; } = "IP属地：广东";
-    public string VideoMeta { get; init; } = "10-24 发布 · 手机游戏 · BV1xx411c7xx";
+    public string VideoMeta { get; init; } = "2026-10-24 发布 · 手机游戏 · BV1xx411c7xx";
     public string BrandText { get; init; } = $"By ShirokaProject && MyParser v{PluginVersion}";
     private static string PluginVersion { get; } =
         typeof(BiliCardViewModel).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
