@@ -151,9 +151,17 @@ public sealed class BilibiliBangumiParser(HttpClient http, PluginConfig config)
             throw new BilibiliParseException("番剧单集缺少 ep_id/cid，无法解析视频。");
         }
 
-        var playInfo = previewOnly ? default : await GetPgcPlayUrlAsync(episode.EpId.Value, cancellationToken);
-        var videos = previewOnly ? [] : ParseVideoStreams(playInfo).OrderByDescending(GetVideoScore).ToList();
-        var audios = previewOnly ? [] : ParseAudioStreams(playInfo).OrderByDescending(i => i.Bandwidth).ToList();
+        var streams = previewOnly
+            ? (Videos: new List<BilibiliMediaStream>(), Audios: new List<BilibiliMediaStream>())
+            : await BilibiliCdnPolicy.ResolveDashStreamsAsync(async (refresh, token) =>
+            {
+                var playInfo = await GetPgcPlayUrlAsync(episode.EpId.Value, token, refresh);
+                return (ParseVideoStreams(playInfo), ParseAudioStreams(playInfo));
+            }, config.BilibiliBlockPcdn, cancellationToken);
+        var videos = streams.Videos.OrderBy(stream => config.BilibiliBlockPcdn && BilibiliCdnPolicy.IsPcdnUrl(stream.Url))
+            .ThenByDescending(GetVideoScore).ToList();
+        var audios = streams.Audios.OrderBy(stream => config.BilibiliBlockPcdn && BilibiliCdnPolicy.IsPcdnUrl(stream.Url))
+            .ThenByDescending(i => i.Bandwidth).ToList();
         if (!previewOnly && videos.Count == 0)
         {
             throw new BilibiliParseException("播放接口未返回可用的番剧 DASH 视频流，请检查剧集访问权限或接口返回格式。");
@@ -188,9 +196,9 @@ public sealed class BilibiliBangumiParser(HttpClient http, PluginConfig config)
         };
     }
 
-    private async Task<JsonElement> GetPgcPlayUrlAsync(long epId, CancellationToken cancellationToken)
+    private async Task<JsonElement> GetPgcPlayUrlAsync(long epId, CancellationToken cancellationToken, bool refreshCdn = false)
     {
-        using var json = await GetJsonDocumentAsync(PgcPlayUrlApi, new Dictionary<string, string>
+        var parameters = new Dictionary<string, string>
         {
             ["ep_id"] = epId.ToString(),
             ["qn"] = "127",
@@ -198,7 +206,9 @@ public sealed class BilibiliBangumiParser(HttpClient http, PluginConfig config)
             ["fnval"] = "12240",
             ["fourk"] = "1",
             ["from_client"] = "BROWSER",
-        }, cancellationToken);
+        };
+        if (refreshCdn) parameters["force_host"] = "2";
+        using var json = await GetJsonDocumentAsync(PgcPlayUrlApi, parameters, cancellationToken);
         var result = json.RootElement.GetPropertyOrDefault("result")
                      ?? json.RootElement.GetPropertyOrDefault("data")?.GetPropertyOrDefault("result")
                      ?? json.RootElement.GetPropertyOrDefault("data");

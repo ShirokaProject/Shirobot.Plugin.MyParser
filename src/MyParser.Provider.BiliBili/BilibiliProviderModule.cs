@@ -35,7 +35,7 @@ public sealed class BilibiliProviderModule : MyParserProviderModuleBase, IProvid
         [
             new BilibiliArticleParseProvider(parser),
             new BilibiliBangumiParseProvider(new BilibiliBangumiParser(parser.HttpClient, config), parser),
-            new BilibiliLiveParseProvider(new BilibiliLiveParser(parser.HttpClient)),
+            new BilibiliLiveParseProvider(new BilibiliLiveParser(parser.HttpClient, config)),
             new BilibiliParseProvider(parser),
         ];
     }

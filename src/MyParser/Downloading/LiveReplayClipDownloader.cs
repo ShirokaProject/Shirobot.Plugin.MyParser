@@ -15,8 +15,27 @@ internal sealed class LiveReplayClipDownloader(PluginConfig config, ProviderDown
 
     public async Task<ProviderLiveReplayClipDownloadResult> DownloadAsync(ProviderLiveReplayClipDownloadRequest request, CancellationToken cancellationToken = default)
     {
-        var stream = request.Streams.OrderBy(request.StreamRank).FirstOrDefault()
-                     ?? throw new InvalidOperationException($"{request.PlatformDisplayName} 未返回可用于截取的播放流。");
+        Exception? lastError = null;
+        foreach (var stream in request.Streams.OrderBy(request.StreamRank))
+        {
+            try
+            {
+                return await DownloadStreamAsync(request, stream, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+            catch (Exception ex) when (ex is HttpRequestException or IOException or InvalidOperationException or OperationCanceledException)
+            {
+                lastError = ex;
+                global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser {request.PlatformDisplayName} 直播节点不可用，尝试下一个: error={ex.GetType().Name}");
+            }
+        }
+
+        throw new InvalidOperationException($"{request.PlatformDisplayName} 没有可用的直播播放流：{lastError?.Message ?? "接口未返回播放流"}", lastError);
+    }
+
+    private async Task<ProviderLiveReplayClipDownloadResult> DownloadStreamAsync(
+        ProviderLiveReplayClipDownloadRequest request, ProviderLiveReplayStream stream, CancellationToken cancellationToken)
+    {
         var dir = MyParserRuntime.CreateTempDirectory();
         Directory.CreateDirectory(dir);
         var outputPath = Path.Combine(dir, $"live_{SanitizeFileName(request.MediaId, 40)}_{DateTimeOffset.UtcNow:yyyyMMddHHmmss}.mp4");

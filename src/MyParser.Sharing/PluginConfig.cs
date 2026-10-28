@@ -107,6 +107,9 @@ public sealed class PluginConfig
     [ConfigField("是否自动解析聊天中的 Bilibili 链接。", Label = "【Bilibili】自动解析 Bilibili 链接")]
     public bool AutoParseBilibiliLinks { get; set; } = true;
 
+    [ConfigField("优先避开视频、番剧和直播的已知 PCDN 节点，先尝试普通 CDN；视频和番剧缺少普通 CDN 时重新请求一次，PCDN 保留为最后兜底。", Label = "【Bilibili】屏蔽 PCDN 节点")]
+    public bool BilibiliBlockPcdn { get; set; } = true;
+
     [ConfigField("是否发送 Bilibili 视频、番剧、分 P 和直播封面。", Label = "【Bilibili】发送 Bilibili 封面")]
     public bool SendBilibiliVideoCover { get; set; } = true;
 

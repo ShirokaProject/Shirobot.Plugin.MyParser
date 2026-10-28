@@ -16,6 +16,7 @@ var previousCookie = cookieProperty.GetValue(null);
 cookieProperty.SetValue(null, "SESSDATA=verification; bili_jct=verification");
 try
 {
+    await BilibiliCdnVerification.RunAsync();
     using var handler = new MetadataHandler();
     using var http = new HttpClient(handler);
     using var provider = new BilibiliParseProvider(new BilibiliParser(new PluginConfig(), http));

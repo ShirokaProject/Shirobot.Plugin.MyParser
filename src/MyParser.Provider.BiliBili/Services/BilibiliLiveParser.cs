@@ -6,7 +6,7 @@ using MyParser.Provider.BiliBili.Parsing;
 
 namespace MyParser.Provider.BiliBili.Services;
 
-public sealed class BilibiliLiveParser(HttpClient http)
+public sealed class BilibiliLiveParser(HttpClient http, PluginConfig? config = null)
 {
     private const string RoomInitApi = "https://api.live.bilibili.com/room/v1/Room/room_init";
     private const string RoomInfoApi = "https://api.live.bilibili.com/xlive/web-room/v1/index/getInfoByRoom";
@@ -59,6 +59,10 @@ public sealed class BilibiliLiveParser(HttpClient http)
         var infoRoomInfo = infoData?.GetPropertyOrDefault("room_info");
         var anchorInfo = infoData?.GetPropertyOrDefault("anchor_info")?.GetPropertyOrDefault("base_info");
         var streams = ParseStreams(data);
+        if (config?.BilibiliBlockPcdn ?? true)
+        {
+            streams = streams.OrderBy(stream => BilibiliCdnPolicy.IsPcdnUrl(stream.Url)).ToList();
+        }
         var watchedShow = infoData?.GetPropertyOrDefault("watched_show");
         var audienceEntry = infoData?
             .GetPropertyOrDefault("room_rank_info")

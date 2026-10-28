@@ -787,7 +787,9 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
         }
     }
 
-    private static int GetLiveStreamRank(ProviderLiveReplayStream stream) => (stream.Protocol, stream.Format, stream.Codec) switch
+    private int GetLiveStreamRank(ProviderLiveReplayStream stream) =>
+        (Config.BilibiliBlockPcdn && global::MyParser.Provider.BiliBili.Infrastructure.BilibiliCdnPolicy.IsPcdnUrl(stream.Url) ? 1000 : 0)
+        + ((stream.Protocol, stream.Format, stream.Codec) switch
     {
         ("http_hls", "fmp4", "avc") => 0,
         ("http_hls", "ts", "avc") => 1,
@@ -797,7 +799,7 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
         ("http_stream", "flv", "hevc") => 5,
         ("http_hls", "fmp4", "av1") => 6,
         _ => 99,
-    };
+    });
 
     private async Task SendRemoteImageAsync(MessageEvent message, string? url, string? label, ParsedMedia media, CancellationToken cancellationToken)
     {

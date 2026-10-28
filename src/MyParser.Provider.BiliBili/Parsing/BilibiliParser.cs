@@ -109,15 +109,25 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
         }
 
         var metadataTask = GetVideoMetadataAsync(bvid, view, cid, cancellationToken);
-        var playInfoTask = previewOnly ? Task.FromResult(default(JsonElement)) : GetPlayUrlAsync(bvid, cid, cancellationToken);
-        await Task.WhenAll(metadataTask, playInfoTask);
+        string? playFormat = null;
+        var streamsTask = previewOnly
+            ? Task.FromResult<(List<BilibiliMediaStream> Videos, List<BilibiliMediaStream> Audios)>(([], []))
+            : BilibiliCdnPolicy.ResolveDashStreamsAsync(async (refresh, token) =>
+            {
+                var playInfo = await GetPlayUrlAsync(bvid, cid, token, refresh);
+                playFormat ??= playInfo.GetStringOrDefault("format");
+                return (ParseVideoStreams(playInfo), ParseAudioStreams(playInfo));
+            }, _config.BilibiliBlockPcdn, cancellationToken);
+        await Task.WhenAll(metadataTask, streamsTask);
         var metadata = await metadataTask;
-        var playInfo = await playInfoTask;
-        var videos = ParseVideoStreams(playInfo).OrderByDescending(GetVideoScore).ToList();
-        var audios = ParseAudioStreams(playInfo).OrderByDescending(i => i.Bandwidth).ToList();
+        var streams = await streamsTask;
+        var videos = streams.Videos.OrderBy(stream => _config.BilibiliBlockPcdn && BilibiliCdnPolicy.IsPcdnUrl(stream.Url))
+            .ThenByDescending(GetVideoScore).ToList();
+        var audios = streams.Audios.OrderBy(stream => _config.BilibiliBlockPcdn && BilibiliCdnPolicy.IsPcdnUrl(stream.Url))
+            .ThenByDescending(i => i.Bandwidth).ToList();
         if (!previewOnly && videos.Count == 0)
         {
-            throw new BilibiliParseException($"播放接口未返回可用的 DASH 视频流：bvid={bvid}, page={selectedPage}, format={playInfo.GetStringOrDefault("format") ?? "unknown"}。请检查视频访问权限或接口返回格式。");
+            throw new BilibiliParseException($"播放接口未返回可用的 DASH 视频流：bvid={bvid}, page={selectedPage}, format={playFormat ?? "unknown"}。请检查视频访问权限或接口返回格式。");
         }
 
         var owner = view.GetPropertyOrDefault("owner");
@@ -271,7 +281,7 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
         return json.RootElement.GetPropertyOrDefault("data")?.Clone() ?? throw new BilibiliParseException("B站 view 接口未返回 data。");
     }
 
-    private async Task<JsonElement> GetPlayUrlAsync(string bvid, long cid, CancellationToken cancellationToken)
+    private async Task<JsonElement> GetPlayUrlAsync(string bvid, long cid, CancellationToken cancellationToken, bool refreshCdn = false)
     {
         var parameters = new Dictionary<string, object?>
         {
@@ -286,6 +296,8 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
             ["is_main_page"] = "true",
             ["need_fragment"] = "false",
         };
+        // Best-effort request for HTTPS host URLs; the returned addresses still need filtering.
+        if (refreshCdn) parameters["force_host"] = 2;
         var signed = BilibiliWbiSigner.Sign(parameters, await GetMixinKeyAsync(cancellationToken));
         using var json = await GetJsonDocumentAsync(BilibiliConstants.PlayUrlApi, signed, $"https://www.bilibili.com/video/{bvid}/", cancellationToken);
         return json.RootElement.GetPropertyOrDefault("data")?.Clone() ?? throw new BilibiliParseException("B站 playurl 接口未返回 data。");
