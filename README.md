@@ -1,7 +1,5 @@
 # Shirobot.Plugin.MyParser
-
-当前发布：`v0.6.10`。本版本使用 SDK `1.0.0`，需要宿主 `1.0.0` 的临时目录 API。
-
+、
 <p align="center"><img src="./Assets/icon.png" alt="MyParser" width="160" /></p>
 
 [ShiroBot](https://github.com/ShirokaProject/ShiroBot) 多平台内容解析插件，支持自动识别链接、卡片渲染、视频 / 音频发送和 Cookie 热重载。
@@ -93,36 +91,5 @@ Debug 构建会准备宿主并复制 DLL / PDB，Release 仍使用分发打包�
 sh scripts/dev.sh --prepare  # 只构建并准备宿主
 sh scripts/dev.sh --no-console  # 构建并启动
 ```
-
-Windows 使用 `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 --no-console`。
-开发宿主和配置位于 `.shirobot-dev/host/<RID>/`，新配置默认端口 7003。
-已有配置和插件数据保留。未发布的 SDK 版本需要先准备同版本的本地宿主。
-
-AXAML 预览在 Debug 开启：先构建，再在 Rider 预览器中选择主插件项目。
-不要为设计预览修改宿主运行配置。
-若点击 Debug 仍运行旧插件，确认启动前有 Build，并在 Rider 的
-Toolset and Build 设置中关闭 Use ReSharper Build，确保 MSBuild 执行复制步骤。
-
-内存管理：`max_pending_parse_tasks` 可在配置后台调整，默认 64，允许 1–4096；达到上限时跳过新解析请求，已在执行的任务继续完成。解析冷却和有限时禁言记录每 5 秒清理过期项。已完成的下载缓存最多保留 512 条、最长 6 小时，并定期移除已删除文件；正在下载的任务不会被缓存清理中断。表情去重最多 4096 条、保留 10 分钟，按机器人实例和平台隔离。SharpMP4 的内部中间存储关闭后立即删除，投递媒体仍由宿主临时目录策略管理。诊断工具见 [内存测试说明](Tests/MemoryRetentionVerification/README.md)。
-
-### 内存资源回收
-
-卡片封面最长边限制为 1600 物理像素；JPEG 等支持缩小解码的格式在解码阶段降采样。PNG 等格式可能仍需解码原始像素。头像优先缩小解码，保留中心裁剪与透明度。解析与 Silk 编码不增加串行或并发限制；`max_pending_parse_tasks` 仅保留之前的任务积压保护。
-
-处理结束后释放位图、临时封装文件和工作目录索引；有期限的缓存自动清理。进程 RSS 同时包含 .NET 堆保留空间、原生分配和加载的库，不能等同于存活对象大小。长音频 PCM 使用临时文件映射，并在任务结束释放。
-
-### 音频编码内存与取消
-
-MP3/AAC 转 Silk 使用固定缓冲解码器，把 24 kHz 单声道 PCM 写入私有临时文件，并通过只读内存映射交给 Silk 编码器。任务结束释放映射并删除 PCM 中间文件，避免整段浮点/PCM 数组留在托管堆里等待 GC；Silk 数据包直接写文件。PCM 临时磁盘空间约为每秒 48 KB，5 分钟约 14.4 MB。常见小端平台无整段托管 PCM 数组；大端平台需要额外转换，未在当前 macOS 测试中覆盖。未新增并发限制。
-
-每次编码输出检查取消，取消/失败立即清理私有工作目录和不完整输出；成功输出仍按宿主保留策略管理。原生 AAC 解码遇到当前库不支持的帧时，使用已配置或 PATH 中已有的 ffmpeg 回退为 PCM，然后由 SilkCodec.NET 编码；未找到 ffmpeg 时返回明确错误。回退 stderr 保留末尾 4096 字符，取消或超时会结束并等待子进程退出。
-
-媒体处理优先 SharpMP4：普通合轨、循环视频和支持的音频解码均先走原生路径，失败后使用 ffmpeg 回退。静态图片生成视频等 SharpMP4 尚不支持的功能仍使用 ffmpeg；Silk 编码由 SilkCodec.NET 完成。
-
-## 网易云语音下载
-
-引用回复机器人发送的网易云语音 `dl`，将原始 MP3 上传为群文件或私聊文件，不受语音 Silk 转码影响。回复关联有效期为 60 分钟，缓存已清理时需要重新解析。支持 `DL` 等大小写及前后空格；仅对应机器人实例和会话生效，插件卸载后失效。上传使用现有 QQ 文件扩展和 `FileProtocol` 配置。
-
-抖音 Live Photo 在现有循环和配乐完成后，额外保留末帧约 0.8 秒，让播放自然收尾。原生处理保留视频和音频数据；FFmpeg 回退同样补齐末帧停留。
-
+、
 B 站多 P 视频链接未指定 `p` 时，默认解析并发送 P1 视频；带 `?p=2` 等参数时发送指定分 P。卡片和文字导航仍支持引用回复数字或 `p` 加数字切换分 P。
