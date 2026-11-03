@@ -52,12 +52,6 @@ weixin_channels_yuanbao_cookie = ""
 
 自动解析、视频大小上限、请求超时和媒体发送策略等参数同样在配置界面或 `config.toml` 中调整，修改后自动重载。
 
-Bilibili 选项中的 **屏蔽 PCDN 节点** 默认开启（`bilibili_block_pcdn = true`）。视频、分 P、番剧的音视频流会先尝试普通 CDN，包括接口返回的备用地址；若某条流仅有 PCDN 地址，会向 B 站播放接口额外请求一次，并保留已有地址。普通 CDN 都不可用时，最后再尝试 PCDN 兜底，不会仅因只剩 PCDN 就停止下载。直播同样优先普通 CDN。关闭开关即可恢复接口原始地址顺序和既有清晰度排序，保存后自动重载。
-
-重新请求无法保证 B 站一定分配普通 CDN；插件使用接口返回的完整签名地址，不强行替换域名。已知 PCDN 识别规则包含 `mcdn.bilivideo.*`、`szbdyd.com`、302 PCDN 调度域名及 `os=mcdn` 等特征。
-
-X (Twitter) 的解析、封面与视频下载共用 `http_proxy`；在无法直连 x.com / twimg 的网络下必须配置可用代理，否则解析或视频下载会超时/失败。
-
 ## 构建
 
 需要 .NET 10 SDK，并初始化 SharpMP4 子模块：
@@ -91,5 +85,3 @@ Debug 构建会准备宿主并复制 DLL / PDB，Release 仍使用分发打包�
 sh scripts/dev.sh --prepare  # 只构建并准备宿主
 sh scripts/dev.sh --no-console  # 构建并启动
 ```
-、
-B 站多 P 视频链接未指定 `p` 时，默认解析并发送 P1 视频；带 `?p=2` 等参数时发送指定分 P。卡片和文字导航仍支持引用回复数字或 `p` 加数字切换分 P。
