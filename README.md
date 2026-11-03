@@ -29,28 +29,7 @@
 
 ## 配置
 
-配置项可在插件配置界面或 `config.toml` 中查看和修改；修改后自动重载。
-
-所有媒体下载、图片落盘、直播分片和转码中间文件均通过宿主 `CreateTempDirectory` API 创建独立临时目录，创建后保留 6 小时，由宿主自动清理；插件不再启动清扫或发送后删除临时文件。旧配置 `delete_local_video_after_send`、`delete_local_video_delay_seconds` 不再使用。
-
-抖音动态图片会用 SharpMP4 循环并合成配乐；静图生成视频以及不支持的媒体回退需要本机安装 `ffmpeg` 和 `ffprobe`。
-多张图文会优先使用 QQ 合并转发，其他平台会按图片顺序作为普通消息发送；包含动态图片时发送 Live Photo 视频，配乐合成失败则单独发送音乐。
-
-通过 ShiroBot 配置界面的 **Cookie** 分组填写各平台请求头 `Cookie:` 后面的完整值，保存后立即生效。也可以编辑 `config.toml`：
-
-```toml
-bilibili_cookie = ""
-douyin_cookie = ""
-net_ease_cloud_music_cookie = ""
-heybox_cookie = ""
-weixin_channels_yuanbao_cookie = ""
-```
-
-网页默认隐藏 Cookie；配置文件中仍为明文，请勿公开或分享。首次启动会将旧 `cookies/*.txt` 中的非空值迁入对应的空配置项，保留原文件。之后只读取 TOML；主动清空 Cookie 后不会重新导入旧文件。迁移标记保存在 `data/.cookie-toml-imported-v1`，不要删除。
-
-**从旧版更新时，先升级包含 Cookie 文件保护修复的宿主，再更新插件。** 旧宿主可能按旧安装清单删除 Cookie 文件；仅取消发布空文件无法修复已安装的旧版。已经被覆盖为空的 Cookie 需要从备份恢复或重新获取。
-
-自动解析、视频大小上限、请求超时和媒体发送策略等参数同样在配置界面或 `config.toml` 中调整，修改后自动重载。
+配置项可在插件配置界面或 `config.toml` 中查看和修改
 
 ## 构建
 
@@ -62,26 +41,10 @@ dotnet build MyParser.slnx -c Release -p:CopyPluginToHost=false
 dotnet publish src/MyParser/Shirobot.Plugin.MyParser.csproj -c Release -p:CopyPluginToHost=false -o release/Shirobot.Plugin.MyParser
 ```
 
-源码、共享层、平台模块和 SharpMP4 子模块统一放在 `src/` 下；测试项目保留在 `Tests/`。主插件构建时包含各平台源码，发布时合并依赖。
-
 ## 说明
 
 本项目主要用于个人学习和实验，随缘维护；第三方平台接口和风控变化可能导致解析失效。请仅处理自己拥有权利或已获授权的内容，遵守平台规则及适用法律，不用于侵权、绕过访问限制或公开代下服务。
 
-本项目与第三方平台无隶属或背书关系。许可证：[Apache License 2.0](./LICENSE)。
+许可证：[Apache License 2.0](./LICENSE)。
 
 配置通过宿主统一接口应用；保存后等待应用完成。修改 config.toml 也由宿主监听并应用，无需重新加载插件。
-
-## 本地开发与调试
-
-源码项目位于 `src/MyParser/`，共享代码和 Provider 项目也放在 `src/`；
-开发脚本统一放在根目录 `scripts/`。打开 `MyParser.slnx`，使用 **Debug** 配置。
-首次先构建主插件项目，再选择 **ShiroBot** 运行配置，直接点 Run 或 Debug。
-Debug 构建会准备宿主并复制 DLL / PDB，Release 仍使用分发打包。
-
-在仓库根目录也可以运行：
-
-```bash
-sh scripts/dev.sh --prepare  # 只构建并准备宿主
-sh scripts/dev.sh --no-console  # 构建并启动
-```
