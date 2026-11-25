@@ -204,14 +204,36 @@ internal sealed class ProviderHostServices : IProviderHostServices, IDisposable
         }
 
         global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser {request.PlatformDisplayName} VideoSegment URI 模式：{uriMode}, {request.IdentifierName}={request.MediaId}, file_mb={fileSize / 1024d / 1024d:F2}, uri_preview={PreviewUri(videoUri)}");
+        string? thumbnailUri = null;
+        if (config.IsCoverEnabled(request.PlatformDisplayName))
+        {
+            // 优先用视频首帧做缩略图：协议端按缩略图尺寸决定气泡比例，平台封面常被裁剪成与视频不同的比例。
+            var thumbPath = await VideoThumbnailExtractor.TryExtractFirstFrameAsync(config, request.LocalPath, cancellationToken).ConfigureAwait(false);
+            if (thumbPath is not null)
+            {
+                thumbnailUri = await BuildLocalFileUriAsync(config, thumbPath, cancellationToken).ConfigureAwait(false);
+            }
+            else if (IsThumbnailReachableByAdapter(request.PlatformDisplayName, request.ThumbUri))
+            {
+                thumbnailUri = request.ThumbUri;
+            }
+        }
+
         var segment = new VideoOutgoingSegment(videoUri)
         {
-            ThumbnailUri = config.IsCoverEnabled(request.PlatformDisplayName)
-                           && IsThumbnailReachableByAdapter(request.PlatformDisplayName, request.ThumbUri)
-                ? request.ThumbUri
-                : null,
+            ThumbnailUri = thumbnailUri,
         };
         return new ProviderLocalVideoSegmentResult(segment, uriMode, videoUri, fileSize, registeredToHttpServer);
+    }
+
+    private async Task<string> BuildLocalFileUriAsync(PluginConfig config, string path, CancellationToken cancellationToken)
+    {
+        return config.FileProtocol switch
+        {
+            0 => "base64://" + Convert.ToBase64String(await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false)),
+            2 => GetLocalVideoHttpServer().RegisterFile(path),
+            _ => new Uri(path).AbsoluteUri,
+        };
     }
 
     private static bool IsThumbnailReachableByAdapter(string platformDisplayName, string? thumbUri)

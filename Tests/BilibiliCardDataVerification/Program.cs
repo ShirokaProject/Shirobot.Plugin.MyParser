@@ -9,6 +9,7 @@ using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Plugin;
 using MyParser.Provider.BiliBili.Views;
 using Shirobot.Plugin.MyParser;
+using Shirobot.Plugin.MyParser.CardRendering;
 using Shirobot.Plugin.MyParser.Parsing;
 
 var cookieProperty = typeof(PluginConfig).Assembly.GetType("Shirobot.Plugin.MyParser.MyParserRuntime", true)!.GetProperty("BilibiliCookie")!;
@@ -75,7 +76,7 @@ try
         MessageId="source", Sender=new User("tester"), Segments=[new TextSegment("link")] };
     var fakeServices = DispatchProxy.Create<IProviderHostServices, RecordingHostServices>();
     var recorder = (RecordingHostServices)fakeServices;
-    var handlerType = typeof(BiliCard).Assembly.GetType("Shirobot.Plugin.MyParser.MessageHandling.UnifiedMediaMessageHandler", true)!;
+    var handlerType = typeof(BiliCardViewModel).Assembly.GetType("Shirobot.Plugin.MyParser.MessageHandling.UnifiedMediaMessageHandler", true)!;
     var presenter = Activator.CreateInstance(handlerType,
         [new ProviderMessageHandlerContext(null!, new PluginConfig(), provider, fakeServices, new PreviewCardRenderer())])!;
     await (Task)handlerType.GetMethod("PresentAsync", BindingFlags.NonPublic|BindingFlags.Instance)!
@@ -201,7 +202,7 @@ try
         && shortSeason.Attributes["requested_page"] == "1", "Short ss ID did not play the same first episode.");
     Check(episodePreview.Attributes["preview_only"] == "true" && episodePreview.Assets.Count == 0
         && episodePreview.Attributes["requested_page"] == "2", "Episode preview requested playback or lost episode index.");
-    var rendererType = typeof(BiliCard).Assembly.GetType("MyParser.Provider.BiliBili.BilibiliMediaCardRenderer", true)!;
+    var rendererType = typeof(BiliCardViewModel).Assembly.GetType("MyParser.Provider.BiliBili.BilibiliMediaCardRenderer", true)!;
     var seasonModel = (BiliCardViewModel)rendererType.GetMethod("CreateBangumiViewModel", BindingFlags.Static|BindingFlags.NonPublic)!
         .Invoke(null, [episodePreview, null])!;
     Check(seasonModel.CurrentPageText == "当前解析 第2/2集" && seasonModel.Avatar is null, "Episode card model did not match selected episode.");
@@ -240,7 +241,7 @@ try
     Check(recorder.Messages.SequenceEqual(new[]{"text"}), "Disabled bangumi cover did not send one text preview.");
     await subscriptions.Handler!(numeric with { Segments=[new QuoteSegment("text-1"),new TextSegment("1")] });
     Check(episodeUrls[^1] == "https://www.bilibili.com/bangumi/play/ep100138", "Text episode preview lost reply subscription.");
-    var cacheType = typeof(BiliCard).Assembly.GetType("MyParser.Provider.BiliBili.Parsing.BilibiliMultiPageReplyCache", true)!;
+    var cacheType = typeof(BiliCardViewModel).Assembly.GetType("MyParser.Provider.BiliBili.Parsing.BilibiliMultiPageReplyCache", true)!;
     cacheType.GetMethod("RegisterSelections")!.Invoke(null,
         [source, "native-bangumi-card", new[]{"https://www.bilibili.com/bangumi/play/ep100138", "https://www.bilibili.com/bangumi/play/ep100139"}, null, null]);
     Check(module.TryBuildParseText(numeric with { Segments=[new QuoteSegment("native-bangumi-card"),new TextSegment("2")] })
@@ -289,10 +290,14 @@ try
 }
 finally { cookieProperty.SetValue(null, previousCookie); }
 
-static BiliCardViewModel CreateViewModel(ParsedMedia media)
+static VideoCardView CreateViewModel(ParsedMedia media)
 {
     var renderer = typeof(BiliCardViewModel).Assembly.GetType("MyParser.Provider.BiliBili.BilibiliMediaCardRenderer", true)!;
-    return (BiliCardViewModel)renderer.GetMethod("CreateVideoViewModel", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, [media, null, null])!;
+    var card = (MediaCardViewModel)renderer.GetMethod("CreateVideoViewModel", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, [media, null, null])!;
+    string Metric(string label) => card.Metrics.Single(metric => metric.Label == label).Value;
+    return new VideoCardView(card.Title, card.Meta, card.AuthorName, card.AuthorMeta, card.HasAuthorMeta, card.BadgeText,
+        card.Tags, card.HasTags, card.HasExtra, card.ExtraText,
+        Metric("播放"), Metric("点赞"), Metric("投币"), Metric("收藏"));
 }
 
 static void Check(bool condition, string message)
@@ -417,3 +422,8 @@ public sealed class TestReplySubscription(MessageReference reference, DateTimeOf
     public bool Disposed { get; private set; }
     public void Dispose() => Disposed = true;
 }
+
+/// <summary>统一卡片模型在测试中的扁平视图，保留旧断言使用的字段名。</summary>
+internal sealed record VideoCardView(string Title, string VideoMeta, string AuthorName, string AuthorMeta, bool HasAuthorMeta,
+    string DurationText, IReadOnlyList<string> Tags, bool HasTags, bool HasMultiPages, string CurrentPageText,
+    string ViewCount, string LikeCount, string CoinCount, string CollectCount);

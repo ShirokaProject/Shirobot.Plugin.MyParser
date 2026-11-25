@@ -41,7 +41,7 @@ internal sealed class BilibiliMediaCardRenderer(ProviderCardRenderContext contex
             }
 
             var viewModel = CreateVideoViewModel(media, cover, avatar);
-            return await context.HostServices.RenderCardUriAsync<BiliCard>(viewModel, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
+            return await context.HostServices.RenderCardUriAsync<MediaCard>(viewModel, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -67,36 +67,39 @@ internal sealed class BilibiliMediaCardRenderer(ProviderCardRenderContext contex
         }
     }
 
-    internal static BiliCardViewModel CreateVideoViewModel(ParsedMedia media, Bitmap? cover, Bitmap? avatar)
+    internal static MediaCardViewModel CreateVideoViewModel(ParsedMedia media, Bitmap? cover, Bitmap? avatar)
     {
         var duration = ParseDuration(media.Attributes.GetValueOrDefault("duration_seconds"));
         var hasMultiPages = int.TryParse(Value(media, "pages"), out var pageCount) && pageCount > 1;
         var currentPage = int.TryParse(Value(media, "requested_page"), out var page) ? Math.Clamp(page, 1, Math.Max(1, pageCount)) : 1;
-        var durationText = media.Kind == ParsedMediaKind.Collection
+        var badgeText = media.Kind == ParsedMediaKind.Collection
             ? $"共 {Value(media, "pages")} P · {duration}"
             : duration;
-        return new BiliCardViewModel
+        return new MediaCardViewModel
         {
+            Platform = MediaCardPlatform.Bilibili,
             Cover = cover,
             Avatar = avatar,
+            BadgeText = badgeText,
+            BadgeIcon = MediaCardIcons.Play,
             Title = media.Title ?? "Bilibili 视频",
+            Meta = BuildVideoMeta(media),
             Description = media.Description ?? string.Empty,
             DescriptionMaxLines = 0,
-            CoverHeight = hasMultiPages ? 245 : 290,
-            ContentMargin = new Avalonia.Thickness(14, hasMultiPages ? 210 : 175, 14, 14),
-            AuthorName = media.AuthorName ?? "未知 UP",
-            AuthorMeta = FormatLocation(Value(media, "author_location")),
-            VideoMeta = BuildVideoMeta(media),
-            DurationText = durationText,
-            HasMultiPages = hasMultiPages,
-            CurrentPageText = $"当前解析 P{currentPage}/{pageCount}",
             Tags = media.Tags.Where(tag => !string.IsNullOrWhiteSpace(tag))
                 .Select(tag => "#" + tag.Trim().TrimStart('#')).ToArray(),
-            ViewCount = FormatCount(Value(media, "views")),
-            LikeCount = FormatCount(Value(media, "likes")),
-            CoinCount = FormatCount(Value(media, "coins")),
-            CollectCount = FormatCount(Value(media, "favorites")),
-            ShareCount = Value(media, "shares"),
+            Metrics =
+            [
+                new(MediaCardIcons.Play, "播放", FormatCount(Value(media, "views"))),
+                new(MediaCardIcons.ThumbUp, "点赞", FormatCount(Value(media, "likes"))),
+                new(MediaCardIcons.Coin, "投币", FormatCount(Value(media, "coins"))),
+                new(MediaCardIcons.Star, "收藏", FormatCount(Value(media, "favorites"))),
+            ],
+            ExtraIcon = MediaCardIcons.Playlist,
+            ExtraText = hasMultiPages ? $"当前解析 P{currentPage}/{pageCount}" : string.Empty,
+            ExtraHint = hasMultiPages ? "10min 内回复数字解析对应 P" : string.Empty,
+            AuthorName = media.AuthorName ?? "未知 UP",
+            AuthorMeta = FormatLocation(Value(media, "author_location")),
         };
     }
 
@@ -240,16 +243,7 @@ internal sealed class BilibiliMediaCardRenderer(ProviderCardRenderContext contex
         return string.Join(" · ", parts);
     }
 
-    private static string FormatCount(string value)
-    {
-        if (!long.TryParse(value, out var count)) return string.IsNullOrWhiteSpace(value) ? "--" : value;
-        return count switch
-        {
-            >= 100_000_000 => (count / 100_000_000d).ToString("0.#", CultureInfo.InvariantCulture) + "亿",
-            >= 10_000 => (count / 10_000d).ToString("0.#", CultureInfo.InvariantCulture) + "万",
-            _ => count.ToString("N0", CultureInfo.InvariantCulture),
-        };
-    }
+    private static string FormatCount(string value) => MediaCardViewModel.FormatCount(value);
 
     private static string ParseDuration(string? value) => long.TryParse(value, out var seconds)
         ? TimeSpan.FromSeconds(Math.Max(0, seconds)).ToString(seconds >= 3600 ? "h\\:mm\\:ss" : "m\\:ss")

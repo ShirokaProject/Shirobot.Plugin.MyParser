@@ -1,0 +1,291 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Shirobot.Plugin.MyParser.CardRendering"
+             x:Class="Shirobot.Plugin.MyParser.CardRendering.MediaCard"
+             x:DataType="vm:MediaCardViewModel"
+             Width="320"
+             HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
+    <Design.DataContext>
+        <vm:MediaCardViewModel />
+    </Design.DataContext>
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="CardBase" Color="#F5F6F8" />
+                    <LinearGradientBrush x:Key="AmbientVeil" StartPoint="0%,0%" EndPoint="0%,100%">
+                        <GradientStop Color="#99FFFFFF" Offset="0" />
+                        <GradientStop Color="#C7FFFFFF" Offset="1" />
+                    </LinearGradientBrush>
+                    <LinearGradientBrush x:Key="CoverFade" StartPoint="0%,0%" EndPoint="0%,100%">
+                        <GradientStop Color="#00FFFFFF" Offset="0.6" />
+                        <GradientStop Color="#8CFFFFFF" Offset="1" />
+                    </LinearGradientBrush>
+                    <SolidColorBrush x:Key="PanelBg" Color="#9EFFFFFF" />
+                    <SolidColorBrush x:Key="PanelBorder" Color="#0D101828" />
+                    <SolidColorBrush x:Key="TextTitle" Color="#16181D" />
+                    <SolidColorBrush x:Key="TextMeta" Color="#5D616B" />
+                    <SolidColorBrush x:Key="TextDesc" Color="#363941" />
+                    <SolidColorBrush x:Key="TagText" Color="#363941" />
+                    <SolidColorBrush x:Key="MetricLabel" Color="#6B6F79" />
+                    <SolidColorBrush x:Key="MetricNumber" Color="#16181D" />
+                    <SolidColorBrush x:Key="BrandText" Color="#8C909A" />
+                    <SolidColorBrush x:Key="AvatarGap" Color="#FFFFFF" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="CardBase" Color="#22242B" />
+                    <LinearGradientBrush x:Key="AmbientVeil" StartPoint="0%,0%" EndPoint="0%,100%">
+                        <GradientStop Color="#80181A20" Offset="0" />
+                        <GradientStop Color="#B8181A20" Offset="1" />
+                    </LinearGradientBrush>
+                    <LinearGradientBrush x:Key="CoverFade" StartPoint="0%,0%" EndPoint="0%,100%">
+                        <GradientStop Color="#00181A20" Offset="0.55" />
+                        <GradientStop Color="#C2181A20" Offset="1" />
+                    </LinearGradientBrush>
+                    <SolidColorBrush x:Key="PanelBg" Color="#17FFFFFF" />
+                    <SolidColorBrush x:Key="PanelBorder" Color="#1AFFFFFF" />
+                    <SolidColorBrush x:Key="TextTitle" Color="#F4F5F7" />
+                    <SolidColorBrush x:Key="TextMeta" Color="#B3B7C0" />
+                    <SolidColorBrush x:Key="TextDesc" Color="#D9DBE0" />
+                    <SolidColorBrush x:Key="TagText" Color="#E6E8EC" />
+                    <SolidColorBrush x:Key="MetricLabel" Color="#B3B7C0" />
+                    <SolidColorBrush x:Key="MetricNumber" Color="#F4F5F7" />
+                    <SolidColorBrush x:Key="BrandText" Color="#8F939C" />
+                    <SolidColorBrush x:Key="AvatarGap" Color="#2A2C33" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <Style Selector="Border.glass">
+            <Setter Property="Background" Value="#570B0D12" />
+            <Setter Property="BorderBrush" Value="#47FFFFFF" />
+            <Setter Property="BorderThickness" Value="0.75" />
+            <Setter Property="CornerRadius" Value="13" />
+            <Setter Property="BackdropEffect">
+                <BlurEffect Radius="16" />
+            </Setter>
+        </Style>
+        <Style Selector="TextBlock.glassText">
+            <Setter Property="Foreground" Value="#FFFFFF" />
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+    </UserControl.Styles>
+
+    <Border CornerRadius="16" ClipToBounds="True" Background="{DynamicResource CardBase}">
+        <Grid>
+            <!-- ===== 氛围底：封面高斯模糊 + 明暗蒙层 + 平台双色调，颜色随封面自然平衡 ===== -->
+            <!-- 用画刷而不是 Image：不参与布局测量，负边距只为让模糊边缘不露底 -->
+            <Border IsVisible="{Binding HasCover}" Margin="-60">
+                <Border.Background>
+                    <ImageBrush Source="{Binding Cover}" Stretch="UniformToFill" />
+                </Border.Background>
+                <Border.Effect>
+                    <BlurEffect Radius="60" />
+                </Border.Effect>
+            </Border>
+            <Border Background="{DynamicResource AmbientVeil}" />
+            <Border Background="{Binding AccentTintGradient}" />
+
+            <!-- ===== 封面 ===== -->
+            <!-- 封面整体向下淡出，露出同一张封面模糊出的底色，因此没有分界线 -->
+            <Grid Height="{Binding CoverHeight}" VerticalAlignment="Top" ClipToBounds="True"
+                  IsVisible="{Binding HasCover}">
+                <Grid.OpacityMask>
+                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                        <GradientStop Color="#FFFFFFFF" Offset="0" />
+                        <GradientStop Color="#FFFFFFFF" Offset="0.62" />
+                        <GradientStop Color="#A6FFFFFF" Offset="0.82" />
+                        <GradientStop Color="#00FFFFFF" Offset="1" />
+                    </LinearGradientBrush>
+                </Grid.OpacityMask>
+                <!-- 清晰层 -->
+                <Image Source="{Binding Cover}" Stretch="UniformToFill"
+                       HorizontalAlignment="Center" VerticalAlignment="Top" />
+                <!-- 模糊层：只在下半部分逐渐出现，形成渐进模糊 -->
+                <Border Margin="-24">
+                    <Border.Background>
+                        <ImageBrush Source="{Binding Cover}" Stretch="UniformToFill"
+                                    AlignmentX="Center" AlignmentY="Top" />
+                    </Border.Background>
+                    <Border.Effect>
+                        <BlurEffect Radius="22" />
+                    </Border.Effect>
+                    <Border.OpacityMask>
+                        <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                            <GradientStop Color="#00FFFFFF" Offset="0.55" />
+                            <GradientStop Color="#FFFFFFFF" Offset="0.86" />
+                        </LinearGradientBrush>
+                    </Border.OpacityMask>
+                </Border>
+                <!-- 与底色同色的蒙层，保证标题对比度 -->
+                <Border Background="{DynamicResource CoverFade}" />
+            </Grid>
+
+            <!-- ===== 顶部暗角：保证任何封面上角标都清晰 ===== -->
+            <Border Height="72" VerticalAlignment="Top" IsVisible="{Binding HasCover}" IsHitTestVisible="False">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                        <GradientStop Color="#38000000" Offset="0" />
+                        <GradientStop Color="#00000000" Offset="1" />
+                    </LinearGradientBrush>
+                </Border.Background>
+            </Border>
+
+            <!-- ===== 角标：统一的毛玻璃胶囊，平台区分只体现在图标圆片上 =====
+                 注意：Avalonia 12.2 中 BoxShadow 与 BackdropEffect 叠用会在 2x 渲染下错位，这里只用描边 -->
+            <Grid ZIndex="10" VerticalAlignment="Top" Margin="12,12,12,0" ColumnDefinitions="Auto,*">
+                <Border Classes="glass" Padding="3,3,11,3">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <!-- B 站：白色圆片 + 蓝色小电视 -->
+                        <Border Width="20" Height="20" CornerRadius="10" Background="#FFFFFF"
+                                IsVisible="{Binding IsBilibili}">
+                            <Viewbox Width="12" Height="12">
+                                <Path Fill="#00AEEC" Width="24" Height="24" Data="M17.813 4.653h.854c1.51.054 2.769.578 3.773 1.574 1.004.995 1.524 2.249 1.56 3.76v7.36c-.036 1.51-.556 2.769-1.56 3.773s-2.262 1.524-3.773 1.56H5.333c-1.51-.036-2.769-.556-3.773-1.56S.036 18.858 0 17.347v-7.36c.036-1.511.556-2.765 1.56-3.76 1.004-.996 2.262-1.52 3.773-1.574h.774l-1.174-1.12a1.234 1.234 0 0 1-.373-.906c0-.356.124-.658.373-.907l.027-.027c.267-.249.573-.373.92-.373.347 0 .653.124.92.373L9.653 4.44c.071.071.134.142.187.213h4.267a.836.836 0 0 1 .16-.213l2.853-2.747c.267-.249.573-.373.92-.373.347 0 .662.151.929.4.267.249.391.551.391.907 0 .355-.124.657-.373.906zM5.333 7.24c-.746.018-1.373.276-1.88.773-.506.498-.769 1.13-.786 1.894v7.52c.017.764.28 1.395.786 1.893.507.498 1.134.756 1.88.773h13.334c.746-.017 1.373-.275 1.88-.773.506-.498.769-1.129.786-1.893v-7.52c-.017-.765-.28-1.396-.786-1.894-.507-.497-1.134-.755-1.88-.773zM8 11.107c.373 0 .684.124.933.373.25.249.383.569.4.96v1.173c-.017.391-.15.711-.4.96-.249.25-.56.374-.933.374s-.684-.125-.933-.374c-.25-.249-.383-.569-.4-.96V12.44c0-.373.129-.689.386-.947.258-.257.574-.386.947-.386zm8 0c.373 0 .684.124.933.373.25.249.383.569.4.96v1.173c-.017.391-.15.711-.4.96-.249.25-.56.374-.933.374s-.684-.125-.933-.374c-.25-.249-.383-.569-.4-.96V12.44c.017-.391.15-.711.4-.96.249-.249.56-.373.933-.373z" />
+                            </Viewbox>
+                        </Border>
+                        <!-- 抖音：黑色圆片 + 青红错位音符 -->
+                        <Border Width="20" Height="20" CornerRadius="10" Background="#161823"
+                                IsVisible="{Binding IsDouyin}">
+                            <Viewbox Width="11" Height="11">
+                                <Canvas Width="24" Height="24">
+                                    <Path Canvas.Left="-1.2" Canvas.Top="-1.2" Fill="#25F4EE" Data="M16.4 2.5h-3.5v13.3a2.9 2.9 0 1 1-2.9-2.9c.3 0 .6.1.9.2V9.5a6.4 6.4 0 1 0 5.5 6.3V9.1a7.9 7.9 0 0 0 4.6 1.5V7.1a4.6 4.6 0 0 1-4.6-4.6z" />
+                                    <Path Canvas.Left="1.2" Canvas.Top="1.2" Fill="#FE2C55" Data="M16.4 2.5h-3.5v13.3a2.9 2.9 0 1 1-2.9-2.9c.3 0 .6.1.9.2V9.5a6.4 6.4 0 1 0 5.5 6.3V9.1a7.9 7.9 0 0 0 4.6 1.5V7.1a4.6 4.6 0 0 1-4.6-4.6z" />
+                                    <Path Fill="#FFFFFF" Data="M16.4 2.5h-3.5v13.3a2.9 2.9 0 1 1-2.9-2.9c.3 0 .6.1.9.2V9.5a6.4 6.4 0 1 0 5.5 6.3V9.1a7.9 7.9 0 0 0 4.6 1.5V7.1a4.6 4.6 0 0 1-4.6-4.6z" />
+                                </Canvas>
+                            </Viewbox>
+                        </Border>
+                        <TextBlock Text="{Binding PlatformName}" Classes="glassText" />
+                        <!-- 平台 | 时长：合并为一个胶囊 -->
+                        <Border Width="1" Height="10" Background="#66FFFFFF" VerticalAlignment="Center"
+                                Margin="2,0" IsVisible="{Binding HasBadge}" />
+                        <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding HasBadge}">
+                            <Path Data="{Binding BadgeIcon, Converter={x:Static vm:MediaCardGeometryConverter.Instance}}"
+                                  Fill="#FFFFFF" Stretch="Uniform" Width="7.5" Height="7.5" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding BadgeText}" Classes="glassText" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+            </Grid>
+
+            <!-- ===== 内容：直接落在渐隐区与底色上，不再使用独立面板 ===== -->
+            <Border Margin="{Binding SheetMargin}" VerticalAlignment="Top" Padding="16,0,16,14">
+                <StackPanel Spacing="12">
+                    <!-- 标题 + 元信息 -->
+                    <StackPanel Spacing="5">
+                        <TextBlock Text="{Binding Title}" Foreground="{DynamicResource TextTitle}"
+                                   FontSize="16.5" FontWeight="Bold" LineHeight="23" TextWrapping="Wrap"
+                                   MaxLines="3" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding Meta}" IsVisible="{Binding HasMeta}"
+                                   Foreground="{DynamicResource TextMeta}"
+                                   FontSize="10" FontWeight="Medium" TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <!-- 简介 -->
+                    <TextBlock Text="{Binding Description}" IsVisible="{Binding HasDescription}"
+                               Foreground="{DynamicResource TextDesc}" FontSize="11" LineHeight="17"
+                               TextWrapping="Wrap" MaxLines="{Binding DescriptionMaxLines}"
+                               TextTrimming="CharacterEllipsis" />
+
+                    <!-- 标签：平台浅渐变 -->
+                    <ItemsControl ItemsSource="{Binding Tags}" IsVisible="{Binding HasTags}" Margin="0,-2,0,-5">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="x:String">
+                                <Border Background="{Binding $parent[UserControl].((vm:MediaCardViewModel)DataContext).AccentSoftGradient}"
+                                        CornerRadius="7" Padding="8,3" Margin="0,0,5,5">
+                                    <TextBlock Text="{Binding}" FontSize="9.5" FontWeight="SemiBold" LineHeight="14"
+                                               Foreground="{DynamicResource TagText}" />
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- 数据：图标使用平台渐变 -->
+                    <Border IsVisible="{Binding HasMetrics}" Background="{DynamicResource PanelBg}"
+                            BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1"
+                            CornerRadius="14" Padding="4,10">
+                        <Border.BackdropEffect>
+                            <BlurEffect Radius="16" />
+                        </Border.BackdropEffect>
+                        <ItemsControl ItemsSource="{Binding Metrics}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <UniformGrid Rows="1" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:MediaCardMetric">
+                                    <StackPanel Spacing="3" HorizontalAlignment="Center">
+                                        <StackPanel Orientation="Horizontal" Spacing="3" HorizontalAlignment="Center">
+                                            <Path Data="{Binding Icon, Converter={x:Static vm:MediaCardGeometryConverter.Instance}}"
+                                                  Fill="{Binding $parent[UserControl].((vm:MediaCardViewModel)DataContext).AccentGradient}"
+                                                  Stretch="Uniform" Width="10" Height="10" VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding Label}" Foreground="{DynamicResource MetricLabel}"
+                                                       FontSize="9" FontWeight="Medium" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding Value}" Foreground="{DynamicResource MetricNumber}"
+                                                   FontSize="13.5" FontWeight="Bold" LineHeight="18" HorizontalAlignment="Center" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Border>
+
+                    <!-- 附加条：多P / 背景音乐 -->
+                    <Border IsVisible="{Binding HasExtra}" Background="{Binding AccentSoftGradient}"
+                            CornerRadius="12" Padding="5,5,10,5">
+                        <Grid ColumnDefinitions="Auto,Auto,*">
+                            <Border Width="22" Height="22" CornerRadius="11" Background="{Binding AccentGradient}">
+                                <Path Data="{Binding ExtraIcon, Converter={x:Static vm:MediaCardGeometryConverter.Instance}}"
+                                      Fill="#FFFFFF" Stretch="Uniform" Width="10" Height="10" />
+                            </Border>
+                            <TextBlock Grid.Column="1" Text="{Binding ExtraText}" Foreground="{DynamicResource TextTitle}"
+                                       FontSize="10.5" FontWeight="Bold" VerticalAlignment="Center" Margin="8,0,0,0"
+                                       MaxWidth="230" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Grid.Column="2" Text="{Binding ExtraHint}" IsVisible="{Binding HasExtraHint}"
+                                       Foreground="{DynamicResource TextMeta}" FontSize="9" FontWeight="Medium"
+                                       VerticalAlignment="Center" HorizontalAlignment="Right" Margin="8,0,0,0"
+                                       TextTrimming="CharacterEllipsis" />
+                        </Grid>
+                    </Border>
+
+                    <!-- 作者 + 署名 -->
+                    <Grid ColumnDefinitions="Auto,*" Margin="0,2,0,0">
+                        <Grid ColumnDefinitions="38,Auto" MaxWidth="200" VerticalAlignment="Center">
+                            <!-- 渐变描边头像 -->
+                            <Ellipse Width="38" Height="38" Fill="{Binding AccentGradient}" />
+                            <Ellipse Width="34.5" Height="34.5" Fill="{DynamicResource AvatarGap}" />
+                            <Ellipse Width="32" Height="32" IsVisible="{Binding HasAvatar}">
+                                <Ellipse.Fill>
+                                    <ImageBrush Source="{Binding Avatar}" Stretch="UniformToFill" />
+                                </Ellipse.Fill>
+                            </Ellipse>
+                            <Ellipse Width="32" Height="32" IsVisible="{Binding !HasAvatar}"
+                                     Fill="{Binding AccentSoftGradient}" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1" Margin="9,0,0,0">
+                                <TextBlock Text="{Binding AuthorName}" Foreground="{DynamicResource TextTitle}"
+                                           FontSize="12" FontWeight="Bold" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Text="{Binding AuthorMeta}" IsVisible="{Binding HasAuthorMeta}"
+                                           Foreground="{DynamicResource TextMeta}" FontSize="9"
+                                           TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </Grid>
+                        <TextBlock Grid.Column="1" Text="{Binding BrandText}" Foreground="{DynamicResource BrandText}"
+                                   FontSize="7" Opacity="0.8" VerticalAlignment="Bottom" HorizontalAlignment="Right"
+                                   TextAlignment="Right" TextWrapping="Wrap" Margin="8,0,0,2" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
+</UserControl>

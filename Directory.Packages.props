@@ -9,5 +9,9 @@
     <PackageVersion Include="LightDl" Version="0.4.3" />
     <PackageVersion Include="SilkCodec.NET" Version="1.2.2" />
     <PackageVersion Include="ShiroBot.SDK" Version="1.0.2" />
+    <!-- 卡片使用 Visual.BackdropEffect（Avalonia 12.2 起提供），宿主 ShiroBot 1.0.4 运行时即为 12.2.0。 -->
+    <PackageVersion Include="Avalonia" Version="12.2.0" />
+    <PackageVersion Include="Avalonia.Skia" Version="12.2.0" />
+    <PackageVersion Include="Avalonia.HarfBuzz" Version="12.2.0" />
   </ItemGroup>
 </Project>

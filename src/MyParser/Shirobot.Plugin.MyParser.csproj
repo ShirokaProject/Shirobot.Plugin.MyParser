@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-    <Version>0.6.17</Version>
+    <Version>0.6.18</Version>
         <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -32,6 +32,9 @@
         <PackageReference Include="LightDl" />
         <PackageReference Include="SharpJaad.AAC" />
         <PackageReference Include="NLayer" />
+        <PackageReference Include="Avalonia" />
+        <PackageReference Include="Avalonia.Skia" />
+        <PackageReference Include="Avalonia.HarfBuzz" />
     </ItemGroup>
 
     <ItemGroup>

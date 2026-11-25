@@ -24,41 +24,75 @@ internal sealed class DouyinMediaCardRenderer(ProviderCardRenderContext context)
         try
         {
             cover = await LoadImageAsync(media.CoverUrl, media, "cover", cancellationToken).ConfigureAwait(false);
-            avatar = await LoadImageAsync(media.Attributes.GetValueOrDefault("author_avatar_url"), media, "avatar", cancellationToken, avatarSize: 46).ConfigureAwait(false);
-            var createTime = long.TryParse(media.Attributes.GetValueOrDefault("create_time"), out var timestamp) && timestamp > 0
-                ? DateTimeOffset.FromUnixTimeSeconds(timestamp).ToLocalTime().ToString("yyyy-MM-dd HH:mm")
-                : string.Empty;
-            var duration = long.TryParse(media.Attributes.GetValueOrDefault("duration_ms"), out var durationMs)
-                ? TimeSpan.FromMilliseconds(Math.Max(0, durationMs)).ToString(durationMs >= 3_600_000 ? "h\\:mm\\:ss" : "m\\:ss")
-                : string.Empty;
-            var model = new DouyinCardViewModel
-            {
-                Cover = cover,
-                Avatar = avatar,
-                CoverUri = media.CoverUrl ?? string.Empty,
-                AlbumId = media.MediaId,
-                Title = media.Title ?? "抖音作品",
-                Description = media.Description ?? string.Empty,
-                AuthorName = media.AuthorName ?? "未知用户",
-                AuthorMeta = $"粉丝 {Value(media, "author_followers")} · {Value(media, "author_region")}",
-                DurationText = duration,
-                PublishTimeText = createTime,
-                HasPublishTime = !string.IsNullOrWhiteSpace(createTime),
-                PageText = media.Kind == ParsedMediaKind.Gallery ? $"1/{media.Assets.Count(a => a.Kind == MediaAssetKind.Image)}" : string.Empty,
-                LikeCount = Value(media, "likes"),
-                CollectCount = Value(media, "collects"),
-                CommentCount = Value(media, "comments"),
-                ShareCount = Value(media, "shares"),
-                MusicText = $"{Value(media, "music_title")} - {Value(media, "music_author")}".Trim(' ', '-'),
-                TagsText = string.Join(' ', media.Tags.Select(tag => tag.StartsWith('#') ? tag : "#" + tag)),
-            };
-            return await context.HostServices.RenderCardUriAsync<DouyinCard>(model, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
+            avatar = await LoadImageAsync(media.Attributes.GetValueOrDefault("author_avatar_url"), media, "avatar", cancellationToken, avatarSize: 32).ConfigureAwait(false);
+            var model = CreateViewModel(media, cover, avatar);
+            return await context.HostServices.RenderCardUriAsync<MediaCard>(model, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
             cover?.Dispose();
             avatar?.Dispose();
         }
+    }
+
+    internal static MediaCardViewModel CreateViewModel(ParsedMedia media, Bitmap? cover, Bitmap? avatar)
+    {
+        var isGallery = media.Kind == ParsedMediaKind.Gallery;
+        var imageCount = media.Assets.Count(asset => asset.Kind == MediaAssetKind.Image);
+        var badgeText = isGallery
+            ? (imageCount > 0 ? $"{imageCount} 张" : "图文")
+            : long.TryParse(Value(media, "duration_ms"), out var durationMs) && durationMs > 0
+                ? MediaCardViewModel.FormatDuration(TimeSpan.FromMilliseconds(durationMs))
+                : string.Empty;
+
+        var metaParts = new List<string>();
+        if (long.TryParse(Value(media, "create_time"), out var timestamp) && timestamp > 0)
+        {
+            metaParts.Add(DateTimeOffset.FromUnixTimeSeconds(timestamp).ToOffset(TimeSpan.FromHours(8))
+                .ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture) + " 发布");
+        }
+        metaParts.Add(isGallery ? "图文" : "视频");
+        if (!string.IsNullOrWhiteSpace(media.MediaId)) metaParts.Add(media.MediaId);
+
+        var title = string.IsNullOrWhiteSpace(media.Title) ? "抖音作品" : media.Title.Trim();
+        var description = media.Description?.Trim() ?? string.Empty;
+        if (description == title || title.StartsWith(description, StringComparison.Ordinal)) description = string.Empty;
+
+        var authorMeta = new List<string>();
+        if (long.TryParse(Value(media, "author_followers"), out var followers) && followers > 0)
+            authorMeta.Add("粉丝 " + MediaCardViewModel.FormatCount(followers.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        var region = Value(media, "author_region");
+        if (!string.IsNullOrWhiteSpace(region))
+            authorMeta.Add(region.StartsWith("IP属地", StringComparison.Ordinal) ? region[4..].TrimStart('：', ':', ' ') : region);
+
+        var music = string.Join(" - ", new[] { Value(media, "music_title"), Value(media, "music_author") }
+            .Where(part => !string.IsNullOrWhiteSpace(part)));
+
+        return new MediaCardViewModel
+        {
+            Platform = MediaCardPlatform.Douyin,
+            Cover = cover,
+            Avatar = avatar,
+            BadgeText = badgeText,
+            BadgeIcon = isGallery ? MediaCardIcons.Image : MediaCardIcons.Play,
+            Title = title,
+            Meta = string.Join(" · ", metaParts),
+            Description = description,
+            DescriptionMaxLines = 6,
+            Tags = media.Tags.Where(tag => !string.IsNullOrWhiteSpace(tag))
+                .Select(tag => "#" + tag.Trim().TrimStart('#')).Distinct().ToArray(),
+            Metrics =
+            [
+                new(MediaCardIcons.Heart, "点赞", MediaCardViewModel.FormatCount(Value(media, "likes"))),
+                new(MediaCardIcons.Comment, "评论", MediaCardViewModel.FormatCount(Value(media, "comments"))),
+                new(MediaCardIcons.Star, "收藏", MediaCardViewModel.FormatCount(Value(media, "collects"))),
+                new(MediaCardIcons.Share, "分享", MediaCardViewModel.FormatCount(Value(media, "shares"))),
+            ],
+            ExtraIcon = MediaCardIcons.Music,
+            ExtraText = music,
+            AuthorName = media.AuthorName ?? "未知用户",
+            AuthorMeta = string.Join(" · ", authorMeta),
+        };
     }
 
     private async Task<string?> RenderCommentsAsync(ParsedMedia media, CancellationToken cancellationToken)

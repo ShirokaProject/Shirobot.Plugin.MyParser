@@ -1011,7 +1011,7 @@ internal sealed class ProviderDownloadService
         }
     }
 
-    private static string? ResolveFfmpegPath(PluginConfig config)
+    internal static string? ResolveFfmpegPath(PluginConfig config)
     {
         if (!string.IsNullOrWhiteSpace(config.FfmpegPath) && File.Exists(config.FfmpegPath))
         {

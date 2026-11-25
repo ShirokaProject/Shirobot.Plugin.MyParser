@@ -1,11 +1,11 @@
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 
-namespace MyParser.Provider.BiliBili.Views;
+namespace Shirobot.Plugin.MyParser.CardRendering;
 
-public partial class BiliCard : UserControl
+public partial class MediaCard : UserControl
 {
-    public BiliCard()
+    public MediaCard()
     {
         InitializeComponent();
     }
