@@ -1,13 +1,13 @@
 using Shirobot.Plugin.MyParser.CardRendering;
 using Avalonia.Media.Imaging;
-using MyParser.Provider.WeixinChannels.Views;
+using System.Text.RegularExpressions;
 using ShiroBot.AvaloniaSdk;
 using ShiroBot.SDK.Plugin;
 using Shirobot.Plugin.MyParser.Parsing;
 
 namespace MyParser.Provider.WeixinChannels;
 
-internal sealed class WeixinChannelsMediaCardRenderer(ProviderCardRenderContext context) : IProviderMediaCardRenderer
+internal sealed partial class WeixinChannelsMediaCardRenderer(ProviderCardRenderContext context) : IProviderMediaCardRenderer
 {
     public async Task<string?> RenderAsync(ParsedMedia media, ProviderCardPurpose purpose, CancellationToken cancellationToken = default)
     {
@@ -17,32 +17,56 @@ internal sealed class WeixinChannelsMediaCardRenderer(ProviderCardRenderContext 
         try
         {
             cover = await LoadImageAsync(media.CoverUrl, media, "cover", cancellationToken).ConfigureAwait(false);
-            avatar = await LoadImageAsync(Value(media, "author_avatar_url"), media, "avatar", cancellationToken, avatarSize: 46).ConfigureAwait(false);
-            var duration = int.TryParse(Value(media, "duration_seconds"), out var seconds)
-                ? TimeSpan.FromSeconds(Math.Max(0, seconds)).ToString(@"mm\:ss") : string.Empty;
-            var published = DateTimeOffset.TryParse(Value(media, "publish_time"), out var time)
-                ? time.ToLocalTime().ToString("yyyy-MM-dd HH:mm") : "微信视频号";
-            var model = new WeixinChannelsCardViewModel
-            {
-                Cover = cover,
-                Avatar = avatar,
-                Title = media.Title ?? "微信视频号视频",
-                AuthorName = media.AuthorName ?? "视频号作者",
-                Description = media.Description ?? string.Empty,
-                DurationText = duration,
-                PublishText = published,
-                LikeCount = "赞 " + Value(media, "likes"),
-                CommentCount = "评论 " + Value(media, "comments"),
-                FavoriteCount = "收藏 " + Value(media, "favorites"),
-                ForwardCount = "转发 " + Value(media, "shares"),
-            };
-            return await context.HostServices.RenderCardUriAsync<WeixinChannelsCard>(model, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
+            avatar = await LoadImageAsync(Value(media, "author_avatar_url"), media, "avatar", cancellationToken, avatarSize: 32).ConfigureAwait(false);
+            var model = CreateViewModel(media, cover, avatar, DateTimeOffset.Now);
+            return await context.HostServices.RenderCardUriAsync<MediaCard>(model, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
             cover?.Dispose();
             avatar?.Dispose();
         }
+    }
+
+    internal static MediaCardViewModel CreateViewModel(ParsedMedia media, Bitmap? cover, Bitmap? avatar, DateTimeOffset now)
+    {
+        var title = string.IsNullOrWhiteSpace(media.Title) ? media.Description?.Trim() : media.Title.Trim();
+        if (string.IsNullOrWhiteSpace(title)) title = "微信视频号视频";
+        var description = media.Description?.Trim() ?? string.Empty;
+        if (description == title || title.Contains(description, StringComparison.Ordinal)) description = string.Empty;
+
+        var metaParts = new List<string>();
+        if (DateTimeOffset.TryParse(Value(media, "publish_time"), out var time))
+            metaParts.Add(time.ToOffset(TimeSpan.FromHours(8)).ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture) + " 发布");
+        metaParts.Add("视频");
+
+        // 视频号没有独立的话题字段，话题写在文案里（#露营 #星空）
+        var tags = TopicRegex().Matches(title + " " + description).Select(match => match.Value).Distinct().Take(6).ToArray();
+
+        return new MediaCardViewModel
+        {
+            Platform = MediaCardPlatform.WeixinChannels,
+            Cover = cover,
+            Avatar = avatar,
+            BadgeText = int.TryParse(Value(media, "duration_seconds"), out var seconds) && seconds > 0
+                ? MediaCardViewModel.FormatDuration(TimeSpan.FromSeconds(seconds)) : string.Empty,
+            BadgeIcon = MediaCardIcons.Play,
+            Title = TopicRegex().Replace(title, string.Empty).Trim() is { Length: > 0 } clean ? clean : title,
+            Meta = string.Join(" · ", metaParts),
+            Description = TopicRegex().Replace(description, string.Empty).Trim(),
+            DescriptionMaxLines = 6,
+            Tags = tags,
+            Metrics =
+            [
+                new(MediaCardIcons.Heart, "点赞", MediaCardViewModel.FormatCount(Value(media, "likes"))),
+                new(MediaCardIcons.Comment, "评论", MediaCardViewModel.FormatCount(Value(media, "comments"))),
+                new(MediaCardIcons.Star, "收藏", MediaCardViewModel.FormatCount(Value(media, "favorites"))),
+                new(MediaCardIcons.Share, "转发", MediaCardViewModel.FormatCount(Value(media, "shares"))),
+            ],
+            ExtraText = string.Empty,
+            AuthorName = string.IsNullOrWhiteSpace(media.AuthorName) ? "视频号作者" : media.AuthorName,
+            AuthorMeta = string.Empty,
+        };
     }
 
     private async Task<Bitmap?> LoadImageAsync(string? url, ParsedMedia media, string suffix, CancellationToken cancellationToken, double avatarSize = 0)
@@ -60,4 +84,7 @@ internal sealed class WeixinChannelsMediaCardRenderer(ProviderCardRenderContext 
     }
 
     private static string Value(ParsedMedia media, string key) => media.Attributes.GetValueOrDefault(key, string.Empty);
+
+    [GeneratedRegex(@"#[^\s#]+")]
+    private static partial Regex TopicRegex();
 }

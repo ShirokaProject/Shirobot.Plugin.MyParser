@@ -23,6 +23,7 @@ public sealed class MediaCardViewModel
     public string PlatformName => Platform.Name;
     public bool IsBilibili => Platform.Kind == MediaCardPlatformKind.Bilibili;
     public bool IsDouyin => Platform.Kind == MediaCardPlatformKind.Douyin;
+    public bool IsWeixinChannels => Platform.Kind == MediaCardPlatformKind.WeixinChannels;
     public IBrush PlatformBadgeBackground => new SolidColorBrush(Platform.BadgeBackground);
     public IBrush PlatformBadgeForeground => new SolidColorBrush(Platform.BadgeForeground);
     public IBrush PrimaryBrush => new SolidColorBrush(Platform.Primary);
@@ -89,6 +90,7 @@ public sealed class MediaCardViewModel
     public Bitmap? Avatar { get; init; } = LoadDesignBitmap("avatar.jpg");
     public bool HasAvatar => Avatar is not null;
     public string AuthorName { get; init; } = "作者名字";
+    public string AvatarInitial => string.IsNullOrWhiteSpace(AuthorName) ? "?" : char.ConvertFromUtf32(char.ConvertToUtf32(AuthorName.Trim(), 0));
     public string AuthorMeta { get; init; } = "IP属地：广东";
     public bool HasAuthorMeta => !string.IsNullOrWhiteSpace(AuthorMeta);
     public string BrandText { get; } = $"By ShirokaProject && MyParser v{PluginVersion}";
@@ -143,6 +145,7 @@ public enum MediaCardPlatformKind
     Bilibili,
     Douyin,
     NetEase,
+    WeixinChannels,
 }
 
 /// <summary>平台视觉：名称、双色渐变与徽标配色。</summary>
@@ -165,6 +168,10 @@ public sealed record MediaCardPlatform(
     /// <summary>网易云音乐：朱红 → 暖橘，红底徽标。</summary>
     public static readonly MediaCardPlatform NetEase = new(MediaCardPlatformKind.NetEase, "网易云音乐",
         Color.Parse("#FF3A5C"), Color.Parse("#FF9548"), Color.Parse("#FFE60026"), Color.Parse("#FFFFFF"));
+
+    /// <summary>微信视频号：微信绿 → 视频号橙，白底徽标。</summary>
+    public static readonly MediaCardPlatform WeixinChannels = new(MediaCardPlatformKind.WeixinChannels, "微信视频号",
+        Color.Parse("#07C160"), Color.Parse("#FA9D3B"), Color.Parse("#F2FFFFFF"), Color.Parse("#07C160"));
 
     public bool IsBilibili => Kind == MediaCardPlatformKind.Bilibili;
     public bool IsDouyin => Kind == MediaCardPlatformKind.Douyin;
@@ -221,6 +228,7 @@ public static class MediaCardIcons
     /// <summary>抖音音符（24x24）。</summary>
     public const string DouyinNote = "M16.4 2.5h-3.5v13.3a2.9 2.9 0 1 1-2.9-2.9c.3 0 .6.1.9.2V9.5a6.4 6.4 0 1 0 5.5 6.3V9.1a7.9 7.9 0 0 0 4.6 1.5V7.1a4.6 4.6 0 0 1-4.6-4.6z";
     /// <summary>网易云音乐（Remix Icon netease-cloud-music-line）。</summary>
+    public const string WeChat = "M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.17 4.203 3.002 5.55a.59.59 0 0 1 .213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.29.295a.326.326 0 0 0 .167-.054l1.903-1.114a.864.864 0 0 1 .717-.098 10.16 10.16 0 0 0 2.837.403c.276 0 .543-.027.811-.05-.857-2.578.157-4.972 1.932-6.446 1.703-1.415 3.882-1.98 5.853-1.838-.576-3.583-4.196-6.348-8.596-6.348zM5.785 5.991c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 0 1-1.162 1.178A1.17 1.17 0 0 1 4.623 7.17c0-.651.52-1.18 1.162-1.18zm5.813 0c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 0 1-1.162 1.178 1.17 1.17 0 0 1-1.162-1.178c0-.651.52-1.18 1.162-1.18zm5.34 2.867c-1.797-.052-3.746.512-5.28 1.786-1.72 1.428-2.687 3.72-1.78 6.22.942 2.453 3.666 4.229 6.884 4.229.826 0 1.622-.12 2.361-.336a.722.722 0 0 1 .598.082l1.584.926a.272.272 0 0 0 .14.047c.134 0 .24-.111.24-.247 0-.06-.023-.12-.038-.177l-.327-1.233a.582.582 0 0 1-.023-.156.49.49 0 0 1 .201-.398C23.024 18.48 24 16.82 24 14.98c0-3.21-2.931-5.837-6.656-6.088V8.89c-.135-.01-.27-.027-.407-.03zm-2.53 3.274c.535 0 .969.44.969.982a.976.976 0 0 1-.969.983.976.976 0 0 1-.969-.983c0-.542.434-.982.97-.982zm4.844 0c.535 0 .969.44.969.982a.976.976 0 0 1-.969.983.976.976 0 0 1-.969-.983c0-.542.434-.982.969-.982z";
     public const string NetEase = "M10.4222 11.375C10.1278 12.4026 10.4341 13.4395 11.2058 14.0282C12.267 14.8376 13.7712 14.3289 14.0796 13.0331C14.1599 12.6958 14.1833 12.311 14.1067 11.9767C13.8775 10.9756 13.586 9.98862 13.3147 8.98094C11.9843 9.13543 10.7722 10.1533 10.4222 11.375ZM15.9698 11.0879C16.2427 12.1002 16.2553 13.1053 15.8435 14.0875C14.7148 16.7784 11.1215 17.2286 9.26951 14.9136C7.96829 13.2869 7.99065 10.953 9.32982 9.18031C10.1096 8.14796 11.1339 7.47322 12.3776 7.12595C12.5007 7.09159 12.6241 7.058 12.7566 7.02157C12.6731 6.60736 12.569 6.20612 12.5143 5.79828C12.3375 4.48137 13.026 3.29477 14.2582 2.7574C15.4836 2.22294 16.9661 2.54204 17.7889 3.51738C18.1936 3.99703 18.183 4.59854 17.7631 4.98218C17.3507 5.359 16.7665 5.32761 16.3276 4.89118C16.0809 4.64585 15.8185 4.45112 15.451 4.45569C14.9264 4.46223 14.4642 4.87382 14.5058 5.39329C14.5432 5.86105 14.6785 6.32376 14.8058 6.77892C14.8276 6.85679 15.0218 6.91415 15.1436 6.9321C16.4775 7.12862 17.6476 7.66332 18.6165 8.60769C21.1739 11.1006 21.4772 15.1394 19.2882 18.0482C17.7593 20.0797 15.6785 21.2165 13.1609 21.4567C8.53953 21.8977 4.49683 18.9278 3.46188 14.3992C2.5147 10.2551 4.8397 5.83074 8.79509 4.25032C9.38067 4.01635 9.93787 4.21869 10.1664 4.74827C10.3982 5.28546 10.147 5.83389 9.55552 6.09847C7.18759 7.15787 5.73935 8.9527 5.34076 11.5215C4.80806 14.9546 6.99662 18.2982 10.3416 19.2428C13.0644 20.0117 15.9994 19.0758 17.6494 16.9123C19.2354 14.8328 19.0484 11.8131 17.2221 10.0389C16.7172 9.54838 16.1246 9.21455 15.3988 9.02564C15.5974 9.74151 15.7879 10.4136 15.9698 11.0879Z";
     public const string Playlist = "M4 6h11a1 1 0 0 1 0 2H4a1 1 0 0 1 0-2zm0 5h11a1 1 0 0 1 0 2H4a1 1 0 0 1 0-2zm0 5h6a1 1 0 0 1 0 2H4a1 1 0 0 1 0-2zm11.5-1.9v5.8c0 .8.9 1.3 1.5.8l4.2-2.9c.6-.4.6-1.2 0-1.6L17 14.1c-.6-.5-1.5 0-1.5.8z";
 }

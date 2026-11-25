@@ -159,6 +159,14 @@
                                 </Canvas>
                             </Viewbox>
                         </Border>
+                        <!-- 微信视频号：白色圆片 + 绿色微信图标 -->
+                        <Border Width="20" Height="20" CornerRadius="10" Background="#FFFFFF"
+                                IsVisible="{Binding IsWeixinChannels}">
+                            <Viewbox Width="13" Height="13">
+                                <Path Fill="#07C160" Width="24" Height="24"
+                                      Data="{Binding Source={x:Static vm:MediaCardIcons.WeChat}, Converter={x:Static vm:MediaCardGeometryConverter.Instance}}" />
+                            </Viewbox>
+                        </Border>
                         <TextBlock Text="{Binding PlatformName}" Classes="glassText" />
                         <!-- 平台 | 时长：合并为一个胶囊 -->
                         <Border Width="1" Height="10" Background="#66FFFFFF" VerticalAlignment="Center"
@@ -272,6 +280,9 @@
                             </Ellipse>
                             <Ellipse Width="32" Height="32" IsVisible="{Binding !HasAvatar}"
                                      Fill="{Binding AccentSoftGradient}" />
+                            <!-- 没有头像时显示昵称首字 -->
+                            <TextBlock Text="{Binding AvatarInitial}" IsVisible="{Binding !HasAvatar}" Foreground="{Binding PrimaryBrush}"
+                                       FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1" Margin="9,0,0,0">
                                 <TextBlock Text="{Binding AuthorName}" Foreground="{DynamicResource TextTitle}"
                                            FontSize="12" FontWeight="Bold" TextTrimming="CharacterEllipsis" />

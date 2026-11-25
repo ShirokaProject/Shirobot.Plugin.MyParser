@@ -1,167 +1,172 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:MyParser.Provider.Heybox.Views"
+             xmlns:cr="using:Shirobot.Plugin.MyParser.CardRendering"
              x:Class="MyParser.Provider.Heybox.Views.HeyboxCard"
-             x:CompileBindings="False"
-             Width="360" Height="520">
+             x:DataType="vm:HeyboxCardViewModel"
+             Width="360"
+             HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
 
-    <UserControl.Styles>
-        <Style Selector="Border.PremiumCard">
-            <Setter Property="BoxShadow" Value="0 8 24 0 #1A000000" />
-        </Style>
-    </UserControl.Styles>
+    <Design.DataContext>
+        <vm:HeyboxCardViewModel />
+    </Design.DataContext>
 
+    <!-- 游戏社区信息流：白底 / 深灰底，青色强调；字号 17 标题 / 13 正文 / 11 说明 -->
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Light">
-                    <SolidColorBrush x:Key="CardFallbackBg">#F5F7FA</SolidColorBrush>
-                    <SolidColorBrush x:Key="CardTextPrimary">#14191E</SolidColorBrush>
-                    <SolidColorBrush x:Key="CardTextSecondary">#344352</SolidColorBrush>
-                    <SolidColorBrush x:Key="CardTextMuted">#5D6B78</SolidColorBrush>
-                    <SolidColorBrush x:Key="CardPanelBg">#D9FFFFFF</SolidColorBrush>
-                    <SolidColorBrush x:Key="CardPanelBorder">#33FFFFFF</SolidColorBrush>
-                    <SolidColorBrush x:Key="CardTagBg">#1A000000</SolidColorBrush>
-                    <SolidColorBrush x:Key="CardTagText">#344352</SolidColorBrush>
-                    <SolidColorBrush x:Key="HeyboxAccent">#008AB8</SolidColorBrush>
-                    <SolidColorBrush x:Key="HeyboxAccentText">#FFFFFF</SolidColorBrush>
-                    <SolidColorBrush x:Key="CardImageOverlay">#66FFFFFF</SolidColorBrush>
-                    <LinearGradientBrush x:Key="BottomScrim" StartPoint="0%,100%" EndPoint="0%,0%">
-                        <GradientStop Color="#F2F5F7FA" Offset="0" />
-                        <GradientStop Color="#CCF5F7FA" Offset="0.35" />
-                        <GradientStop Color="#00F5F7FA" Offset="1" />
-                    </LinearGradientBrush>
+                    <SolidColorBrush x:Key="Page" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="Placeholder" Color="#EEF1F4" />
+                    <SolidColorBrush x:Key="Divider" Color="#ECEFF2" />
+                    <SolidColorBrush x:Key="TextTitle" Color="#14191E" />
+                    <SolidColorBrush x:Key="TextBody" Color="#3B4652" />
+                    <SolidColorBrush x:Key="TextMeta" Color="#8A94A0" />
+                    <SolidColorBrush x:Key="Accent" Color="#00A3D9" />
+                    <SolidColorBrush x:Key="TopicBg" Color="#E6F6FC" />
+                    <SolidColorBrush x:Key="TopicText" Color="#0083AF" />
                 </ResourceDictionary>
-
                 <ResourceDictionary x:Key="Dark">
-                    <SolidColorBrush x:Key="CardFallbackBg">#101820</SolidColorBrush>
-                    <SolidColorBrush x:Key="CardTextPrimary">#FFFFFF</SolidColorBrush>
-                    <SolidColorBrush x:Key="CardTextSecondary">#E8EEF4</SolidColorBrush>
-                    <SolidColorBrush x:Key="CardTextMuted">#C4D0DA</SolidColorBrush>
-                    <SolidColorBrush x:Key="CardPanelBg">#40000000</SolidColorBrush>
-                    <SolidColorBrush x:Key="CardPanelBorder">#1AFFFFFF</SolidColorBrush>
-                    <SolidColorBrush x:Key="CardTagBg">#2BFFFFFF</SolidColorBrush>
-                    <SolidColorBrush x:Key="CardTagText">#E8EEF4</SolidColorBrush>
-                    <SolidColorBrush x:Key="HeyboxAccent">#00C2EE</SolidColorBrush>
-                    <SolidColorBrush x:Key="HeyboxAccentText">#052B36</SolidColorBrush>
-                    <SolidColorBrush x:Key="CardImageOverlay">#66000000</SolidColorBrush>
-                    <LinearGradientBrush x:Key="BottomScrim" StartPoint="0%,100%" EndPoint="0%,0%">
-                        <GradientStop Color="#F2101820" Offset="0" />
-                        <GradientStop Color="#B3101820" Offset="0.45" />
-                        <GradientStop Color="#00101820" Offset="1" />
-                    </LinearGradientBrush>
+                    <SolidColorBrush x:Key="Page" Color="#24282F" />
+                    <SolidColorBrush x:Key="Placeholder" Color="#2F343C" />
+                    <SolidColorBrush x:Key="Divider" Color="#343941" />
+                    <SolidColorBrush x:Key="TextTitle" Color="#F2F5F7" />
+                    <SolidColorBrush x:Key="TextBody" Color="#C9D1D9" />
+                    <SolidColorBrush x:Key="TextMeta" Color="#97A2AE" />
+                    <SolidColorBrush x:Key="Accent" Color="#2FC6F0" />
+                    <SolidColorBrush x:Key="TopicBg" Color="#1E3A45" />
+                    <SolidColorBrush x:Key="TopicText" Color="#6FD8F5" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>
     </UserControl.Resources>
 
-    <Border Classes="PremiumCard"
-            Width="360" Height="520"
-            CornerRadius="12"
-            ClipToBounds="True"
-            Background="{DynamicResource CardFallbackBg}">
-        <Grid>
-            <!-- 参考 Bilibili 卡片：封面毛玻璃铺底，弱化纯色块。 -->
-            <Border Margin="-44">
-                <Border.Effect>
-                    <BlurEffect Radius="28" />
-                </Border.Effect>
-                <Border.Background>
-                    <ImageBrush Source="{Binding Cover}" Stretch="UniformToFill" />
-                </Border.Background>
-            </Border>
-            <Border Background="{DynamicResource CardImageOverlay}" />
-            <Border VerticalAlignment="Bottom" Height="360" IsHitTestVisible="False" Background="{DynamicResource BottomScrim}" />
+    <UserControl.Styles>
+        <Style Selector="TextBlock.meta">
+            <Setter Property="Foreground" Value="{DynamicResource TextMeta}" />
+            <Setter Property="FontSize" Value="11" />
+        </Style>
+    </UserControl.Styles>
 
-            <!-- 顶部平台与 link id，参考视频卡片的悬浮 pill。 -->
-            <Grid VerticalAlignment="Top" Margin="18,18,18,0" ColumnDefinitions="*,Auto">
-                <Border Background="{DynamicResource HeyboxAccent}"
-                        CornerRadius="8"
-                        Padding="10,5"
-                        HorizontalAlignment="Left">
-                    <TextBlock Text="小黑盒 / Heybox"
-                               Foreground="{DynamicResource HeyboxAccentText}"
-                               FontSize="12"
-                               FontWeight="Black"
-                               LetterSpacing="0.4" />
+    <Border CornerRadius="6" ClipToBounds="True" Background="{DynamicResource Page}">
+        <StackPanel>
+            <!-- ===== 作者 ===== -->
+            <Grid ColumnDefinitions="Auto,*,Auto" Margin="16,16,16,0">
+                <Border Width="36" Height="36" CornerRadius="18" ClipToBounds="True" Background="{DynamicResource Placeholder}">
+                    <Panel>
+                        <Image Source="{Binding Avatar}" Stretch="UniformToFill" IsVisible="{Binding HasAvatar}" />
+                        <TextBlock Text="{Binding AvatarInitial}" IsVisible="{Binding HasNoAvatar}" Foreground="{DynamicResource TextMeta}"
+                                   FontSize="15" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Panel>
                 </Border>
-
-                <Border Grid.Column="1"
-                        Background="{DynamicResource CardPanelBg}"
-                        BorderBrush="{DynamicResource CardPanelBorder}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="8,5">
-                    <TextBlock Text="{Binding LinkId}"
-                               Foreground="{DynamicResource CardTextSecondary}"
-                               FontSize="11"
-                               FontWeight="SemiBold" />
-                </Border>
+                <StackPanel Grid.Column="1" Margin="10,0,8,0" VerticalAlignment="Center" Spacing="2">
+                    <TextBlock Text="{Binding AuthorName}" Foreground="{DynamicResource TextTitle}" FontSize="14"
+                               FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding MetaText}" Classes="meta" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                <!-- 平台标识 -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                    <Border Width="18" Height="18" CornerRadius="5" Background="{DynamicResource Accent}">
+                        <Viewbox Width="12" Height="12">
+                            <Canvas Width="24" Height="24">
+                                <Path Data="{Binding Source={x:Static vm:HeyboxIcons.Brand}, Converter={x:Static cr:MediaCardGeometryConverter.Instance}}"
+                                      Fill="White" />
+                            </Canvas>
+                        </Viewbox>
+                    </Border>
+                    <TextBlock Text="小黑盒" Foreground="{DynamicResource TextBody}" FontSize="12" FontWeight="SemiBold"
+                               VerticalAlignment="Center" />
+                </StackPanel>
             </Grid>
 
-            <!-- 中部封面缩略图：保留文章封面识别度，样式参考 Bili 图片卡片。 -->
-            <Border Width="132" Height="132"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Top"
-                    Margin="0,68,0,0"
-                    CornerRadius="16"
-                    ClipToBounds="True"
-                    Background="{DynamicResource CardPanelBg}"
-                    BorderBrush="{DynamicResource CardPanelBorder}"
-                    BorderThickness="1">
-                <Image Source="{Binding Cover}" Stretch="UniformToFill" />
+            <!-- ===== 标题与正文 ===== -->
+            <StackPanel Margin="16,12,16,0" Spacing="6">
+                <TextBlock Text="{Binding Title}" Foreground="{DynamicResource TextTitle}" FontSize="17" FontWeight="Bold"
+                           LineHeight="24" TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{Binding Description}" IsVisible="{Binding HasDescription}" Foreground="{DynamicResource TextBody}"
+                           FontSize="13" LineHeight="20" TextWrapping="Wrap" MaxLines="4" TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+
+            <!-- ===== 封面：右下角图片 / 视频数 ===== -->
+            <Border Margin="16,12,16,0" Height="{Binding CoverHeight}" CornerRadius="4" ClipToBounds="True"
+                    Background="{DynamicResource Placeholder}" IsVisible="{Binding HasCover}">
+                <Grid>
+                    <Image Source="{Binding Cover}" Stretch="UniformToFill" />
+                    <Border IsVisible="{Binding HasMediaBadge}" Background="#80000000" CornerRadius="4" Padding="7,3"
+                            HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,8,8">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <StackPanel Orientation="Horizontal" Spacing="3" IsVisible="{Binding HasImageCount}">
+                                <Viewbox Width="12" Height="12" VerticalAlignment="Center">
+                                    <Canvas Width="24" Height="24">
+                                        <Path Data="{Binding Source={x:Static vm:HeyboxIcons.Images}, Converter={x:Static cr:MediaCardGeometryConverter.Instance}}" Fill="White" />
+                                    </Canvas>
+                                </Viewbox>
+                                <TextBlock Text="{Binding ImageCountText}" Foreground="White" FontSize="11" FontWeight="Medium" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="3" IsVisible="{Binding HasVideoCount}">
+                                <Viewbox Width="12" Height="12" VerticalAlignment="Center">
+                                    <Canvas Width="24" Height="24">
+                                        <Path Data="{Binding Source={x:Static vm:HeyboxIcons.Videos}, Converter={x:Static cr:MediaCardGeometryConverter.Instance}}" Fill="White" />
+                                    </Canvas>
+                                </Viewbox>
+                                <TextBlock Text="{Binding VideoCountText}" Foreground="White" FontSize="11" FontWeight="Medium" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </Grid>
             </Border>
 
-            <StackPanel VerticalAlignment="Bottom" Margin="20,0,20,22" Spacing="14">
-                <StackPanel Spacing="8">
-                    <TextBlock Text="{Binding Title}"
-                               Foreground="{DynamicResource CardTextPrimary}"
-                               FontSize="19"
-                               FontWeight="Heavy"
-                               TextWrapping="Wrap"
-                               LineHeight="25"
-                               MaxLines="3" />
+            <!-- ===== 话题 ===== -->
+            <ItemsControl ItemsSource="{Binding Topics}" IsVisible="{Binding HasTopics}" Margin="16,12,16,0">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="x:String">
+                        <Border Background="{DynamicResource TopicBg}" CornerRadius="4" Padding="8,3" Margin="0,0,6,6">
+                            <TextBlock Text="{Binding StringFormat='#{0}'}" Foreground="{DynamicResource TopicText}" FontSize="11"
+                                       FontWeight="Medium" />
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
 
-                    <TextBlock Text="{Binding AuthorName}"
-                               Foreground="{DynamicResource CardTextMuted}"
-                               FontSize="12"
-                               FontWeight="Medium" />
+            <!-- ===== 互动计数 ===== -->
+            <ItemsControl ItemsSource="{Binding Stats}" IsVisible="{Binding HasStats}" Margin="16,10,16,12">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <UniformGrid Rows="1" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:HeyboxStat">
+                        <StackPanel Orientation="Horizontal" Spacing="5" HorizontalAlignment="Center">
+                            <Viewbox Width="15" Height="15" VerticalAlignment="Center">
+                                <Canvas Width="24" Height="24">
+                                    <Path Data="{Binding Icon, Converter={x:Static cr:MediaCardGeometryConverter.Instance}}"
+                                          Fill="{DynamicResource TextMeta}" />
+                                </Canvas>
+                            </Viewbox>
+                            <TextBlock Text="{Binding Text}" Foreground="{DynamicResource TextBody}" FontSize="12"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
 
-                    <TextBlock Text="{Binding Description}"
-                               Foreground="{DynamicResource CardTextSecondary}"
-                               FontSize="13"
-                               TextWrapping="Wrap"
-                               LineHeight="20"
-                               MaxLines="4" />
+            <Border Height="1" Background="{DynamicResource Divider}" Margin="16,0" />
+
+            <!-- ===== 底部 ===== -->
+            <Grid ColumnDefinitions="Auto,*" Margin="16,10,16,12">
+                <StackPanel Orientation="Horizontal" Spacing="5">
+                    <Border Width="6" Height="6" CornerRadius="3" Background="{DynamicResource Accent}" VerticalAlignment="Center" />
+                    <TextBlock Text="小黑盒 · heybox" Classes="meta" VerticalAlignment="Center" />
                 </StackPanel>
-
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <Border Background="{DynamicResource CardTagBg}" CornerRadius="7" Padding="8,4">
-                        <TextBlock Text="{Binding MediaText}"
-                                   Foreground="{DynamicResource CardTagText}"
-                                   FontSize="11"
-                                   FontWeight="Medium" />
-                    </Border>
-                    <Border Background="{DynamicResource CardTagBg}" CornerRadius="7" Padding="8,4">
-                        <TextBlock Text="{Binding SourceText}"
-                                   Foreground="{DynamicResource CardTagText}"
-                                   FontSize="11"
-                                   FontWeight="Medium" />
-                    </Border>
-                </StackPanel>
-
-                <Border Background="{DynamicResource CardPanelBg}"
-                        BorderBrush="{DynamicResource CardPanelBorder}"
-                        BorderThickness="1"
-                        CornerRadius="12"
-                        Padding="12,10">
-                    <TextBlock Text="{Binding StatsText}"
-                               Foreground="{DynamicResource CardTextSecondary}"
-                               FontSize="12"
-                               FontWeight="SemiBold"
-                               TextWrapping="Wrap"
-                               LineHeight="18" />
-                </Border>
-            </StackPanel>
-        </Grid>
+                <TextBlock Grid.Column="1" Text="{Binding BrandText}" Foreground="{DynamicResource TextMeta}" FontSize="9"
+                           HorizontalAlignment="Right" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="12,0,0,0" />
+            </Grid>
+        </StackPanel>
     </Border>
 </UserControl>

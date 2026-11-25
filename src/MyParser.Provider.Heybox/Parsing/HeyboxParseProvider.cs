@@ -57,6 +57,9 @@ public sealed class HeyboxParseProvider(HeyboxParser parser) : IIncomingMessageP
                 ["comments"] = result.CommentCount?.ToString() ?? string.Empty, ["source_kind"] = result.SourceKind ?? string.Empty,
                 ["favorites"] = result.FavoriteCount?.ToString() ?? string.Empty, ["shares"] = result.ShareCount?.ToString() ?? string.Empty,
                 ["video_count"] = result.VideoUrls.Count.ToString(), ["image_count"] = result.ImageUrls.Count.ToString(),
+                ["author_avatar_url"] = result.AuthorAvatarUrl ?? string.Empty,
+                ["publish_time"] = result.PublishTime?.ToString("O") ?? string.Empty,
+                ["topics"] = string.Join('\n', result.Topics.Where(topic => !string.IsNullOrWhiteSpace(topic))),
             },
         };
     }
