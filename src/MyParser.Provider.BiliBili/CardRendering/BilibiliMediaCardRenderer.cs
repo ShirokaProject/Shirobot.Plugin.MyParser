@@ -1,5 +1,6 @@
 using Shirobot.Plugin.MyParser.CardRendering;
 using Avalonia.Media.Imaging;
+using System.Collections.Concurrent;
 using System.Globalization;
 using MyParser.Provider.BiliBili.Views;
 using ShiroBot.AvaloniaSdk;
@@ -15,6 +16,11 @@ internal sealed class BilibiliMediaCardRenderer(ProviderCardRenderContext contex
         if (purpose == ProviderCardPurpose.Article && media.Kind == ParsedMediaKind.Article)
         {
             return await RenderArticleAsync(media, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (purpose == ProviderCardPurpose.Comments)
+        {
+            return await RenderCommentsAsync(media, cancellationToken).ConfigureAwait(false);
         }
 
         if (purpose == ProviderCardPurpose.Main && media.Kind == ParsedMediaKind.Live)
@@ -47,6 +53,52 @@ internal sealed class BilibiliMediaCardRenderer(ProviderCardRenderContext contex
         {
             if (coverTask.IsCompletedSuccessfully) coverTask.Result?.Dispose();
             if (avatarTask.IsCompletedSuccessfully) avatarTask.Result?.Dispose();
+        }
+    }
+
+    private async Task<string?> RenderCommentsAsync(ParsedMedia media, CancellationToken cancellationToken)
+    {
+        var blocks = media.Content.Where(block => block.Attributes.GetValueOrDefault("category") == "comment").Take(30).ToArray();
+        if (blocks.Length == 0) return null;
+        var bitmaps = new ConcurrentBag<Bitmap>();
+        try
+        {
+            var coverTask = LoadOptionalImageAsync(media.CoverUrl, media, "cover", cancellationToken);
+            var comments = await CommentCardLoader.LoadItemsAsync(blocks, bitmaps,
+                (url, name, size, token) => LoadOptionalImageAsync(url, media, name, token, size), cancellationToken).ConfigureAwait(false);
+            var cover = await coverTask.ConfigureAwait(false);
+            if (cover is not null) bitmaps.Add(cover);
+
+            var total = Value(media, "replies");
+            var model = new CommentCardViewModel
+            {
+                Platform = MediaCardPlatform.Bilibili,
+                Cover = cover,
+                SourceTitle = media.Title ?? "Bilibili 视频",
+                CountText = $"热评 {comments.Count}",
+                SourceMeta = long.TryParse(total, out var totalCount) && totalCount > 0
+                    ? $"共 {FormatCount(total)} 条评论" : string.Empty,
+                Comments = comments,
+            };
+            return await context.HostServices.RenderCardUriAsync<CommentCard>(model, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            foreach (var bitmap in bitmaps) bitmap.Dispose();
+        }
+    }
+
+    private async Task<Bitmap?> LoadOptionalImageAsync(string? url, ParsedMedia media, string name, CancellationToken cancellationToken, double avatarSize = 0)
+    {
+        try
+        {
+            return await LoadImageAsync(url, media, name, cancellationToken, avatarSize).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser Bilibili 评论图片加载失败: media_id={media.MediaId}, name={name}, error={ex.GetType().Name}");
+            return null;
         }
     }
 

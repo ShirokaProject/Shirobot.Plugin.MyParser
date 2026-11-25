@@ -35,6 +35,7 @@ public sealed class NetEaseParseProvider(NetEaseParser parser) : IParseProviderW
                 ["album"] = result.Album, ["quality"] = result.Quality, ["file_type"] = result.FileType ?? "mp3",
                 ["file_size"] = result.FileSize?.ToString() ?? string.Empty, ["bitrate"] = result.Bitrate?.ToString() ?? string.Empty,
                 ["lyrics"] = result.Lyric ?? string.Empty, ["translated_lyrics"] = result.TranslatedLyric ?? string.Empty,
+                ["duration_ms"] = result.DurationMs?.ToString() ?? string.Empty,
             },
         };
     }

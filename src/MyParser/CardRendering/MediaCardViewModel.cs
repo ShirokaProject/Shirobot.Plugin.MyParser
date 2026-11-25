@@ -99,19 +99,8 @@ public sealed class MediaCardViewModel
         ?? typeof(MediaCardViewModel).Assembly.GetName().Version?.ToString(3)
         ?? "unknown";
 
-    private LinearGradientBrush Gradient(double primaryOpacity, double secondaryOpacity) => new()
-    {
-        StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
-        EndPoint = new RelativePoint(1, 1, RelativeUnit.Relative),
-        GradientStops =
-        {
-            new GradientStop(WithOpacity(Platform.Primary, primaryOpacity), 0),
-            new GradientStop(WithOpacity(Platform.Secondary, secondaryOpacity), 1),
-        },
-    };
-
-    private static Color WithOpacity(Color color, double opacity) =>
-        Color.FromArgb((byte)Math.Round(color.A * Math.Clamp(opacity, 0, 1)), color.R, color.G, color.B);
+    private LinearGradientBrush Gradient(double primaryOpacity, double secondaryOpacity) =>
+        Platform.CreateGradient(primaryOpacity, secondaryOpacity);
 
     public static string FormatCount(string? value)
     {
@@ -153,6 +142,7 @@ public enum MediaCardPlatformKind
 {
     Bilibili,
     Douyin,
+    NetEase,
 }
 
 /// <summary>平台视觉：名称、双色渐变与徽标配色。</summary>
@@ -171,6 +161,29 @@ public sealed record MediaCardPlatform(
     /// <summary>抖音：青 → 品红，墨黑徽标。</summary>
     public static readonly MediaCardPlatform Douyin = new(MediaCardPlatformKind.Douyin, "抖音",
         Color.Parse("#25F4EE"), Color.Parse("#FE2C55"), Color.Parse("#E6161823"), Color.Parse("#FFFFFF"));
+
+    /// <summary>网易云音乐：朱红 → 暖橘，红底徽标。</summary>
+    public static readonly MediaCardPlatform NetEase = new(MediaCardPlatformKind.NetEase, "网易云音乐",
+        Color.Parse("#FF3A5C"), Color.Parse("#FF9548"), Color.Parse("#FFE60026"), Color.Parse("#FFFFFF"));
+
+    public bool IsBilibili => Kind == MediaCardPlatformKind.Bilibili;
+    public bool IsDouyin => Kind == MediaCardPlatformKind.Douyin;
+    public bool IsNetEase => Kind == MediaCardPlatformKind.NetEase;
+
+    /// <summary>平台双色斜向渐变，透明度分别作用于两端。</summary>
+    public LinearGradientBrush CreateGradient(double primaryOpacity, double secondaryOpacity) => new()
+    {
+        StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+        EndPoint = new RelativePoint(1, 1, RelativeUnit.Relative),
+        GradientStops =
+        {
+            new GradientStop(WithOpacity(Primary, primaryOpacity), 0),
+            new GradientStop(WithOpacity(Secondary, secondaryOpacity), 1),
+        },
+    };
+
+    private static Color WithOpacity(Color color, double opacity) =>
+        Color.FromArgb((byte)Math.Round(color.A * Math.Clamp(opacity, 0, 1)), color.R, color.G, color.B);
 }
 
 /// <summary>把图标 path 字符串转换为 Geometry；在渲染线程上解析，避免模型构造依赖 Avalonia 平台。</summary>
@@ -197,5 +210,17 @@ public static class MediaCardIcons
     public const string Share = "M13 4.6c0-.9 1-1.3 1.7-.7l7 6.4c.4.4.4 1.1 0 1.5l-7 6.4c-.7.6-1.7.2-1.7-.7V14c-4.3 0-7.3 1.4-9.4 4.6-.3.5-1.1.2-1-.4C3.4 12.6 6.8 9.4 13 8.9V4.6z";
     public const string Music = "M9 18.5a3.5 3.5 0 1 1-2-3.16V6.2c0-.7.5-1.3 1.2-1.5l9.5-2.1c.9-.2 1.8.5 1.8 1.5v11.4a3.5 3.5 0 1 1-2-3.16V7.6L9 9.4v9.1z";
     public const string Image = "M5.5 3h13A2.5 2.5 0 0 1 21 5.5v13a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 18.5v-13A2.5 2.5 0 0 1 5.5 3zm3 3.5a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM5 17.6V18.5c0 .3.2.5.5.5h13c.3 0 .5-.2.5-.5v-3.1l-3.3-3.3a1 1 0 0 0-1.4 0L9.5 17l-1.8-1.8a1 1 0 0 0-1.4 0L5 17.6z";
+    public const string Reply = "M10 8.2V5.6c0-.9-1-1.3-1.7-.7l-5.6 5.2c-.4.4-.4 1.1 0 1.5l5.6 5.2c.7.6 1.7.2 1.7-.7v-2.6c4.4 0 7.5 1.3 9.6 4.4.4.5 1.2.2 1.1-.4C20 11.6 16.4 8.6 10 8.2z";
+    public const string Album = "M12 2.5a9.5 9.5 0 1 1 0 19 9.5 9.5 0 0 1 0-19zm0 6a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm0 2.3a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4z";
+    public const string Clock = "M12 2.5a9.5 9.5 0 1 1 0 19 9.5 9.5 0 0 1 0-19zm0 2a7.5 7.5 0 1 0 0 15 7.5 7.5 0 0 0 0-15zM12 6.5a1 1 0 0 1 1 1v4.1l2.8 2.1a1 1 0 1 1-1.2 1.6l-3.2-2.4a1 1 0 0 1-.4-.8V7.5a1 1 0 0 1 1-1z";
+    public const string Waveform = "M4 10a1 1 0 0 1 1 1v2a1 1 0 0 1-2 0v-2a1 1 0 0 1 1-1zm4-4a1 1 0 0 1 1 1v10a1 1 0 0 1-2 0V7a1 1 0 0 1 1-1zm4-3a1 1 0 0 1 1 1v16a1 1 0 0 1-2 0V4a1 1 0 0 1 1-1zm4 4a1 1 0 0 1 1 1v8a1 1 0 0 1-2 0V8a1 1 0 0 1 1-1zm4 3a1 1 0 0 1 1 1v2a1 1 0 0 1-2 0v-2a1 1 0 0 1 1-1z";
+    public const string File = "M7 2.5h6.6c.5 0 1 .2 1.4.6l4.4 4.4c.4.4.6.9.6 1.4V19a2.5 2.5 0 0 1-2.5 2.5H7A2.5 2.5 0 0 1 4.5 19V5A2.5 2.5 0 0 1 7 2.5zm6 1.8V8a1 1 0 0 0 1 1h3.7L13 4.3z";
+    public const string Fire = "M12.6 2.2c.3-.4 1-.3 1.1.2.6 2.3 2 3.9 3.5 5.4 1.6 1.7 3.3 3.5 3.3 6.6 0 4.3-3.6 7.6-8.5 7.6S3.5 18.7 3.5 14.4c0-2.6 1.2-4.6 2.8-6 .4-.3 1-.1 1.1.4.2 1.2.7 2.2 1.6 2.9.2-3.8 1.7-7 3.6-9.5z";
+    /// <summary>B 站小电视（24x24）。</summary>
+    public const string BilibiliTv = "M17.813 4.653h.854c1.51.054 2.769.578 3.773 1.574 1.004.995 1.524 2.249 1.56 3.76v7.36c-.036 1.51-.556 2.769-1.56 3.773s-2.262 1.524-3.773 1.56H5.333c-1.51-.036-2.769-.556-3.773-1.56S.036 18.858 0 17.347v-7.36c.036-1.511.556-2.765 1.56-3.76 1.004-.996 2.262-1.52 3.773-1.574h.774l-1.174-1.12a1.234 1.234 0 0 1-.373-.906c0-.356.124-.658.373-.907l.027-.027c.267-.249.573-.373.92-.373.347 0 .653.124.92.373L9.653 4.44c.071.071.134.142.187.213h4.267a.836.836 0 0 1 .16-.213l2.853-2.747c.267-.249.573-.373.92-.373.347 0 .662.151.929.4.267.249.391.551.391.907 0 .355-.124.657-.373.906zM5.333 7.24c-.746.018-1.373.276-1.88.773-.506.498-.769 1.13-.786 1.894v7.52c.017.764.28 1.395.786 1.893.507.498 1.134.756 1.88.773h13.334c.746-.017 1.373-.275 1.88-.773.506-.498.769-1.129.786-1.893v-7.52c-.017-.765-.28-1.396-.786-1.894-.507-.497-1.134-.755-1.88-.773zM8 11.107c.373 0 .684.124.933.373.25.249.383.569.4.96v1.173c-.017.391-.15.711-.4.96-.249.25-.56.374-.933.374s-.684-.125-.933-.374c-.25-.249-.383-.569-.4-.96V12.44c0-.373.129-.689.386-.947.258-.257.574-.386.947-.386zm8 0c.373 0 .684.124.933.373.25.249.383.569.4.96v1.173c-.017.391-.15.711-.4.96-.249.25-.56.374-.933.374s-.684-.125-.933-.374c-.25-.249-.383-.569-.4-.96V12.44c.017-.391.15-.711.4-.96.249-.249.56-.373.933-.373z";
+    /// <summary>抖音音符（24x24）。</summary>
+    public const string DouyinNote = "M16.4 2.5h-3.5v13.3a2.9 2.9 0 1 1-2.9-2.9c.3 0 .6.1.9.2V9.5a6.4 6.4 0 1 0 5.5 6.3V9.1a7.9 7.9 0 0 0 4.6 1.5V7.1a4.6 4.6 0 0 1-4.6-4.6z";
+    /// <summary>网易云音乐（Remix Icon netease-cloud-music-line）。</summary>
+    public const string NetEase = "M10.4222 11.375C10.1278 12.4026 10.4341 13.4395 11.2058 14.0282C12.267 14.8376 13.7712 14.3289 14.0796 13.0331C14.1599 12.6958 14.1833 12.311 14.1067 11.9767C13.8775 10.9756 13.586 9.98862 13.3147 8.98094C11.9843 9.13543 10.7722 10.1533 10.4222 11.375ZM15.9698 11.0879C16.2427 12.1002 16.2553 13.1053 15.8435 14.0875C14.7148 16.7784 11.1215 17.2286 9.26951 14.9136C7.96829 13.2869 7.99065 10.953 9.32982 9.18031C10.1096 8.14796 11.1339 7.47322 12.3776 7.12595C12.5007 7.09159 12.6241 7.058 12.7566 7.02157C12.6731 6.60736 12.569 6.20612 12.5143 5.79828C12.3375 4.48137 13.026 3.29477 14.2582 2.7574C15.4836 2.22294 16.9661 2.54204 17.7889 3.51738C18.1936 3.99703 18.183 4.59854 17.7631 4.98218C17.3507 5.359 16.7665 5.32761 16.3276 4.89118C16.0809 4.64585 15.8185 4.45112 15.451 4.45569C14.9264 4.46223 14.4642 4.87382 14.5058 5.39329C14.5432 5.86105 14.6785 6.32376 14.8058 6.77892C14.8276 6.85679 15.0218 6.91415 15.1436 6.9321C16.4775 7.12862 17.6476 7.66332 18.6165 8.60769C21.1739 11.1006 21.4772 15.1394 19.2882 18.0482C17.7593 20.0797 15.6785 21.2165 13.1609 21.4567C8.53953 21.8977 4.49683 18.9278 3.46188 14.3992C2.5147 10.2551 4.8397 5.83074 8.79509 4.25032C9.38067 4.01635 9.93787 4.21869 10.1664 4.74827C10.3982 5.28546 10.147 5.83389 9.55552 6.09847C7.18759 7.15787 5.73935 8.9527 5.34076 11.5215C4.80806 14.9546 6.99662 18.2982 10.3416 19.2428C13.0644 20.0117 15.9994 19.0758 17.6494 16.9123C19.2354 14.8328 19.0484 11.8131 17.2221 10.0389C16.7172 9.54838 16.1246 9.21455 15.3988 9.02564C15.5974 9.74151 15.7879 10.4136 15.9698 11.0879Z";
     public const string Playlist = "M4 6h11a1 1 0 0 1 0 2H4a1 1 0 0 1 0-2zm0 5h11a1 1 0 0 1 0 2H4a1 1 0 0 1 0-2zm0 5h6a1 1 0 0 1 0 2H4a1 1 0 0 1 0-2zm11.5-1.9v5.8c0 .8.9 1.3 1.5.8l4.2-2.9c.6-.4.6-1.2 0-1.6L17 14.1c-.6-.5-1.5 0-1.5.8z";
 }

@@ -167,6 +167,7 @@ public sealed class NetEaseParser : IParserHttpClientAccessor, IDisposable
             Artists = JoinNames(song, "ar") ?? "未知歌手",
             Album = GetString(album, "name") ?? "未知专辑",
             CoverUrl = GetString(album, "picUrl"),
+            DurationMs = GetNullableInt64(song, "dt"),
             SourceUrl = NetEaseUrlParser.BuildSongUrl(songId),
             AudioUrl = string.Empty,
         };

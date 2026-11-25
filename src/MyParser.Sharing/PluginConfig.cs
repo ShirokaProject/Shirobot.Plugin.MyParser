@@ -113,6 +113,12 @@ public sealed class PluginConfig
     [ConfigField("是否发送 Bilibili 视频、番剧、分 P 和直播封面。", Label = "【Bilibili】发送 Bilibili 封面")]
     public bool SendBilibiliVideoCover { get; set; } = true;
 
+    [ConfigField("解析 Bilibili 视频时是否获取并发送热门评论卡片。接口失败不会影响视频发送。", Label = "【Bilibili】获取 Bilibili 评论")]
+    public bool BilibiliFetchComments { get; set; } = true;
+
+    [ConfigField("Bilibili 视频最多获取的热门评论数量。", Label = "【Bilibili】Bilibili 评论数量", Min = 0, Max = 30)]
+    public int BilibiliCommentCount { get; set; } = 10;
+
     [ConfigField("Bilibili 分 P 总览最多展示封面数量。", Label = "【Bilibili】分P封面上限", Min = 0, Max = 200)]
     public int BilibiliMultiPageCoverImageLimit { get; set; } = 50;
 

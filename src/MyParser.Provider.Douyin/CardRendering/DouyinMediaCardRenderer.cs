@@ -1,7 +1,6 @@
 using Shirobot.Plugin.MyParser.CardRendering;
 using Avalonia.Media.Imaging;
 using System.Collections.Concurrent;
-using MyParser.Provider.Douyin.Views;
 using ShiroBot.AvaloniaSdk;
 using ShiroBot.SDK.Plugin;
 using Shirobot.Plugin.MyParser.Parsing;
@@ -100,63 +99,44 @@ internal sealed class DouyinMediaCardRenderer(ProviderCardRenderContext context)
         var blocks = media.Content.Where(block => block.Attributes.GetValueOrDefault("category") == "comment").Take(30).ToArray();
         if (blocks.Length == 0) return null;
         var bitmaps = new ConcurrentBag<Bitmap>();
-        using var slots = new SemaphoreSlim(4);
         try
         {
-            var tasks = blocks.Select(async (block, index) =>
-            {
-                await slots.WaitAsync(cancellationToken).ConfigureAwait(false);
-                try
-                {
-                    var avatarTask = LoadImageAsync(block.Attributes.GetValueOrDefault("avatar_url"), media, $"comment_{index + 1}_avatar", cancellationToken, avatarSize: 40);
-                    var imageTask = LoadImageAsync(block.Attributes.GetValueOrDefault("image_url"), media, $"comment_{index + 1}_image", cancellationToken);
-                    try { await Task.WhenAll(avatarTask, imageTask).ConfigureAwait(false); }
-                    finally
-                    {
-                        if (avatarTask.IsCompletedSuccessfully && avatarTask.Result is { } avatarBitmap) bitmaps.Add(avatarBitmap);
-                        if (imageTask.IsCompletedSuccessfully && imageTask.Result is { } imageBitmap) bitmaps.Add(imageBitmap);
-                    }
-                    var avatar = await avatarTask.ConfigureAwait(false);
-                    var image = await imageTask.ConfigureAwait(false);
-                    var createdAt = long.TryParse(block.Attributes.GetValueOrDefault("created"), out var timestamp) && timestamp > 0
-                        ? DateTimeOffset.FromUnixTimeSeconds(timestamp).ToLocalTime()
-                        : (DateTimeOffset?)null;
-                    var timeText = createdAt is { } value ? FormatRelativeTime(value) : string.Empty;
-                    var location = block.Attributes.GetValueOrDefault("ip");
-                    var metadata = string.Join("  ·  ", new[] { timeText, location }.Where(value => !string.IsNullOrWhiteSpace(value)));
-                    var message = block.Text.Trim();
-                    var replyCount = long.TryParse(block.Attributes.GetValueOrDefault("replies"), out var count) ? count : 0;
-                    return new DouyinCommentItemViewModel
-                    {
-                        Avatar = avatar,
-                        CommentImage = image,
-                        HasImage = image is not null,
-                        UserName = block.Caption,
-                        TimeLocationText = metadata,
-                        Message = message,
-                        LikeText = FormatCount(block.Attributes.GetValueOrDefault("likes", "0")),
-                        HasReplies = replyCount > 0,
-                        ReplyCountText = $"查看 {FormatCount(replyCount.ToString())} 条回复 ›",
-                        EstimatedHeight = 120 + Math.Max(0, (message.Length - 1) / 42) * 20 + (image is null ? 0 : 145) + (replyCount > 0 ? 30 : 0),
-                        IsAuthor = block.Attributes.GetValueOrDefault("is_author") == bool.TrueString,
-                    };
-                }
-                finally { slots.Release(); }
-            }).ToArray();
-            var comments = await Task.WhenAll(tasks).ConfigureAwait(false);
+            var coverTask = LoadOptionalImageAsync(media.CoverUrl, media, "cover", cancellationToken);
+            var comments = await CommentCardLoader.LoadItemsAsync(blocks, bitmaps,
+                (url, name, size, token) => LoadOptionalImageAsync(url, media, name, token, size), cancellationToken).ConfigureAwait(false);
+            var cover = await coverTask.ConfigureAwait(false);
+            if (cover is not null) bitmaps.Add(cover);
 
-            var model = new DouyinCommentCardViewModel
+            var total = Value(media, "comments");
+            var model = new CommentCardViewModel
             {
-                SourceTitle = media.Title ?? "抖音作品",
-                CommentCountText = $"{blocks.Length} 条评论",
+                Platform = MediaCardPlatform.Douyin,
+                Cover = cover,
+                SourceTitle = string.IsNullOrWhiteSpace(media.Title) ? "抖音作品" : media.Title.Trim(),
+                CountText = $"热评 {comments.Count}",
+                SourceMeta = long.TryParse(total, out var totalCount) && totalCount > 0
+                    ? $"共 {MediaCardViewModel.FormatCount(total)} 条评论" : string.Empty,
                 Comments = comments,
-                CanvasHeight = Math.Clamp(92 + comments.Sum(comment => comment.EstimatedHeight + 1), 400, 9000),
             };
-            return await context.HostServices.RenderCardUriAsync<DouyinCommentCard>(model, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
+            return await context.HostServices.RenderCardUriAsync<CommentCard>(model, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
             foreach (var bitmap in bitmaps) bitmap.Dispose();
+        }
+    }
+
+    private async Task<Bitmap?> LoadOptionalImageAsync(string? url, ParsedMedia media, string name, CancellationToken cancellationToken, double avatarSize = 0)
+    {
+        try
+        {
+            return await LoadImageAsync(url, media, name, cancellationToken, avatarSize).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser 抖音评论图片加载失败: media_id={media.MediaId}, name={name}, error={ex.GetType().Name}");
+            return null;
         }
     }
 
@@ -175,22 +155,4 @@ internal sealed class DouyinMediaCardRenderer(ProviderCardRenderContext context)
     }
 
     private static string Value(ParsedMedia media, string key) => media.Attributes.GetValueOrDefault(key, string.Empty);
-
-    private static string FormatRelativeTime(DateTimeOffset timestamp)
-    {
-        var elapsed = DateTimeOffset.Now - timestamp;
-        if (elapsed < TimeSpan.FromMinutes(1)) return "刚刚";
-        if (elapsed < TimeSpan.FromHours(1)) return $"{Math.Max(1, (int)elapsed.TotalMinutes)} 分钟前";
-        if (elapsed < TimeSpan.FromDays(1)) return $"{Math.Max(1, (int)elapsed.TotalHours)} 小时前";
-        if (elapsed < TimeSpan.FromDays(7)) return $"{Math.Max(1, (int)elapsed.TotalDays)} 天前";
-        return timestamp.ToString("MM-dd");
-    }
-
-    private static string FormatCount(string? value)
-    {
-        if (!long.TryParse(value, out var count) || count < 0) return value ?? "0";
-        return count >= 100_000_000
-            ? $"{count / 100_000_000d:0.#} 亿"
-            : count >= 10_000 ? $"{count / 10_000d:0.#} 万" : count.ToString();
-    }
 }

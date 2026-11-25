@@ -121,7 +121,25 @@ public sealed class BilibiliParseProvider(BilibiliParser parser) : IIncomingMess
                     ["favorites"] = video.FavoriteCount.ToString(), ["shares"] = video.ShareCount.ToString(),
                     ["replies"] = video.ReplyCount.ToString(), ["part_title"] = video.PartTitle ?? string.Empty,
                 },
-                Content = [new MediaContentBlock { Kind = MediaContentKind.Text, Text = video.Description ?? string.Empty }],
+                Content = [new MediaContentBlock { Kind = MediaContentKind.Text, Text = video.Description ?? string.Empty },
+                    .. video.Comments.Select(comment => new MediaContentBlock
+                    {
+                        Kind = MediaContentKind.Text,
+                        Text = comment.Message,
+                        Caption = comment.UserName,
+                        Attributes = new Dictionary<string, string>
+                        {
+                            ["category"] = "comment",
+                            ["user_id"] = comment.UserId ?? string.Empty,
+                            ["ip"] = comment.IpLocation ?? string.Empty,
+                            ["likes"] = comment.LikeCount.ToString(),
+                            ["replies"] = comment.ReplyCount.ToString(),
+                            ["created"] = comment.CreateTimeUnixSeconds.ToString(),
+                            ["is_author"] = comment.IsAuthor.ToString(),
+                            ["avatar_url"] = comment.UserAvatarUrl ?? string.Empty,
+                            ["image_url"] = comment.ImageUrl ?? string.Empty,
+                        },
+                    })],
             },
             _ => throw new BilibiliParseException("Bilibili 视频解析返回了未知结果类型。"),
         };

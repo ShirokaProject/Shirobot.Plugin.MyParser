@@ -16,6 +16,7 @@ public sealed record NetEaseParseResult
     public string? CoverUrl { get; init; }
     public string? SourceUrl { get; init; }
     public required string AudioUrl { get; init; }
+    public long? DurationMs { get; init; }
     public string Quality { get; init; } = "standard";
     public string? FileType { get; init; }
     public long? FileSize { get; init; }

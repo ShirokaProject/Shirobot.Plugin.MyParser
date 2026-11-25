@@ -42,6 +42,7 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
     private readonly bool _ownsHttpClient;
     private readonly PluginConfig _config;
     private readonly BilibiliArticleParser _articleParser;
+    private readonly BilibiliCommentService _commentService;
 
     public HttpClient HttpClient => _http;
     private string? _mixinKey;
@@ -62,6 +63,7 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
         }
 
         _articleParser = new BilibiliArticleParser(_http);
+        _commentService = new BilibiliCommentService(_http, GetMixinKeyAsync);
     }
 
     public Task<object> ParseMediaAsync(string text, CancellationToken cancellationToken = default)
@@ -109,6 +111,9 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
         }
 
         var metadataTask = GetVideoMetadataAsync(bvid, view, cid, cancellationToken);
+        var commentsTask = previewOnly
+            ? Task.FromResult<IReadOnlyList<BilibiliCommentInfo>>([])
+            : TryFetchCommentsAsync(bvid, view, cancellationToken);
         string? playFormat = null;
         var streamsTask = previewOnly
             ? Task.FromResult<(List<BilibiliMediaStream> Videos, List<BilibiliMediaStream> Audios)>(([], []))
@@ -118,7 +123,7 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
                 playFormat ??= playInfo.GetStringOrDefault("format");
                 return (ParseVideoStreams(playInfo), ParseAudioStreams(playInfo));
             }, _config.BilibiliBlockPcdn, cancellationToken);
-        await Task.WhenAll(metadataTask, streamsTask);
+        await Task.WhenAll(metadataTask, streamsTask, commentsTask);
         var metadata = await metadataTask;
         var streams = await streamsTask;
         var videos = streams.Videos.OrderBy(stream => _config.BilibiliBlockPcdn && BilibiliCdnPolicy.IsPcdnUrl(stream.Url))
@@ -166,10 +171,32 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
             FavoriteCount = stat?.GetInt64OrDefault("favorite") ?? 0,
             ShareCount = stat?.GetInt64OrDefault("share") ?? 0,
             ReplyCount = stat?.GetInt64OrDefault("reply") ?? 0,
+            Comments = await commentsTask,
             VideoStreams = videos,
             AudioStreams = audios,
         };
         return result;
+    }
+
+    /// <summary>评论只是附加信息：任何失败都只记日志，不影响视频解析。</summary>
+    private async Task<IReadOnlyList<BilibiliCommentInfo>> TryFetchCommentsAsync(string bvid, JsonElement view, CancellationToken cancellationToken)
+    {
+        var requestedCount = Math.Clamp(_config.BilibiliCommentCount, 0, 30);
+        if (!_config.BilibiliFetchComments || requestedCount == 0) return [];
+        var aid = view.GetInt64OrDefault("aid");
+        if (aid <= 0) return [];
+        var authorId = view.GetPropertyOrDefault("owner")?.GetInt64OrDefault("mid").ToString();
+        try
+        {
+            var comments = await _commentService.FetchAsync(aid, authorId, $"https://www.bilibili.com/video/{bvid}/", requestedCount, cancellationToken).ConfigureAwait(false);
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser Bilibili 评论解析完成: bvid={bvid}, aid={aid}, requested={requestedCount}, parsed={comments.Count}");
+            return comments;
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser Bilibili 评论获取失败，继续发送视频: bvid={bvid}, aid={aid}, error={ex.Message}");
+            return [];
+        }
     }
 
     private static string? FirstNonEmpty(params string?[] values)

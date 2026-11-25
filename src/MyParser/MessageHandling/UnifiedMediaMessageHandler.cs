@@ -158,7 +158,10 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
                 if (!string.IsNullOrWhiteSpace(commentsCard))
                     await SendImageAsync(message, new ImageSegment(commentsCard)).ConfigureAwait(false);
                 else
-                    await SendContentAsync(message, media, cancellationToken).ConfigureAwait(false);
+                    await SendContentAsync(message, media with
+                    {
+                        Content = media.Content.Where(block => block.Attributes.GetValueOrDefault("category") == "comment").ToArray(),
+                    }, cancellationToken).ConfigureAwait(false);
             }
         }
         finally

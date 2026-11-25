@@ -76,7 +76,7 @@
         </Style>
     </UserControl.Styles>
 
-    <Border CornerRadius="16" ClipToBounds="True" Background="{DynamicResource CardBase}">
+    <Border CornerRadius="6" ClipToBounds="True" Background="{DynamicResource CardBase}">
         <Grid>
             <!-- ===== 氛围底：封面高斯模糊 + 明暗蒙层 + 平台双色调，颜色随封面自然平衡 ===== -->
             <!-- 用画刷而不是 Image：不参与布局测量，负边距只为让模糊边缘不露底 -->

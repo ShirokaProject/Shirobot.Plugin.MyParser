@@ -9,6 +9,8 @@ namespace MyParser.Provider.NetEaseCloudMusic;
 
 internal sealed class NetEaseMediaCardRenderer(ProviderCardRenderContext context) : IProviderMediaCardRenderer
 {
+    private const int MaxLyricLines = 10;
+
     public async Task<string?> RenderAsync(ParsedMedia media, ProviderCardPurpose purpose, CancellationToken cancellationToken = default)
     {
         if (media.Kind != ParsedMediaKind.Track || purpose != ProviderCardPurpose.Main) return null;
@@ -25,23 +27,11 @@ internal sealed class NetEaseMediaCardRenderer(ProviderCardRenderContext context
                     ? context.HostServices.DecodeImageFileForRender(image.LocalPath)
                     : context.HostServices.DecodeBase64ImageForRender(image.Uri);
                 avatar = !string.IsNullOrWhiteSpace(image.LocalPath)
-                    ? AvatarBitmapResizer.DecodeFile(image.LocalPath, 52)
-                    : AvatarBitmapResizer.DecodeBase64(image.Uri, 52);
+                    ? AvatarBitmapResizer.DecodeFile(image.LocalPath, 92)
+                    : AvatarBitmapResizer.DecodeBase64(image.Uri, 92);
             }
 
-            var viewModel = new NetEaseMusicCardViewModel
-            {
-                Cover = cover,
-                Avatar = avatar,
-                Title = media.Title ?? string.Empty,
-                Artists = media.AuthorName ?? string.Empty,
-                Album = media.Attributes.GetValueOrDefault("album", string.Empty),
-                LyricText = string.Join(Environment.NewLine, BuildLyricPreview(media.Attributes.GetValueOrDefault("lyrics", string.Empty))),
-                QualityText = media.Attributes.GetValueOrDefault("quality", string.Empty),
-                SizeText = FormatSize(media.Attributes.GetValueOrDefault("file_size", string.Empty)),
-                BitrateText = FormatBitrate(media.Attributes.GetValueOrDefault("bitrate", string.Empty)),
-                SongIdText = media.MediaId,
-            };
+            var viewModel = CreateViewModel(media, cover, avatar);
             return await context.HostServices.RenderCardUriAsync<NetEaseMusicCard>(viewModel, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -51,21 +41,23 @@ internal sealed class NetEaseMediaCardRenderer(ProviderCardRenderContext context
         }
     }
 
-    internal static IReadOnlyList<string> BuildLyricPreview(string lyrics)
+    internal static NetEaseMusicCardViewModel CreateViewModel(ParsedMedia media, Bitmap? cover, Bitmap? avatar)
     {
-        var lines = lyrics.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
-            .Select(line => System.Text.RegularExpressions.Regex.Replace(line, @"^(?:\[[^\]]*\])+", string.Empty).Trim())
-            .Where(line => !string.IsNullOrWhiteSpace(line)).Take(15).ToArray();
-        return lines.Length > 0 ? lines : ["无歌词"];
+        var (lyrics, credits) = NetEaseMusicCardViewModel.ParseLyrics(
+            Value(media, "lyrics"), Value(media, "translated_lyrics"), MaxLyricLines);
+        return new NetEaseMusicCardViewModel
+        {
+            Cover = cover,
+            Avatar = avatar,
+            Title = media.Title ?? string.Empty,
+            Artists = media.AuthorName ?? string.Empty,
+            Album = Value(media, "album"),
+            DurationText = NetEaseMusicCardViewModel.FormatDuration(Value(media, "duration_ms")),
+            Credits = credits,
+            Lyrics = lyrics,
+            SongIdText = media.MediaId,
+        };
     }
 
-    private static string FormatSize(string value)
-    {
-        if (!long.TryParse(value, out var bytes)) return "未知";
-        if (bytes >= 1024L * 1024L * 1024L) return $"{bytes / 1024d / 1024d / 1024d:F2}GB";
-        if (bytes >= 1024L * 1024L) return $"{bytes / 1024d / 1024d:F2}MB";
-        if (bytes >= 1024L) return $"{bytes / 1024d:F1}KB";
-        return bytes + "B";
-    }
-    private static string FormatBitrate(string value) => int.TryParse(value, out var bitrate) ? $"{bitrate} kbps" : "未知";
+    private static string Value(ParsedMedia media, string key) => media.Attributes.GetValueOrDefault(key, string.Empty);
 }

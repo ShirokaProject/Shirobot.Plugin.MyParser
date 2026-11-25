@@ -1,0 +1,228 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Shirobot.Plugin.MyParser.CardRendering"
+             x:Class="Shirobot.Plugin.MyParser.CardRendering.CommentCard"
+             x:DataType="vm:CommentCardViewModel"
+             Width="320"
+             HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
+    <Design.DataContext>
+        <vm:CommentCardViewModel />
+    </Design.DataContext>
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="CardBase" Color="#F5F6F8" />
+                    <LinearGradientBrush x:Key="AmbientVeil" StartPoint="0%,0%" EndPoint="0%,100%">
+                        <GradientStop Color="#A6FFFFFF" Offset="0" />
+                        <GradientStop Color="#D1FFFFFF" Offset="1" />
+                    </LinearGradientBrush>
+                    <SolidColorBrush x:Key="PanelBg" Color="#A8FFFFFF" />
+                    <SolidColorBrush x:Key="PanelBorder" Color="#0D101828" />
+                    <SolidColorBrush x:Key="Divider" Color="#12101828" />
+                    <SolidColorBrush x:Key="TextTitle" Color="#16181D" />
+                    <SolidColorBrush x:Key="TextName" Color="#4A4E58" />
+                    <SolidColorBrush x:Key="TextMeta" Color="#7D818B" />
+                    <SolidColorBrush x:Key="TextBody" Color="#25282F" />
+                    <SolidColorBrush x:Key="IconMuted" Color="#8C909A" />
+                    <SolidColorBrush x:Key="BrandText" Color="#8C909A" />
+                    <SolidColorBrush x:Key="AvatarGap" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="AvatarEmpty" Color="#E6E8EC" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="CardBase" Color="#22242B" />
+                    <LinearGradientBrush x:Key="AmbientVeil" StartPoint="0%,0%" EndPoint="0%,100%">
+                        <GradientStop Color="#8C181A20" Offset="0" />
+                        <GradientStop Color="#C2181A20" Offset="1" />
+                    </LinearGradientBrush>
+                    <SolidColorBrush x:Key="PanelBg" Color="#14FFFFFF" />
+                    <SolidColorBrush x:Key="PanelBorder" Color="#1AFFFFFF" />
+                    <SolidColorBrush x:Key="Divider" Color="#14FFFFFF" />
+                    <SolidColorBrush x:Key="TextTitle" Color="#F4F5F7" />
+                    <SolidColorBrush x:Key="TextName" Color="#D4D7DE" />
+                    <SolidColorBrush x:Key="TextMeta" Color="#B8BCC5" />
+                    <SolidColorBrush x:Key="TextBody" Color="#E6E8EC" />
+                    <SolidColorBrush x:Key="IconMuted" Color="#B8BCC5" />
+                    <SolidColorBrush x:Key="BrandText" Color="#8F939C" />
+                    <SolidColorBrush x:Key="AvatarGap" Color="#2A2C33" />
+                    <SolidColorBrush x:Key="AvatarEmpty" Color="#3A3D45" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <!-- 作者头像外圈渐变描边，普通用户不描边 -->
+        <Style Selector="Grid.avatar Ellipse.ring">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="Grid.avatar.author Ellipse.ring">
+            <Setter Property="IsVisible" Value="True" />
+        </Style>
+        <Style Selector="Grid.avatar Ellipse.face">
+            <Setter Property="Width" Value="30" />
+            <Setter Property="Height" Value="30" />
+        </Style>
+        <Style Selector="Grid.avatar.author Ellipse.face">
+            <Setter Property="Width" Value="26" />
+            <Setter Property="Height" Value="26" />
+        </Style>
+    </UserControl.Styles>
+
+    <Border CornerRadius="6" ClipToBounds="True" Background="{DynamicResource CardBase}">
+        <Grid>
+            <!-- ===== 氛围底：与视频卡片相同，封面模糊 + 明暗蒙层 + 平台双色调 ===== -->
+            <Border IsVisible="{Binding HasCover}" Margin="-60">
+                <Border.Background>
+                    <ImageBrush Source="{Binding Cover}" Stretch="UniformToFill" />
+                </Border.Background>
+                <Border.Effect>
+                    <BlurEffect Radius="60" />
+                </Border.Effect>
+            </Border>
+            <Border Background="{DynamicResource AmbientVeil}" />
+            <Border Background="{Binding AccentTintGradient}" />
+
+            <StackPanel Margin="14,14,14,12" Spacing="12">
+                <!-- ===== 头部：作品缩略图 + 评论区 + 数量胶囊 ===== -->
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                    <Border Width="44" Height="44" CornerRadius="11" ClipToBounds="True"
+                            BorderBrush="{DynamicResource PanelBorder}" BorderThickness="0.75"
+                            IsVisible="{Binding HasCover}">
+                        <Image Source="{Binding Cover}" Stretch="UniformToFill" />
+                    </Border>
+                    <Border Width="44" Height="44" CornerRadius="11" Background="{Binding AccentGradient}"
+                            IsVisible="{Binding HasNoCover}">
+                        <Path Data="{Binding PlatformIcon, Converter={x:Static vm:MediaCardGeometryConverter.Instance}}"
+                              Fill="#FFFFFF" Stretch="Uniform" Width="20" Height="20" />
+                    </Border>
+
+                    <StackPanel Grid.Column="1" Margin="10,0,8,0" VerticalAlignment="Center" Spacing="2">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <Path Data="{Binding Source={x:Static vm:MediaCardIcons.Fire}, Converter={x:Static vm:MediaCardGeometryConverter.Instance}}"
+                                  Fill="{Binding AccentGradient}" Stretch="Uniform" Width="12" Height="12"
+                                  VerticalAlignment="Center" />
+                            <TextBlock Text="热门评论" Foreground="{DynamicResource TextTitle}"
+                                       FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <TextBlock Text="{Binding SourceTitle}" Foreground="{DynamicResource TextMeta}"
+                                   FontSize="10" FontWeight="Medium" TextTrimming="CharacterEllipsis" MaxLines="1" />
+                    </StackPanel>
+
+                    <Border Grid.Column="2" Background="{Binding AccentGradient}" CornerRadius="10"
+                            Padding="9,4" VerticalAlignment="Center" IsVisible="{Binding HasCountText}">
+                        <TextBlock Text="{Binding CountText}" Foreground="#FFFFFF" FontSize="10" FontWeight="SemiBold" />
+                    </Border>
+                </Grid>
+
+                <!-- ===== 评论列表：一整块毛玻璃面板，条目之间细分隔线 ===== -->
+                <Border Background="{DynamicResource PanelBg}" BorderBrush="{DynamicResource PanelBorder}"
+                        BorderThickness="1" CornerRadius="14" Padding="12,2">
+                    <Border.BackdropEffect>
+                        <BlurEffect Radius="16" />
+                    </Border.BackdropEffect>
+                    <ItemsControl ItemsSource="{Binding Comments}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:CommentCardItem">
+                                <StackPanel>
+                                    <Border Height="0.75" Background="{DynamicResource Divider}" Margin="39,0,0,0"
+                                            IsVisible="{Binding ShowDivider}" />
+                                    <Grid ColumnDefinitions="30,*" Margin="0,11,0,11">
+                                        <!-- 头像 -->
+                                        <Grid Classes="avatar" Classes.author="{Binding IsAuthor}"
+                                              Width="30" Height="30" VerticalAlignment="Top">
+                                            <Ellipse Classes="ring" Width="30" Height="30"
+                                                     Fill="{Binding $parent[UserControl].((vm:CommentCardViewModel)DataContext).AccentGradient}" />
+                                            <Ellipse Classes="ring" Width="27.5" Height="27.5" Fill="{DynamicResource AvatarGap}" />
+                                            <Ellipse Classes="face" IsVisible="{Binding HasAvatar}">
+                                                <Ellipse.Fill>
+                                                    <ImageBrush Source="{Binding Avatar}" Stretch="UniformToFill" />
+                                                </Ellipse.Fill>
+                                            </Ellipse>
+                                            <Ellipse Classes="face" IsVisible="{Binding !HasAvatar}"
+                                                     Fill="{DynamicResource AvatarEmpty}" />
+                                        </Grid>
+
+                                        <StackPanel Grid.Column="1" Margin="9,0,0,0">
+                                            <!-- 昵称 + 作者标 / 点赞 -->
+                                            <Grid ColumnDefinitions="*,Auto" MinHeight="16">
+                                                <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding UserName}" Foreground="{DynamicResource TextName}"
+                                                               FontSize="11" FontWeight="SemiBold" MaxWidth="160"
+                                                               TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                    <Border IsVisible="{Binding IsAuthor}" CornerRadius="5" Padding="4.5,1"
+                                                            VerticalAlignment="Center"
+                                                            Background="{Binding $parent[UserControl].((vm:CommentCardViewModel)DataContext).AccentGradient}">
+                                                        <TextBlock Text="作者" Foreground="#FFFFFF" FontSize="7.5" FontWeight="Bold" />
+                                                    </Border>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="3"
+                                                            VerticalAlignment="Center" IsVisible="{Binding HasLikes}">
+                                                    <Path Data="{Binding $parent[UserControl].((vm:CommentCardViewModel)DataContext).LikeIcon, Converter={x:Static vm:MediaCardGeometryConverter.Instance}}"
+                                                          Fill="{DynamicResource IconMuted}" Stretch="Uniform" Width="9.5" Height="9.5"
+                                                          VerticalAlignment="Center" />
+                                                    <TextBlock Text="{Binding LikeText}" Foreground="{DynamicResource TextMeta}"
+                                                               FontSize="9.5" FontWeight="Medium" VerticalAlignment="Center" />
+                                                </StackPanel>
+                                            </Grid>
+
+                                            <!-- 正文 -->
+                                            <TextBlock Text="{Binding Message}" Foreground="{DynamicResource TextBody}"
+                                                       FontSize="11.5" LineHeight="17.5" TextWrapping="Wrap"
+                                                       MaxLines="12" TextTrimming="CharacterEllipsis" Margin="0,4,0,0" />
+
+                                            <!-- 评论图片：保持原比例，最大 168 -->
+                                            <Border IsVisible="{Binding HasImage}" CornerRadius="8" ClipToBounds="True"
+                                                    HorizontalAlignment="Left" Margin="0,7,0,0"
+                                                    BorderBrush="{DynamicResource PanelBorder}" BorderThickness="0.75">
+                                                <Image Source="{Binding Image}" Stretch="Uniform" MaxWidth="168" MaxHeight="168" />
+                                            </Border>
+
+                                            <!-- 时间 · 属地，回复数 -->
+                                            <TextBlock Text="{Binding Meta}" IsVisible="{Binding HasMeta}"
+                                                       Foreground="{DynamicResource TextMeta}" FontSize="9"
+                                                       Margin="0,6,0,0" TextTrimming="CharacterEllipsis" />
+                                            <Border IsVisible="{Binding HasReplies}" HorizontalAlignment="Left"
+                                                    Margin="0,7,0,0" CornerRadius="7" Padding="7,3,8,3"
+                                                    Background="{Binding $parent[UserControl].((vm:CommentCardViewModel)DataContext).AccentSoftGradient}">
+                                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                                    <Path Data="{Binding Source={x:Static vm:MediaCardIcons.Reply}, Converter={x:Static vm:MediaCardGeometryConverter.Instance}}"
+                                                          Fill="{Binding $parent[UserControl].((vm:CommentCardViewModel)DataContext).AccentGradient}"
+                                                          Stretch="Uniform" Width="8.5" Height="8.5" VerticalAlignment="Center" />
+                                                    <TextBlock Text="{Binding ReplyText}" Foreground="{DynamicResource TextName}"
+                                                               FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                                </StackPanel>
+                                            </Border>
+                                        </StackPanel>
+                                    </Grid>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Border>
+
+                <!-- ===== 底部：平台徽标 + 说明 / 署名 ===== -->
+                <Grid ColumnDefinitions="Auto,*" Margin="2,0">
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <Border Width="16" Height="16" CornerRadius="8" Background="#FFFFFF"
+                                IsVisible="{Binding IsBilibili}">
+                            <Path Data="{Binding Source={x:Static vm:MediaCardIcons.BilibiliTv}, Converter={x:Static vm:MediaCardGeometryConverter.Instance}}"
+                                  Fill="#00AEEC" Stretch="Uniform" Width="10" Height="10" />
+                        </Border>
+                        <Border Width="16" Height="16" CornerRadius="8" Background="#161823"
+                                IsVisible="{Binding IsDouyin}">
+                            <Path Data="{Binding Source={x:Static vm:MediaCardIcons.DouyinNote}, Converter={x:Static vm:MediaCardGeometryConverter.Instance}}"
+                                  Fill="#FFFFFF" Stretch="Uniform" Width="9" Height="9" />
+                        </Border>
+                        <TextBlock Text="{Binding FooterText}" Foreground="{DynamicResource TextMeta}"
+                                   FontSize="9" FontWeight="Medium" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="1" Text="{Binding BrandText}" Foreground="{DynamicResource BrandText}"
+                               FontSize="7" Opacity="0.8" VerticalAlignment="Center" HorizontalAlignment="Right"
+                               TextAlignment="Right" TextWrapping="Wrap" Margin="8,0,0,0" />
+                </Grid>
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>
