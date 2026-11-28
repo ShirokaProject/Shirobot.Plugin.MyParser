@@ -1,14 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-    <Version>0.6.20</Version>
-        <TargetFramework>net10.0</TargetFramework>
+    <Version>0.6.21</Version>
+        <TargetFramework>net11.0</TargetFramework>
         <Nullable>enable</Nullable>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <ImplicitUsings>enable</ImplicitUsings>
         <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
         <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
         <LocalSharpMp4Root>$(MSBuildProjectDirectory)\..\SharpMP4\src</LocalSharpMp4Root>
+        <!-- SharpMP4 copies all of its codec and ISOBMFF dependencies into its own output. -->
+        <LocalSharpMp4Bin>$(LocalSharpMp4Root)\SharpMP4\bin\$(Configuration)\net11.0\$(RuntimeIdentifier)\</LocalSharpMp4Bin>
         <ShiroBotPluginSharedAssemblies>ShiroBot.Model.QQ;ShiroBot.Model.Discord;ShiroBot.Model.Telegram</ShiroBotPluginSharedAssemblies>
         <ShiroBotPluginPackagingEnabled Condition="'$(Configuration)' == 'Release'">true</ShiroBotPluginPackagingEnabled>
         <ShiroBotAvaloniaPreviewerSupport Condition="'$(Configuration)' == 'Debug'">true</ShiroBotAvaloniaPreviewerSupport>
@@ -48,14 +50,14 @@
     </ItemGroup>
 
     <ItemGroup>
-        <Reference Include="SharpMP4" HintPath="$(LocalSharpMp4Root)\SharpMP4\bin\$(Configuration)\net10.0\$(RuntimeIdentifier)\SharpMP4.dll" />
-        <Reference Include="SharpISOBMFF" HintPath="$(LocalSharpMp4Root)\SharpISOBMFF\bin\$(Configuration)\net10.0\SharpISOBMFF.dll" />
-        <Reference Include="SharpMP4Common" HintPath="$(LocalSharpMp4Root)\SharpMP4Common\bin\$(Configuration)\net10.0\SharpMP4Common.dll" />
-        <Reference Include="SharpAV1" HintPath="$(LocalSharpMp4Root)\SharpAV1\bin\$(Configuration)\net10.0\SharpAV1.dll" />
-        <Reference Include="SharpH264" HintPath="$(LocalSharpMp4Root)\SharpH264\bin\$(Configuration)\net10.0\SharpH264.dll" />
-        <Reference Include="SharpH265" HintPath="$(LocalSharpMp4Root)\SharpH265\bin\$(Configuration)\net10.0\SharpH265.dll" />
-        <Reference Include="SharpH266" HintPath="$(LocalSharpMp4Root)\SharpH266\bin\$(Configuration)\net10.0\SharpH266.dll" />
-        <Reference Include="SharpH26X" HintPath="$(LocalSharpMp4Root)\SharpH26X\bin\$(Configuration)\net10.0\SharpH26X.dll" />
+        <Reference Include="SharpMP4" HintPath="$(LocalSharpMp4Bin)SharpMP4.dll" />
+        <Reference Include="SharpISOBMFF" HintPath="$(LocalSharpMp4Bin)SharpISOBMFF.dll" />
+        <Reference Include="SharpMP4Common" HintPath="$(LocalSharpMp4Bin)SharpMP4Common.dll" />
+        <Reference Include="SharpAV1" HintPath="$(LocalSharpMp4Bin)SharpAV1.dll" />
+        <Reference Include="SharpH264" HintPath="$(LocalSharpMp4Bin)SharpH264.dll" />
+        <Reference Include="SharpH265" HintPath="$(LocalSharpMp4Bin)SharpH265.dll" />
+        <Reference Include="SharpH266" HintPath="$(LocalSharpMp4Bin)SharpH266.dll" />
+        <Reference Include="SharpH26X" HintPath="$(LocalSharpMp4Bin)SharpH26X.dll" />
     </ItemGroup>
 
     <ItemGroup>
@@ -69,7 +71,7 @@
     <Target Name="BuildLocalSharpMp4" BeforeTargets="ResolveAssemblyReferences">
         <MSBuild Projects="$(LocalSharpMp4Root)\SharpMP4\SharpMP4.csproj"
                  Targets="Restore;Build"
-                 Properties="Configuration=$(Configuration);TargetFramework=net10.0;AutoGenerateCode=false;GeneratePackageOnBuild=false;ManagePackageVersionsCentrally=false" />
+                 Properties="Configuration=$(Configuration);TargetFramework=net11.0;LangVersion=15.0;Features=runtime-async=on;AutoGenerateCode=false;GeneratePackageOnBuild=false;ManagePackageVersionsCentrally=false" />
     </Target>
 
     <Target Name="RemoveBundledDependencySymbolsFromPublish" AfterTargets="Publish">

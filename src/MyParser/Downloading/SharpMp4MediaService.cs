@@ -7,9 +7,6 @@ namespace Shirobot.Plugin.MyParser.Downloading;
 
 internal static class SharpMp4MediaService
 {
-    private static readonly Action<Mp4Builder, uint, byte[], int, bool, long>? ProcessTimedRawSample =
-        CreateTimedRawSampleDelegate();
-
     public static void Mux(string videoPath, string audioPath, string outputPath)
     {
         using var videoStream = OpenRead(videoPath);
@@ -163,6 +160,7 @@ internal static class SharpMp4MediaService
         return container;
     }
 
+    // Each reader reuses one payload buffer; Mp4Builder copies the bytes it is given.
     private static void CopyInterleavedSamples(
         VideoReader videoReader,
         ITrack sourceVideoTrack,
@@ -172,10 +170,9 @@ internal static class SharpMp4MediaService
         ITrack outputAudioTrack,
         Mp4Builder builder)
     {
-        var processSample = ProcessTimedRawSample
-                            ?? throw new NotSupportedException("当前 SharpMP4 版本不支持保留逐样本时间戳。");
-        var videoSample = videoReader.ReadSample(sourceVideoTrack.TrackID);
-        var audioSample = audioReader.ReadSample(sourceAudioTrack.TrackID);
+        byte[] videoBuffer = null!, audioBuffer = null!;
+        var videoSample = videoReader.ReadSample(sourceVideoTrack.TrackID, ref videoBuffer, out var videoBytes);
+        var audioSample = audioReader.ReadSample(sourceAudioTrack.TrackID, ref audioBuffer, out var audioBytes);
 
         while (videoSample is not null || audioSample is not null)
         {
@@ -183,13 +180,13 @@ internal static class SharpMp4MediaService
                 || videoSample is not null
                 && CompareDecodeTime(videoSample, outputVideoTrack.Timescale, audioSample, outputAudioTrack.Timescale) <= 0)
             {
-                WriteSample(processSample, builder, outputVideoTrack.TrackID, videoSample!);
-                videoSample = videoReader.ReadSample(sourceVideoTrack.TrackID);
+                WriteSample(builder, outputVideoTrack.TrackID, videoSample!, videoBytes);
+                videoSample = videoReader.ReadSample(sourceVideoTrack.TrackID, ref videoBuffer, out videoBytes);
             }
             else
             {
-                WriteSample(processSample, builder, outputAudioTrack.TrackID, audioSample);
-                audioSample = audioReader.ReadSample(sourceAudioTrack.TrackID);
+                WriteSample(builder, outputAudioTrack.TrackID, audioSample, audioBytes);
+                audioSample = audioReader.ReadSample(sourceAudioTrack.TrackID, ref audioBuffer, out audioBytes);
             }
         }
     }
@@ -199,30 +196,16 @@ internal static class SharpMp4MediaService
         return ((decimal)left.DTS / leftTimescale).CompareTo((decimal)right.DTS / rightTimescale);
     }
 
-    private static void WriteSample(
-        Action<Mp4Builder, uint, byte[], int, bool, long> processSample,
-        Mp4Builder builder,
-        uint outputTrackId,
-        MediaSample sample)
+    private static void WriteSample(Mp4Builder builder, uint outputTrackId, MediaSample sample, int bytes)
     {
-        processSample(
-            builder,
+        builder.ProcessRawSample(
             outputTrackId,
             sample.Data,
+            0,
+            bytes,
             sample.Duration,
             sample.IsRandomAccessPoint,
             sample.PTS - sample.DTS);
-    }
-
-    private static Action<Mp4Builder, uint, byte[], int, bool, long>? CreateTimedRawSampleDelegate()
-    {
-        var method = typeof(Mp4Builder).GetMethod(
-            nameof(Mp4Builder.ProcessRawSample),
-            [typeof(uint), typeof(byte[]), typeof(int), typeof(bool), typeof(long)]);
-        return method is null
-            ? null
-            : (Action<Mp4Builder, uint, byte[], int, bool, long>)method.CreateDelegate(
-                typeof(Action<Mp4Builder, uint, byte[], int, bool, long>));
     }
 
     private static TrackBox? GetTrackBox(Container container, string handlerType)

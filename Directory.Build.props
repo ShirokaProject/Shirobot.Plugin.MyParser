@@ -3,5 +3,9 @@
     <ShiroBotSourceRoot Condition="'$(ShiroBotSourceRoot)' == '' and Exists('$(MSBuildThisFileDirectory)..\ShiroBot\SDK\ShiroBot.SDK.csproj')">$(MSBuildThisFileDirectory)..\ShiroBot</ShiroBotSourceRoot>
     <UseShiroBotSource Condition="'$(UseShiroBotSource)' == '' and '$(ShiroBotSourceRoot)' != '' and Exists('$(ShiroBotSourceRoot)\SDK\ShiroBot.SDK.csproj')">true</UseShiroBotSource>
     <UseShiroBotSource Condition="'$(UseShiroBotSource)' == ''">false</UseShiroBotSource>
+    <LangVersion>15.0</LangVersion>
+    <!-- .NET 11 runtime async: async methods compile without compiler-generated state machines. -->
+    <Features Condition="'$(Features)' == ''">runtime-async=on</Features>
+    <Features Condition="'$(Features)' != '' and !$(Features.Contains('runtime-async'))">$(Features),runtime-async=on</Features>
   </PropertyGroup>
 </Project>

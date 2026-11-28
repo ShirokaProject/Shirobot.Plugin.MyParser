@@ -8,7 +8,7 @@ using Shirobot.Plugin.MyParser.Parsing;
 
 var root = Path.Combine(Path.GetTempPath(), "myparser-temp-verification-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(root);
-var pluginAssembly = typeof(MyParser.Provider.BiliBili.Views.BiliCard).Assembly;
+var pluginAssembly = typeof(MyParser.Provider.BiliBili.Views.BiliLiveCard).Assembly;
 var runtime = typeof(PluginConfig).Assembly.GetType("Shirobot.Plugin.MyParser.MyParserRuntime", true)!;
 var bot = DispatchProxy.Create<IBotContext, TempBotContext>();
 var context = (TempBotContext)bot;
