@@ -13,5 +13,8 @@
     <PackageVersion Include="Avalonia" Version="12.2.0" />
     <PackageVersion Include="Avalonia.Skia" Version="12.2.0" />
     <PackageVersion Include="Avalonia.HarfBuzz" Version="12.2.0" />
+    <!-- 只给 Tests/CardPreview 离屏渲染卡片预览用。 -->
+    <PackageVersion Include="Avalonia.Headless" Version="12.2.0" />
+    <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.2.0" />
   </ItemGroup>
 </Project>

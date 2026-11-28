@@ -1,11 +1,11 @@
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 
-namespace MyParser.Provider.BiliBili.Views;
+namespace Shirobot.Plugin.MyParser.CardRendering;
 
-public partial class BiliBangumiCard : UserControl
+public partial class ForwardLongImage : UserControl
 {
-    public BiliBangumiCard()
+    public ForwardLongImage()
     {
         InitializeComponent();
     }

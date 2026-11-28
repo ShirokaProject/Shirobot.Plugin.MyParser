@@ -37,7 +37,7 @@ public sealed class BilibiliLiveParseProvider(BilibiliLiveParser parser) : IProv
             AuthorId = null,
             CoverUrl = result.CoverUrl,
             Description = result.RoomAudienceText,
-            Tags = [],
+            Tags = result.Tags.ToList(),
             Kind = ParsedMediaKind.Live,
             Assets = result.Streams.Select(stream => new MediaAsset
             {
@@ -54,8 +54,13 @@ public sealed class BilibiliLiveParseProvider(BilibiliLiveParser parser) : IProv
                 ["online"] = result.OnlineCount.ToString(), ["watched"] = result.WatchedText ?? result.WatchedCount.ToString(),
                 ["duration"] = result.LiveDuration?.ToString() ?? string.Empty,
                 ["anchor_avatar_url"] = result.AnchorAvatarUrl ?? string.Empty,
+                ["anchor_pendant_url"] = result.AnchorPendantUrl ?? string.Empty,
                 ["live_start"] = result.LiveStartTime?.ToString("O") ?? string.Empty,
                 ["audience_text"] = result.RoomAudienceText ?? string.Empty,
+                ["audience_count"] = result.RoomAudienceCount.ToString(),
+                ["watched_count"] = result.WatchedCount.ToString(),
+                ["area"] = result.AreaName ?? string.Empty,
+                ["parent_area"] = result.ParentAreaName ?? string.Empty,
             },
         };
     }

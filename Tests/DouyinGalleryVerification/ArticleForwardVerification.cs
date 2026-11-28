@@ -38,8 +38,12 @@ internal static class ArticleForwardVerification
                 new PluginConfig { SendCoverImages = true, SendVideoSegment = videoEnabled }, new GalleryProvider(), services, card)])!;
             var source = new MessageEvent { Platform = scenario == "non-qq" ? "telegram" : "qq", InstanceId = "test", Channel = new Channel("group", ChannelType.Group),
                 MessageId = "source", Sender = new User("tester"), Segments = [] };
-            await ((Task)type.GetMethod("PresentAsync", BindingFlags.NonPublic | BindingFlags.Instance)!
-                .Invoke(handler, [source, media, false, CancellationToken.None])!).WaitAsync(TimeSpan.FromSeconds(5));
+            try
+            {
+                await ((Task)type.GetMethod("PresentAsync", BindingFlags.NonPublic | BindingFlags.Instance)!
+                    .Invoke(handler, [source, media, false, CancellationToken.None])!).WaitAsync(TimeSpan.FromSeconds(5));
+            }
+            catch (Exception ex) { throw new Exception($"Article scenario {scenario} failed: {ex.Message}", ex); }
             var captured = (ArticleMessages)messages;
             if (scenario is "non-qq" or "no-raw" or "forward-rejected")
             {
@@ -79,7 +83,8 @@ public class ArticleMessages : DispatchProxy
     public object? Forward { get; private set; }
     protected override object? Invoke(MethodInfo? method, object?[]? args)
     {
-        if (method!.Name == "GetMessageCapabilities") return new MessageCapabilities { NativeFeatures = SupportsRaw ? MessageFeatures.Raw : MessageFeatures.Image };
+        if (method!.Name == "GetMessageCapabilities")
+            return new MessageCapabilities { NativeFeatures = MessageFeatures.Image | (SupportsRaw ? MessageFeatures.Raw : MessageFeatures.None) };
         if (method!.Name != "SendMessageAsync") throw new Exception("Article sent ordinary replies: " + method.Name);
         Sends++;
         if (RejectForward) return Task.FromException<SentMessage>(new NotSupportedException("Forward is unsupported by this adapter."));

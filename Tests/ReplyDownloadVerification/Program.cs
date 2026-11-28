@@ -64,7 +64,8 @@ await callbacks[0](Message("dl", instance: "two"));
 Check(uploads.Count == 0, "Unrelated replies, groups and instances must not upload.");
 await callbacks[0](Message(" DL "));
 await callbacks[0](Message("dl"));
-Check(uploads.Count == 2 && uploads.All(p => p == path), "Repeated dl replies must upload the original MP3 instead of Silk.");
+await callbacks[0](Message("MP3"));
+Check(uploads.Count == 3 && uploads.All(p => p == path), "Repeated dl / mp3 replies must upload the original MP3 instead of Silk.");
 failUpload = true;
 await callbacks[0](Message("dl"));
 Check(notices.Last().Contains("过期"), "Missing audio cache must provide recovery instructions.");
@@ -72,7 +73,7 @@ handler.Dispose();
 Check(subscriptionsDisposed == 1, "Unload must dispose subscriptions.");
 await callbacks[0](Message("dl"));
 Check(notices.Count == 1, "Disposed subscriptions must not upload.");
-Console.WriteLine("PASS: voice reply registration, original MP3 upload with Silk enabled, repeat dl, scene isolation, missing cache and unload.");
+Console.WriteLine("PASS: voice reply registration, original MP3 upload with Silk enabled, repeat dl / mp3, scene isolation, missing cache and unload.");
 
 static MessageEvent Message(string text, string group = "g", string instance = "one") => new()
 {

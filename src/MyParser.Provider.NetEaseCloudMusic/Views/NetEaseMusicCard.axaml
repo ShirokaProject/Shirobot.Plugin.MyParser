@@ -189,13 +189,21 @@
                     </StackPanel>
                 </Border>
 
-                <!-- ===== 底部：歌曲 ID / 署名 ===== -->
-                <Grid ColumnDefinitions="Auto,*" Margin="2,0">
-                    <TextBlock Text="{Binding FooterText}" Foreground="{DynamicResource TextMeta}" FontSize="9"
-                               FontWeight="Medium" VerticalAlignment="Center" />
-                    <TextBlock Grid.Column="1" Text="{Binding BrandText}" Foreground="{DynamicResource BrandText}"
-                               FontSize="7" Opacity="0.8" VerticalAlignment="Center" HorizontalAlignment="Right"
-                               TextAlignment="Right" TextWrapping="Wrap" Margin="8,0,0,0" />
+                <!-- ===== 底部：回复提示 / 署名 ===== -->
+                <Grid ColumnDefinitions="*,Auto" Margin="2,0">
+                    <!-- 回复提示：与歌词区同款半透明小胶囊 -->
+                    <Border IsVisible="{Binding HasReplyHint}" HorizontalAlignment="Left" VerticalAlignment="Center"
+                            Background="{DynamicResource PanelBg}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1"
+                            CornerRadius="10" Padding="7,3,9,3">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <Path Data="{Binding Source={x:Static card:MediaCardIcons.Download}, Converter={x:Static card:MediaCardGeometryConverter.Instance}}"
+                                  Fill="{Binding AccentGradient}" Stretch="Uniform" Width="10" Height="10" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding ReplyHint}" Foreground="{DynamicResource TextMeta}" FontSize="9"
+                                       FontWeight="Medium" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Border>
+                    <card:CardBrandMark Grid.Column="1" TextSize="8" Opacity="0.8" Margin="8,0,0,0"
+                                        TextElement.Foreground="{DynamicResource BrandText}" />
                 </Grid>
             </StackPanel>
         </Grid>

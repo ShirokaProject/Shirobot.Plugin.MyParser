@@ -50,23 +50,32 @@ internal static class EndHoldVerification
                     finally { Environment.SetEnvironmentVariable("PATH", originalPath); }
                     var baseline = Path.Combine(directory, $"baseline-{bframes}-{loops}.mp4");
                     sharp.GetMethod("MuxLoopingVideoWithAudio")!.Invoke(null, [source, null, baseline, CancellationToken.None, loops]);
-                    Check(Math.Abs(await Duration(output) - await Duration(baseline) - .8) < .05,
-                        $"Production entry point missed the final hold: output={await Duration(output)}, baseline={await Duration(baseline)}.");
+                    // 像 iPhone 实况照片：每一遍放完都定格 1 秒，再放下一遍。
+                    Check(Math.Abs(await Duration(output) - await Duration(baseline) - loops * Hold) < .05 * loops,
+                        $"Every loop must end with a hold: output={await Duration(output)}, baseline={await Duration(baseline)}, loops={loops}.");
+                    var holds = (await Frames(output)).Count(frame => Number(frame, "duration_time") > Hold);
+                    Check(holds == loops, $"Expected one held frame per loop, got {holds} for {loops} loops.");
                     await Run("ffmpeg", "-v", "error", "-i", output, "-f", "null", "-");
                 }
-                Console.WriteLine($"PASS: B-frames={bframes}, final frame held, PTS and media data preserved, native playback with 1/3 loops.");
+                Console.WriteLine($"PASS: B-frames={bframes}, frame held after every loop, PTS and media data preserved, native playback with 1/3 loops.");
             }
             // An MP4 beginning between keyframes forces the external fallback.
             var transport = Path.Combine(directory, "fallback.mp4");
             await Run("ffmpeg", "-v", "error", "-i", Path.Combine(directory, "source-0.mp4"), "-ss", "0.1", "-c", "copy", "-copyinkf", transport);
             var fallback = await (Task<string>)service.GetMethod("MuxLoopingVideoWithAudioAsync")!.Invoke(Activator.CreateInstance(service),
                 [new PluginConfig { FfmpegPath = "ffmpeg" }, transport, null, CancellationToken.None, 1])!;
-            Check(Math.Abs(await Duration(fallback) - (await Duration(transport) + .8)) < .15, "FFmpeg fallback missed the hold.");
+            Check(Math.Abs(await Duration(fallback) - (await Duration(transport) + Hold)) < .15, "FFmpeg fallback missed the hold.");
+            var looped = await (Task<string>)service.GetMethod("MuxLoopingVideoWithAudioAsync")!.Invoke(Activator.CreateInstance(service),
+                [new PluginConfig { FfmpegPath = "ffmpeg" }, transport, null, CancellationToken.None, 3])!;
+            Check(Math.Abs(await Duration(looped) - 3 * (await Duration(transport) + Hold)) < .3, "FFmpeg fallback must hold after every loop.");
             await Run("ffmpeg", "-v", "error", "-i", fallback, "-f", "null", "-");
-            Console.WriteLine("PASS: FFmpeg fallback ends with a cloned final frame.");
+            Console.WriteLine("PASS: FFmpeg fallback holds the final frame after every loop.");
         }
         finally { factory.SetValue(null, previous); Directory.Delete(directory, true); }
     }
+    /// <summary>与 ProviderDownloadService.LivePhotoHoldSeconds 一致。</summary>
+    private const double Hold = 1.0;
+
     private static async Task<JsonElement[]> Frames(string path)
     {
         using var doc = JsonDocument.Parse(await Run("ffprobe", "-v", "error", "-select_streams", "v:0", "-show_frames", "-of", "json", path));

@@ -77,6 +77,7 @@ public sealed partial class BilibiliArticleParser(HttpClient http)
             AuthorName = author?.GetStringOrDefault("name"),
             AuthorId = author?.GetInt64OrDefault("mid").ToString(),
             AuthorAvatarUrl = author?.GetStringOrDefault("face"),
+            AuthorPendantUrl = NonEmpty(author?.GetPropertyOrDefault("pendant")?.GetStringOrDefault("image")),
             AuthorFans = author?.GetInt64OrDefault("fans") ?? 0,
             ViewCount = stats?.GetInt64OrDefault("view") ?? 0,
             LikeCount = stats?.GetInt64OrDefault("like") ?? 0,
@@ -127,6 +128,9 @@ public sealed partial class BilibiliArticleParser(HttpClient http)
         string? authorName = null;
         string? authorId = basic?.GetInt64OrDefault("uid").ToString();
         string? avatar = null;
+        string? pendant = null;
+        string? official = null;
+        var hasTitleModule = false;
         long pubTs = 0;
         long like = 0, coin = 0, favorite = 0, share = 0, reply = 0;
         var imageUrls = new List<string>();
@@ -139,6 +143,7 @@ public sealed partial class BilibiliArticleParser(HttpClient http)
             if (moduleType == "MODULE_TYPE_TITLE")
             {
                 title = module.GetPropertyOrDefault("module_title")?.GetStringOrDefault("text") ?? title;
+                hasTitleModule = true;
             }
             else if (moduleType == "MODULE_TYPE_AUTHOR")
             {
@@ -146,6 +151,8 @@ public sealed partial class BilibiliArticleParser(HttpClient http)
                 authorName = author?.GetStringOrDefault("name") ?? authorName;
                 authorId = author?.GetInt64OrDefault("mid").ToString() ?? authorId;
                 avatar = author?.GetStringOrDefault("face") ?? avatar;
+                pendant = NonEmpty(author?.GetPropertyOrDefault("pendant")?.GetStringOrDefault("image")) ?? pendant;
+                official = NonEmpty(author?.GetPropertyOrDefault("official")?.GetStringOrDefault("title")) ?? official;
                 pubTs = author?.GetInt64OrDefault("pub_ts") ?? pubTs;
             }
             else if (moduleType == "MODULE_TYPE_STAT")
@@ -170,6 +177,8 @@ public sealed partial class BilibiliArticleParser(HttpClient http)
             Cvid = cvid,
             OpusId = opusId,
             IsOpus = true,
+            IsDynamic = !hasTitleModule,
+            AuthorOfficial = official,
             SourceUrl = $"https://www.bilibili.com/opus/{opusId}",
             Title = title,
             Summary = TrimText(plainText, 180),
@@ -180,6 +189,7 @@ public sealed partial class BilibiliArticleParser(HttpClient http)
             AuthorName = authorName,
             AuthorId = authorId,
             AuthorAvatarUrl = avatar,
+            AuthorPendantUrl = pendant,
             LikeCount = like,
             CoinCount = coin,
             FavoriteCount = favorite,
@@ -729,4 +739,6 @@ public sealed partial class BilibiliArticleParser(HttpClient http)
     private static Regex TagRegex() => TagPattern;
 
     private static Regex MultiBlankLineRegex() => MultiBlankLinePattern;
+
+    private static string? NonEmpty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 }

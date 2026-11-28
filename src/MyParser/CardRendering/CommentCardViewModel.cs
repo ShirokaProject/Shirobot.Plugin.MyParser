@@ -33,6 +33,8 @@ public sealed class CommentCardViewModel
     /// <summary>右上角胶囊，例如 "热评 10"。</summary>
     public string CountText { get; init; } = string.Empty;
     public bool HasCountText => !string.IsNullOrWhiteSpace(CountText);
+    /// <summary>评论里有图片时，底部提示「回复 原图 获取评论图片」。</summary>
+    public bool HasImageHint => Comments.Any(comment => comment.Image is not null);
 
     /// <summary>点赞图标：B 站用竖拇指，抖音用爱心。</summary>
     public string LikeIcon => Platform.IsDouyin ? MediaCardIcons.Heart : MediaCardIcons.ThumbUp;
@@ -40,13 +42,7 @@ public sealed class CommentCardViewModel
 
     public IReadOnlyList<CommentCardItem> Comments { get; init; } = [];
 
-    public string BrandText { get; } = $"By ShirokaProject && MyParser v{PluginVersion}";
 
-    private static string PluginVersion { get; } =
-        typeof(CommentCardViewModel).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
-            .InformationalVersion.Split('+')[0]
-        ?? typeof(CommentCardViewModel).Assembly.GetName().Version?.ToString(3)
-        ?? "unknown";
 
     /// <summary>"3 分钟前" / "5 天前" / "11-02" / "2025-11-02"。</summary>
     public static string FormatRelativeTime(DateTimeOffset timestamp, DateTimeOffset? now = null)

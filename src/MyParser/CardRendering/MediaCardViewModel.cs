@@ -89,18 +89,32 @@ public sealed class MediaCardViewModel
     // ---- 作者 ----
     public Bitmap? Avatar { get; init; } = LoadDesignBitmap("avatar.jpg");
     public bool HasAvatar => Avatar is not null;
+    /// <summary>官方账号头像（如番剧）小一号、不加渐变描边，和普通用户区分。</summary>
+    public bool CompactAvatar { get; init; }
+    public double AvatarImageSize => AvatarLayout.AvatarSize;
+    /// <summary>是否画平台渐变描边。B 站设为 false：有头像框就显示头像框，没有就只显示头像。</summary>
+    public bool AvatarRing { get; init; } = true;
+    /// <summary>B 站头像框（装扮挂件），透明 PNG，按头像的 1.75 倍显示。</summary>
+    public Bitmap? AvatarPendant { get; init; }
+    public bool HasAvatarPendant => AvatarPendant is not null;
+    public bool ShowAvatarRing => AvatarRing && !CompactAvatar && !HasAvatarPendant;
+    // 头像框大小和四周间距按头像框实际装饰范围动态计算，见 AvatarPendantLayout。
+    public double PendantSize => AvatarLayout.PendantSize;
+    public Thickness PendantMargin => AvatarLayout.PendantMargin;
+    public Thickness AuthorTextMargin => AvatarLayout.TextMargin;
+    public Thickness AuthorRowMargin => AvatarLayout.RowMargin;
+    public Thickness AvatarColumnMargin => AvatarLayout.ColumnMargin;
+    private AvatarPendantLayout AvatarLayout => _avatarLayout ??= AvatarPendantLayout.Create(AvatarPendant, unitSize: 44, maxAvatar: 32, ringSize: 38, textGap: 5, new AvatarPendantLayout(CompactAvatar ? 26 : 32, 0, default, default, new Thickness(0, 2, 0, 0),
+            new Thickness(CompactAvatar ? 7 : 9, 0, 0, 0)));
+    private AvatarPendantLayout? _avatarLayout;
+
+    /// <summary>「哔哩哔哩番剧」官方账号头像（内嵌资源）。</summary>
+    public static Bitmap? BilibiliBangumiAvatar => EmbeddedBitmaps.Load(ref _bangumiAvatar, "MyParser.Bilibili.BangumiAvatar.jpg", 26);
+    private static Bitmap? _bangumiAvatar;
     public string AuthorName { get; init; } = "作者名字";
     public string AvatarInitial => string.IsNullOrWhiteSpace(AuthorName) ? "?" : char.ConvertFromUtf32(char.ConvertToUtf32(AuthorName.Trim(), 0));
     public string AuthorMeta { get; init; } = "IP属地：广东";
     public bool HasAuthorMeta => !string.IsNullOrWhiteSpace(AuthorMeta);
-    public string BrandText { get; } = $"By ShirokaProject && MyParser v{PluginVersion}";
-
-    private static string PluginVersion { get; } =
-        typeof(MediaCardViewModel).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
-            .InformationalVersion.Split('+')[0]
-        ?? typeof(MediaCardViewModel).Assembly.GetName().Version?.ToString(3)
-        ?? "unknown";
-
     private LinearGradientBrush Gradient(double primaryOpacity, double secondaryOpacity) =>
         Platform.CreateGradient(primaryOpacity, secondaryOpacity);
 
@@ -211,10 +225,13 @@ public static class MediaCardIcons
     public const string Play = "M8 5.14v13.72a1 1 0 0 0 1.5.86l10.6-6.86a1 1 0 0 0 0-1.72L9.5 4.28A1 1 0 0 0 8 5.14z";
     public const string ThumbUp = "M2 10.5A1.5 1.5 0 0 1 3.5 9h1A1.5 1.5 0 0 1 6 10.5v9A1.5 1.5 0 0 1 4.5 21h-1A1.5 1.5 0 0 1 2 19.5v-9zM8 10.3c0-.5.2-1 .6-1.4l5.1-5.6c.8-.9 2.3-.5 2.6.7.1.4.1.8 0 1.2L15.4 9h4.1c1.6 0 2.8 1.5 2.4 3.1l-1.6 6.6A3 3 0 0 1 17.4 21H10a2 2 0 0 1-2-2v-8.7z";
     public const string Heart = "M12 20.6l-1.3-1.2C6 15.2 3 12.4 3 8.9 3 6.1 5.2 4 7.9 4c1.6 0 3.1.7 4.1 1.9C13 4.7 14.5 4 16.1 4 18.8 4 21 6.1 21 8.9c0 3.5-3 6.3-7.7 10.5L12 20.6z";
-    public const string Coin = "M12 2.5a9.5 9.5 0 1 1 0 19 9.5 9.5 0 0 1 0-19zm0 2a7.5 7.5 0 1 0 0 15 7.5 7.5 0 0 0 0-15zM8.5 8h7a1 1 0 0 1 0 2H13v6a1 1 0 0 1-2 0v-6H8.5a1 1 0 0 1 0-2z";
+    /// <summary>B 站官方投币图标（视频页工具栏，28×28 视图）。</summary>
+    public const string Coin = "M14.045 25.5454C7.69377 25.5454 2.54504 20.3967 2.54504 14.0454C2.54504 7.69413 7.69377 2.54541 14.045 2.54541C20.3963 2.54541 25.545 7.69413 25.545 14.0454C25.545 17.0954 24.3334 20.0205 22.1768 22.1771C20.0201 24.3338 17.095 25.5454 14.045 25.5454ZM9.66202 6.81624H18.2761C18.825 6.81624 19.27 7.22183 19.27 7.72216C19.27 8.22248 18.825 8.62807 18.2761 8.62807H14.95V10.2903C17.989 10.4444 20.3766 12.9487 20.3855 15.9916V17.1995C20.3854 17.6997 19.9799 18.1052 19.4796 18.1052C18.9793 18.1052 18.5738 17.6997 18.5737 17.1995V15.9916C18.5667 13.9478 16.9882 12.2535 14.95 12.1022V20.5574C14.95 21.0577 14.5444 21.4633 14.0441 21.4633C13.5437 21.4633 13.1382 21.0577 13.1382 20.5574V12.1022C11.1 12.2535 9.52148 13.9478 9.51448 15.9916V17.1995C9.5144 17.6997 9.10883 18.1052 8.60856 18.1052C8.1083 18.1052 7.70273 17.6997 7.70265 17.1995V15.9916C7.71158 12.9487 10.0992 10.4444 13.1382 10.2903V8.62807H9.66202C9.11309 8.62807 8.66809 8.22248 8.66809 7.72216C8.66809 7.22183 9.11309 6.81624 9.66202 6.81624Z";
     public const string Star = "M12 2.6l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 16.9l-5.6 2.9 1.1-6.2L3 9.2l6.2-.9z";
     public const string Comment = "M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v9a2.5 2.5 0 0 1-2.5 2.5H10l-4.3 3.4c-.7.5-1.7.1-1.7-.8V5.5zM8 9a1.2 1.2 0 1 0 0 2.4A1.2 1.2 0 0 0 8 9zm4 0a1.2 1.2 0 1 0 0 2.4A1.2 1.2 0 0 0 12 9zm4 0a1.2 1.2 0 1 0 0 2.4A1.2 1.2 0 0 0 16 9z";
     public const string Share = "M13 4.6c0-.9 1-1.3 1.7-.7l7 6.4c.4.4.4 1.1 0 1.5l-7 6.4c-.7.6-1.7.2-1.7-.7V14c-4.3 0-7.3 1.4-9.4 4.6-.3.5-1.1.2-1-.4C3.4 12.6 6.8 9.4 13 8.9V4.6z";
+    /// <summary>下载：向下箭头 + 托盘。</summary>
+    public const string Download = "M12 3a1 1 0 0 1 1 1v8.59l2.3-2.3a1 1 0 1 1 1.4 1.42l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.42l2.3 2.3V4a1 1 0 0 1 1-1zM5 15a1 1 0 0 1 1 1v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2a1 1 0 1 1 2 0v2a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3v-2a1 1 0 0 1 1-1z";
     public const string Music = "M9 18.5a3.5 3.5 0 1 1-2-3.16V6.2c0-.7.5-1.3 1.2-1.5l9.5-2.1c.9-.2 1.8.5 1.8 1.5v11.4a3.5 3.5 0 1 1-2-3.16V7.6L9 9.4v9.1z";
     public const string Image = "M5.5 3h13A2.5 2.5 0 0 1 21 5.5v13a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 18.5v-13A2.5 2.5 0 0 1 5.5 3zm3 3.5a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM5 17.6V18.5c0 .3.2.5.5.5h13c.3 0 .5-.2.5-.5v-3.1l-3.3-3.3a1 1 0 0 0-1.4 0L9.5 17l-1.8-1.8a1 1 0 0 0-1.4 0L5 17.6z";
     public const string Reply = "M10 8.2V5.6c0-.9-1-1.3-1.7-.7l-5.6 5.2c-.4.4-.4 1.1 0 1.5l5.6 5.2c.7.6 1.7.2 1.7-.7v-2.6c4.4 0 7.5 1.3 9.6 4.4.4.5 1.2.2 1.1-.4C20 11.6 16.4 8.6 10 8.2z";

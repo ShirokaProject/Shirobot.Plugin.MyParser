@@ -17,6 +17,9 @@ public sealed partial class NetEaseMusicCardViewModel
 {
     public MediaCardPlatform Platform => MediaCardPlatform.NetEase;
     public IBrush AccentGradient => Platform.CreateGradient(1, 1);
+    /// <summary>左下角提示：回复卡片 mp3 获取音频文件（1 小时内有效）。</summary>
+    public string ReplyHint { get; init; } = "回复 mp3 获取原音频";
+    public bool HasReplyHint => !string.IsNullOrWhiteSpace(ReplyHint);
     public IBrush AccentSoftGradient => Platform.CreateGradient(0.13, 0.13);
     public IBrush AccentTintGradient => Platform.CreateGradient(0.2, 0.16);
     public IBrush BadgeBrush => new SolidColorBrush(Platform.BadgeBackground);
@@ -52,12 +55,7 @@ public sealed partial class NetEaseMusicCardViewModel
     public bool HasNoLyrics => Lyrics.Count == 0;
     public string EmptyLyricText { get; init; } = "暂无歌词，请欣赏";
 
-    public string SongIdText { get; init; } = "1234567890";
-    public string FooterText => string.IsNullOrWhiteSpace(SongIdText) ? Platform.Name : $"{Platform.Name} · {SongIdText}";
 
-    public string BrandText { get; } = "By ShirokaProject && MyParser v" +
-        (typeof(NetEaseMusicCardViewModel).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
-            .InformationalVersion.Split('+')[0] ?? "unknown");
 
     private static Bitmap? LoadDesignCover(bool avatar = false, [CallerFilePath] string sourcePath = "")
     {

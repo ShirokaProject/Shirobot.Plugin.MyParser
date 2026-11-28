@@ -9,7 +9,8 @@ namespace Shirobot.Plugin.MyParser.Downloading;
 
 internal sealed class ProviderDownloadService
 {
-    private const double LivePhotoEndHoldSeconds = 0.8;
+    /// <summary>Live Photo 每放完一遍定格的时长（像 iPhone 实况照片：动一下，停住，再动）。</summary>
+    private const double LivePhotoHoldSeconds = 1.0;
     public Task<(string FileUri, string LocalPath)> DownloadProviderVideoAsync(
         PluginConfig config,
         ProviderVideoDownloadRequest request,
@@ -102,14 +103,14 @@ internal sealed class ProviderDownloadService
         {
             try
             {
-                await Task.Run(() => SharpMp4MediaService.MuxLoopingVideoWithAudio(visualPath, audioPath, outputPath, cancellationToken, loopCount), cancellationToken);
-                var heldPath = outputPath + ".hold.mp4";
+                // 先给单段视频末尾加定格，再循环这一段：每一遍都是「播放 → 定格 → 再播放」。
+                var heldClipPath = outputPath + ".clip.mp4";
                 try
                 {
-                    await Task.Run(() => SharpMp4MediaService.HoldLastFrame(outputPath, heldPath, LivePhotoEndHoldSeconds, cancellationToken), cancellationToken);
-                    File.Move(heldPath, outputPath, overwrite: true);
+                    await Task.Run(() => SharpMp4MediaService.HoldLastFrame(visualPath, heldClipPath, LivePhotoHoldSeconds, cancellationToken), cancellationToken);
+                    await Task.Run(() => SharpMp4MediaService.MuxLoopingVideoWithAudio(heldClipPath, audioPath, outputPath, cancellationToken, loopCount), cancellationToken);
                 }
-                finally { File.Delete(heldPath); }
+                finally { File.Delete(heldClipPath); }
                 await ValidateMuxedVideoAsync(outputPath, cancellationToken);
                 if (config.MaxVideoDownloadMegabytes > 0
                     && new FileInfo(outputPath).Length > config.MaxVideoDownloadMegabytes * 1024L * 1024L)
@@ -131,10 +132,10 @@ internal sealed class ProviderDownloadService
                      ?? throw new InvalidOperationException("图文合成音乐需要 ffmpeg；请配置 FfmpegPath 或将 ffmpeg 加入 PATH。");
         var duration = await ProbeMediaDurationAsync(ffmpeg, stillImage ? audioPath! : visualPath, cancellationToken, video: !stillImage);
         var originalDuration = duration;
-        if (!stillImage) duration *= loopCount;
+        // 每一遍 = 原视频 + 定格；循环 loopCount 遍，配乐更长时一直循环到配乐结束。
+        if (!stillImage) duration = (duration + LivePhotoHoldSeconds) * loopCount;
         if (mixAudio) duration = Math.Max(duration, await ProbeMediaDurationAsync(ffmpeg, audioPath!, cancellationToken));
         var motionDuration = duration;
-        if (!stillImage) duration += LivePhotoEndHoldSeconds;
         var psi = new ProcessStartInfo
         {
             FileName = ffmpeg,
@@ -150,11 +151,6 @@ internal sealed class ProviderDownloadService
             psi.ArgumentList.Add("1");
             psi.ArgumentList.Add("-framerate");
             psi.ArgumentList.Add("20");
-        }
-        else
-        {
-            psi.ArgumentList.Add("-stream_loop");
-            psi.ArgumentList.Add(mixAudio ? "-1" : (loopCount - 1).ToString(CultureInfo.InvariantCulture));
         }
 
         psi.ArgumentList.Add("-i");
@@ -192,7 +188,8 @@ internal sealed class ProviderDownloadService
         {
             foreach (var argument in new[]
                      {
-                         "-vf", $"trim=duration={motionDuration.ToString(CultureInfo.InvariantCulture)},tpad=stop_mode=clone:stop_duration={LivePhotoEndHoldSeconds.ToString(CultureInfo.InvariantCulture)},scale=trunc(iw/2)*2:trunc(ih/2)*2",
+                         // 末尾定格后整段循环（Live Photo 只有几秒，loop 滤镜缓存的帧数很少）；时长由 -t 截断。
+                         "-vf", $"tpad=stop_mode=clone:stop_duration={LivePhotoHoldSeconds.ToString(CultureInfo.InvariantCulture)},loop=loop=-1:size=32767:start=0,scale=trunc(iw/2)*2:trunc(ih/2)*2",
                          "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
                      })
                 psi.ArgumentList.Add(argument);

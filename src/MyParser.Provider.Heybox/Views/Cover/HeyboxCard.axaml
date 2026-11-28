@@ -164,8 +164,8 @@
                     <Border Width="6" Height="6" CornerRadius="3" Background="{DynamicResource Accent}" VerticalAlignment="Center" />
                     <TextBlock Text="小黑盒 · heybox" Classes="meta" VerticalAlignment="Center" />
                 </StackPanel>
-                <TextBlock Grid.Column="1" Text="{Binding BrandText}" Foreground="{DynamicResource TextMeta}" FontSize="9"
-                           HorizontalAlignment="Right" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="12,0,0,0" />
+                <cr:CardBrandMark Grid.Column="1" TextSize="9" Margin="12,0,0,0" VerticalAlignment="Center"
+                                  TextElement.Foreground="{DynamicResource TextMeta}" />
             </Grid>
         </StackPanel>
     </Border>

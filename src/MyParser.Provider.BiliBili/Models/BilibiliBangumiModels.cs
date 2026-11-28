@@ -14,6 +14,10 @@ public sealed record BilibiliBangumiParseResult
     public string? RatingText { get; init; }
     public string? PlayText { get; init; }
     public string? FollowText { get; init; }
+    public long ViewCount { get; init; }
+    public long FollowCount { get; init; }
+    public string? RatingScore { get; init; }
+    public long RatingCount { get; init; }
     public IReadOnlyList<string> Styles { get; init; } = [];
     public IReadOnlyList<BilibiliBangumiEpisodeInfo> Episodes { get; init; } = [];
 }

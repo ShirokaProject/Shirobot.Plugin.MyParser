@@ -44,9 +44,6 @@ public sealed class HeyboxArticleDocumentViewModel
         HeyboxArticleBlockViewModel.Video("https://example.com/video.mp4"),
     ];
 
-    public string BrandText { get; } = "By ShirokaProject && MyParser v" +
-        (typeof(HeyboxArticleDocumentViewModel).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
-            .InformationalVersion.Split('+')[0] ?? "unknown");
 
     private static Bitmap? LoadDesignBitmap(string fileName, [CallerFilePath] string sourceFilePath = "")
     {
@@ -82,23 +79,18 @@ public sealed class HeyboxArticleBlockViewModel
     /// <summary>一级标题 22，二级 19，更低 17。</summary>
     public double HeadingSize => Level <= 1 ? 22 : Level == 2 ? 19 : 17;
 
-    /// <summary>横图占满正文宽度；竖图最高为正文宽度的 1.25 倍，宽度按比例缩小后居中。</summary>
-    public double ImageHeight => ImageSize.Height;
-    public double ImageWidth => ImageSize.Width;
+    /// <summary>
+    /// 图片区域总是撑满正文宽度。横图按比例算高度；竖图最高为正文宽度的 1.25 倍，
+    /// 超出时原图完整地居中显示，两侧用同一张图模糊放大铺底（<see cref="HasBackdrop"/>），不裁内容。
+    /// </summary>
+    public double ImageWidth => HeyboxArticleDocumentViewModel.ContentWidth;
+    public double ImageHeight => Math.Min(NaturalHeight, MaxImageHeight);
+    public bool HasBackdrop => IsImage && NaturalHeight > MaxImageHeight + 1;
 
-    private (double Width, double Height) ImageSize
-    {
-        get
-        {
-            if (Image is not { PixelSize: { Width: > 0, Height: > 0 } size }) return (0, 0);
-            const double width = HeyboxArticleDocumentViewModel.ContentWidth;
-            const double maxHeight = width * 1.25;
-            var natural = width * size.Height / size.Width;
-            return natural <= maxHeight
-                ? (width, Math.Round(natural))
-                : (Math.Round(maxHeight * size.Width / size.Height), maxHeight);
-        }
-    }
+    private const double MaxImageHeight = HeyboxArticleDocumentViewModel.ContentWidth * 1.25;
+    private double NaturalHeight => Image is { PixelSize: { Width: > 0, Height: > 0 } size }
+        ? Math.Round(HeyboxArticleDocumentViewModel.ContentWidth * size.Height / size.Width)
+        : 0;
 
     public static HeyboxArticleBlockViewModel Paragraph(string text) => new() { Kind = HeyboxArticleBlockKind.Paragraph, Text = text };
     public static HeyboxArticleBlockViewModel Heading(string text, int level) => new() { Kind = HeyboxArticleBlockKind.Heading, Text = text, Level = level };

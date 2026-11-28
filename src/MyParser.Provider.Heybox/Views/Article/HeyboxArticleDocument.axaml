@@ -132,7 +132,16 @@
                                 <StackPanel IsVisible="{Binding IsImage}" Spacing="6">
                                     <Border CornerRadius="4" ClipToBounds="True" Width="{Binding ImageWidth}" Height="{Binding ImageHeight}"
                                             HorizontalAlignment="Center" Background="{DynamicResource Placeholder}">
-                                        <Image Source="{Binding Image}" Stretch="UniformToFill" />
+                                        <Panel>
+                                            <!-- 竖图：同一张图模糊放大铺满背景，再压一层暗色，原图完整居中 -->
+                                            <Image Source="{Binding Image}" Stretch="UniformToFill" IsVisible="{Binding HasBackdrop}" Margin="-24">
+                                                <Image.Effect>
+                                                    <BlurEffect Radius="70" />
+                                                </Image.Effect>
+                                            </Image>
+                                            <Border Background="#4D000000" IsVisible="{Binding HasBackdrop}" />
+                                            <Image Source="{Binding Image}" Stretch="Uniform" />
+                                        </Panel>
                                     </Border>
                                     <TextBlock IsVisible="{Binding HasCaption}" Text="{Binding Caption}" Foreground="{DynamicResource TextMeta}"
                                                FontSize="12" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" />
@@ -186,8 +195,8 @@
                     <Border Width="6" Height="6" CornerRadius="3" Background="{DynamicResource Accent}" VerticalAlignment="Center" />
                     <TextBlock Text="小黑盒 · heybox" Foreground="{DynamicResource TextMeta}" FontSize="12" VerticalAlignment="Center" />
                 </StackPanel>
-                <TextBlock Grid.Column="1" Text="{Binding BrandText}" Foreground="{DynamicResource TextMeta}" FontSize="10"
-                           HorizontalAlignment="Right" VerticalAlignment="Center" />
+                <cr:CardBrandMark Grid.Column="1" TextSize="10" VerticalAlignment="Center"
+                                  TextElement.Foreground="{DynamicResource TextMeta}" />
             </Grid>
         </StackPanel>
     </Border>

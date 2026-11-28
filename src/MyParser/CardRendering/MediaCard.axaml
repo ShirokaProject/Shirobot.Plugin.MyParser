@@ -61,8 +61,6 @@
     <UserControl.Styles>
         <Style Selector="Border.glass">
             <Setter Property="Background" Value="#570B0D12" />
-            <Setter Property="BorderBrush" Value="#47FFFFFF" />
-            <Setter Property="BorderThickness" Value="0.75" />
             <Setter Property="CornerRadius" Value="13" />
             <Setter Property="BackdropEffect">
                 <BlurEffect Radius="16" />
@@ -137,7 +135,7 @@
             </Border>
 
             <!-- ===== 角标：统一的毛玻璃胶囊，平台区分只体现在图标圆片上 =====
-                 注意：Avalonia 12.2 中 BoxShadow 与 BackdropEffect 叠用会在 2x 渲染下错位，这里只用描边 -->
+                 注意：Avalonia 12.2 中 BoxShadow 与 BackdropEffect 叠用会在 2x 渲染下错位，这里不加阴影也不加描边 -->
             <Grid ZIndex="10" VerticalAlignment="Top" Margin="12,12,12,0" ColumnDefinitions="Auto,*">
                 <Border Classes="glass" Padding="3,3,11,3">
                     <StackPanel Orientation="Horizontal" Spacing="6">
@@ -268,22 +266,29 @@
                     </Border>
 
                     <!-- 作者 + 署名 -->
-                    <Grid ColumnDefinitions="Auto,*" Margin="0,2,0,0">
-                        <Grid ColumnDefinitions="38,Auto" MaxWidth="200" VerticalAlignment="Center">
-                            <!-- 渐变描边头像 -->
-                            <Ellipse Width="38" Height="38" Fill="{Binding AccentGradient}" />
-                            <Ellipse Width="34.5" Height="34.5" Fill="{DynamicResource AvatarGap}" />
-                            <Ellipse Width="32" Height="32" IsVisible="{Binding HasAvatar}">
+                    <!-- 署名列按内容取宽，作者列占剩余宽度：名字过长时截断成省略号，不会压到右下角署名 -->
+                    <Grid ColumnDefinitions="*,Auto" Margin="{Binding AuthorRowMargin}">
+                        <Grid ColumnDefinitions="Auto,*" MaxWidth="240" HorizontalAlignment="Left" VerticalAlignment="Center"
+                              Margin="{Binding AvatarColumnMargin}">
+                            <!-- 渐变描边头像：B 站不加描边（有头像框时用头像框），官方账号（如番剧）小一号 -->
+                            <Ellipse Width="38" Height="38" Fill="{Binding AccentGradient}" IsVisible="{Binding ShowAvatarRing}" />
+                            <Ellipse Width="34.5" Height="34.5" Fill="{DynamicResource AvatarGap}" IsVisible="{Binding ShowAvatarRing}" />
+                            <Ellipse Width="{Binding AvatarImageSize}" Height="{Binding AvatarImageSize}" IsVisible="{Binding HasAvatar}">
                                 <Ellipse.Fill>
                                     <ImageBrush Source="{Binding Avatar}" Stretch="UniformToFill" />
                                 </Ellipse.Fill>
                             </Ellipse>
-                            <Ellipse Width="32" Height="32" IsVisible="{Binding !HasAvatar}"
+                            <Ellipse Width="{Binding AvatarImageSize}" Height="{Binding AvatarImageSize}" IsVisible="{Binding !HasAvatar}"
                                      Fill="{Binding AccentSoftGradient}" />
                             <!-- 没有头像时显示昵称首字 -->
                             <TextBlock Text="{Binding AvatarInitial}" IsVisible="{Binding !HasAvatar}" Foreground="{Binding PrimaryBrush}"
                                        FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1" Margin="9,0,0,0">
+                            <!-- B 站头像框：按官方比例（头像 1.75 倍）居中叠在头像上，负边距让它溢出而不撑大布局；
+                                 装饰大的头像框整体缩小，间距按装饰实际伸出范围留（AvatarPendantLayout） -->
+                            <Image Source="{Binding AvatarPendant}" IsVisible="{Binding HasAvatarPendant}"
+                                   Width="{Binding PendantSize}" Height="{Binding PendantSize}" Margin="{Binding PendantMargin}" Stretch="Uniform"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1" Margin="{Binding AuthorTextMargin}">
                                 <TextBlock Text="{Binding AuthorName}" Foreground="{DynamicResource TextTitle}"
                                            FontSize="12" FontWeight="Bold" TextTrimming="CharacterEllipsis" />
                                 <TextBlock Text="{Binding AuthorMeta}" IsVisible="{Binding HasAuthorMeta}"
@@ -291,9 +296,9 @@
                                            TextTrimming="CharacterEllipsis" />
                             </StackPanel>
                         </Grid>
-                        <TextBlock Grid.Column="1" Text="{Binding BrandText}" Foreground="{DynamicResource BrandText}"
-                                   FontSize="7" Opacity="0.8" VerticalAlignment="Bottom" HorizontalAlignment="Right"
-                                   TextAlignment="Right" TextWrapping="Wrap" Margin="8,0,0,2" />
+                        <!-- 署名：上行插件版本，下行 Powered By [ShiroBot 头像] ShiroBot -->
+                        <vm:CardBrandMark Grid.Column="1" TextSize="8" Opacity="0.8" Margin="8,0,0,1"
+                                          TextElement.Foreground="{DynamicResource BrandText}" />
                     </Grid>
                 </StackPanel>
             </Border>

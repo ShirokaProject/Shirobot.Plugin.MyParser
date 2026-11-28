@@ -34,27 +34,34 @@ internal sealed class BilibiliMediaCardRenderer(ProviderCardRenderContext contex
         var avatarTask = media.ProviderId == "bilibili-bangumi"
             ? Task.FromResult<Bitmap?>(null)
             : LoadVideoAvatarAsync(media, cancellationToken);
+        var pendantTask = media.ProviderId == "bilibili-bangumi"
+            ? Task.FromResult<Bitmap?>(null)
+            : LoadOptionalImageAsync(Value(media, "author_pendant_url"), media, "video_pendant", cancellationToken, avatarSize: PendantSize);
         try
         {
-            await Task.WhenAll(coverTask, avatarTask).ConfigureAwait(false);
+            await Task.WhenAll(coverTask, avatarTask, pendantTask).ConfigureAwait(false);
             var cover = await coverTask.ConfigureAwait(false);
             var avatar = await avatarTask.ConfigureAwait(false);
 
             if (media.ProviderId == "bilibili-bangumi")
             {
-                var model = CreateBangumiViewModel(media, cover);
-                return await context.HostServices.RenderCardUriAsync<BiliBangumiCard>(model, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
+                var model = CreateBangumiViewModel(media, cover, MediaCardViewModel.BilibiliBangumiAvatar);
+                return await context.HostServices.RenderCardUriAsync<MediaCard>(model, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
             }
 
-            var viewModel = CreateVideoViewModel(media, cover, avatar);
+            var viewModel = CreateVideoViewModel(media, cover, avatar, await pendantTask.ConfigureAwait(false));
             return await context.HostServices.RenderCardUriAsync<MediaCard>(viewModel, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
             if (coverTask.IsCompletedSuccessfully) coverTask.Result?.Dispose();
             if (avatarTask.IsCompletedSuccessfully) avatarTask.Result?.Dispose();
+            if (pendantTask.IsCompletedSuccessfully) pendantTask.Result?.Dispose();
         }
     }
+
+    /// <summary>头像框按 B 站官方比例显示为头像（32）的 1.75 倍。</summary>
+    private const double PendantSize = 56;
 
     private async Task<string?> RenderCommentsAsync(ParsedMedia media, CancellationToken cancellationToken)
     {
@@ -88,6 +95,76 @@ internal sealed class BilibiliMediaCardRenderer(ProviderCardRenderContext contex
         }
     }
 
+    /// <summary>图文动态：帖子样式卡片，图片按宫格尺寸解码（多图裁成方块），最多 9 张。</summary>
+    private async Task<string> RenderDynamicAsync(ParsedMedia media, CancellationToken cancellationToken)
+    {
+        var bitmaps = new ConcurrentBag<Bitmap>();
+        using var slots = new SemaphoreSlim(4);
+        var imageUrls = media.Content.Where(block => block.Kind == MediaContentKind.Image && !string.IsNullOrWhiteSpace(block.Url))
+            .Select(block => block.Url!).ToArray();
+        var tileSize = BiliDynamicCardViewModel.TileSizeFor(imageUrls.Length);
+
+        async Task<Bitmap?> LoadAsync(string? url, string name, double avatarSize)
+        {
+            if (string.IsNullOrWhiteSpace(url)) return null;
+            await slots.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                var bitmap = await LoadOptionalImageAsync(url, media, name, cancellationToken, avatarSize).ConfigureAwait(false);
+                if (bitmap is not null) bitmaps.Add(bitmap);
+                return bitmap;
+            }
+            finally { slots.Release(); }
+        }
+
+        try
+        {
+            var avatarTask = LoadAsync(Value(media, "author_avatar_url"), "dynamic_avatar", 40);
+            var pendantTask = LoadAsync(Value(media, "author_pendant_url"), "dynamic_pendant", 70);
+            // 单图保持原比例整张解码；多图按格子边长裁成方块解码，省内存。
+            var imagesTask = Task.WhenAll(imageUrls.Take(BiliDynamicCardViewModel.MaxTiles)
+                .Select((url, index) => LoadAsync(url, $"dynamic_{index:D2}", imageUrls.Length == 1 ? 0 : tileSize)));
+            await Task.WhenAll(avatarTask, pendantTask, imagesTask).ConfigureAwait(false);
+
+            var time = DateTimeOffset.TryParse(Value(media, "publish_time"), CultureInfo.InvariantCulture, DateTimeStyles.None, out var published)
+                ? published.ToOffset(TimeSpan.FromHours(8)).ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)
+                : string.Empty;
+            var official = Value(media, "author_official");
+            var text = string.Join("\n", media.Content.Where(block => block.Kind != MediaContentKind.Image && !string.IsNullOrWhiteSpace(block.Text))
+                .Select(block => block.Text!.Trim()));
+            var model = new BiliDynamicCardViewModel
+            {
+                Avatar = await avatarTask.ConfigureAwait(false),
+                AvatarPendant = await pendantTask.ConfigureAwait(false),
+                AuthorName = string.IsNullOrWhiteSpace(media.AuthorName) ? "B 站用户" : media.AuthorName,
+                AuthorMeta = string.Join(" · ", new[] { time, official }.Where(part => !string.IsNullOrWhiteSpace(part))),
+                Text = text,
+                Images = (await imagesTask.ConfigureAwait(false)).OfType<Bitmap>().ToArray(),
+                ImageCount = imageUrls.Length,
+                Metrics = DynamicMetrics(media),
+            };
+            return await context.HostServices.RenderCardUriAsync<BiliDynamicCard>(model, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            foreach (var bitmap in bitmaps) bitmap.Dispose();
+        }
+    }
+
+    /// <summary>动态底部数据：转发、评论、点赞；投币只有大于 0 时才显示（大多数动态不能投币，B 站也不展示）。</summary>
+    internal static IReadOnlyList<MediaCardMetric> DynamicMetrics(ParsedMedia media)
+    {
+        var metrics = new List<MediaCardMetric>
+        {
+            new(MediaCardIcons.Share, "转发", FormatCount(Value(media, "shares"))),
+            new(MediaCardIcons.Comment, "评论", FormatCount(Value(media, "replies"))),
+            new(MediaCardIcons.ThumbUp, "点赞", FormatCount(Value(media, "likes"))),
+        };
+        if (long.TryParse(Value(media, "coins"), out var coins) && coins > 0)
+            metrics.Add(new(MediaCardIcons.Coin, "投币", FormatCount(Value(media, "coins"))));
+        return metrics;
+    }
+
     private async Task<Bitmap?> LoadOptionalImageAsync(string? url, ParsedMedia media, string name, CancellationToken cancellationToken, double avatarSize = 0)
     {
         try
@@ -97,7 +174,7 @@ internal sealed class BilibiliMediaCardRenderer(ProviderCardRenderContext contex
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (Exception ex)
         {
-            global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser Bilibili 评论图片加载失败: media_id={media.MediaId}, name={name}, error={ex.GetType().Name}");
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser Bilibili 卡片图片加载失败: media_id={media.MediaId}, name={name}, error={ex.GetType().Name}");
             return null;
         }
     }
@@ -119,7 +196,7 @@ internal sealed class BilibiliMediaCardRenderer(ProviderCardRenderContext contex
         }
     }
 
-    internal static MediaCardViewModel CreateVideoViewModel(ParsedMedia media, Bitmap? cover, Bitmap? avatar)
+    internal static MediaCardViewModel CreateVideoViewModel(ParsedMedia media, Bitmap? cover, Bitmap? avatar, Bitmap? pendant)
     {
         var duration = ParseDuration(media.Attributes.GetValueOrDefault("duration_seconds"));
         var hasMultiPages = int.TryParse(Value(media, "pages"), out var pageCount) && pageCount > 1;
@@ -150,108 +227,189 @@ internal sealed class BilibiliMediaCardRenderer(ProviderCardRenderContext contex
             ExtraIcon = MediaCardIcons.Playlist,
             ExtraText = hasMultiPages ? $"当前解析 P{currentPage}/{pageCount}" : string.Empty,
             ExtraHint = hasMultiPages ? "10min 内回复数字解析对应 P" : string.Empty,
+            AvatarRing = false,
+            AvatarPendant = pendant,
             AuthorName = media.AuthorName ?? "未知 UP",
             AuthorMeta = FormatLocation(Value(media, "author_location")),
         };
     }
 
-    internal static BiliCardViewModel CreateBangumiViewModel(ParsedMedia media, Bitmap? cover)
+    /// <summary>番剧：与视频卡片同一版式，角标显示总集数，数据栏为播放 / 追番 / 评分。</summary>
+    internal static MediaCardViewModel CreateBangumiViewModel(ParsedMedia media, Bitmap? cover, Bitmap? officialAvatar)
     {
         var count = int.TryParse(Value(media, "pages"), out var pages) ? Math.Max(1, pages) : 1;
         var current = int.TryParse(Value(media, "requested_page"), out var page) ? Math.Clamp(page, 1, count) : 1;
-        return new BiliCardViewModel
+        var score = Value(media, "rating_score");
+        var ratingCount = long.TryParse(Value(media, "rating_count"), out var raters) ? raters : 0;
+        var metrics = new List<MediaCardMetric>
         {
+            new(MediaCardIcons.Play, "播放", FormatCount(Value(media, "play_count"))),
+            new(MediaCardIcons.Heart, "追番", FormatCount(Value(media, "follow_count"))),
+            new(MediaCardIcons.Star, "评分", string.IsNullOrWhiteSpace(score) ? "暂无" : score),
+        };
+        if (ratingCount > 0) metrics.Add(new(MediaCardIcons.Comment, "评分人数", FormatCount(ratingCount.ToString(CultureInfo.InvariantCulture))));
+        return new MediaCardViewModel
+        {
+            Platform = MediaCardPlatform.Bilibili,
             Cover = cover,
+            BadgeText = $"全 {count} 集",
+            BadgeIcon = MediaCardIcons.Playlist,
             Title = media.Title ?? "Bilibili 番剧",
-            Description = media.Description ?? string.Empty,
-            DescriptionMaxLines = 6,
-            CoverHeight = 290,
-            ContentMargin = new Avalonia.Thickness(14, 175, 14, 14),
-            VideoMeta = string.Join(" · ", new[] { Value(media, "publish"), Value(media, "rating") }
+            Meta = string.Join(" · ", new[] { Value(media, "episode_title"), Value(media, "publish") }
                 .Where(value => !string.IsNullOrWhiteSpace(value))),
-            HasMultiPages = true,
-            CurrentPageText = $"当前解析 第{current}/{count}集",
+            Description = media.Description ?? string.Empty,
+            DescriptionMaxLines = 5,
             Tags = media.Tags.Where(tag => !string.IsNullOrWhiteSpace(tag)).Select(tag => "#" + tag.Trim().TrimStart('#')).ToArray(),
+            Metrics = metrics,
+            ExtraIcon = MediaCardIcons.Playlist,
+            ExtraText = count > 1 ? $"当前解析 第{current}/{count}集" : string.Empty,
+            ExtraHint = count > 1 ? "10min 内回复数字解析对应集" : string.Empty,
+            Avatar = officialAvatar,
+            CompactAvatar = true,
+            AuthorName = "哔哩哔哩番剧",
+            AuthorMeta = string.Empty,
+        };
+    }
+
+    /// <summary>直播：与视频卡片同一版式，角标显示直播状态与已播时长，作者位是主播。</summary>
+    internal static MediaCardViewModel CreateLiveViewModel(ParsedMedia media, Bitmap? cover, Bitmap? avatar, Bitmap? pendant)
+    {
+        var live = Value(media, "live_status") == "1";
+        var duration = TimeSpan.TryParse(Value(media, "duration"), CultureInfo.InvariantCulture, out var span) && span > TimeSpan.Zero
+            ? MediaCardViewModel.FormatDuration(TimeSpan.FromSeconds(Math.Floor(span.TotalSeconds)))
+            : string.Empty;
+        var meta = new List<string> { "房间号 " + Value(media, "room_id") };
+        var area = string.Join(" / ", new[] { Value(media, "parent_area"), Value(media, "area") }
+            .Where(value => !string.IsNullOrWhiteSpace(value)).Distinct());
+        if (!string.IsNullOrWhiteSpace(area)) meta.Add(area);
+        if (live && DateTimeOffset.TryParse(Value(media, "live_start"), CultureInfo.InvariantCulture, DateTimeStyles.None, out var start))
+            meta.Add(start.ToOffset(TimeSpan.FromHours(8)).ToString("MM-dd HH:mm", CultureInfo.InvariantCulture) + " 开播");
+
+        // 未开播只剩「看过」一项，单独占一整栏太空，改为放进元信息行，不显示数据栏。
+        var watched = FormatCount(Value(media, "watched_count"));
+        var metrics = new List<MediaCardMetric>();
+        if (live)
+        {
+            metrics.Add(new(MediaCardIcons.Play, "看过", watched));
+            metrics.Add(new(MediaCardIcons.Fire, "高能用户", FormatCount(Value(media, "audience_count"))));
+            metrics.Add(new(MediaCardIcons.Clock, "已播", string.IsNullOrWhiteSpace(duration) ? "--" : duration));
+        }
+        else if (watched != "--")
+        {
+            meta.Add(watched + "人看过");
+        }
+
+        return new MediaCardViewModel
+        {
+            Platform = MediaCardPlatform.Bilibili,
+            Cover = cover,
+            Avatar = avatar,
+            BadgeText = live ? "直播中" : "未开播",
+            BadgeIcon = live ? MediaCardIcons.Waveform : MediaCardIcons.Clock,
+            Title = media.Title ?? "Bilibili 直播",
+            Meta = string.Join(" · ", meta),
+            Description = string.Empty,
+            Tags = media.Tags.Where(tag => !string.IsNullOrWhiteSpace(tag)).Select(tag => "#" + tag.Trim().TrimStart('#')).ToArray(),
+            Metrics = metrics,
+            AvatarRing = false,
+            AvatarPendant = pendant,
+            AuthorName = string.IsNullOrWhiteSpace(media.AuthorName) ? "主播" : media.AuthorName,
+            AuthorMeta = live ? "正在直播" : "主播",
         };
     }
 
     private async Task<string> RenderLiveAsync(ParsedMedia media, CancellationToken cancellationToken)
     {
-        Bitmap? cover = null;
-        Bitmap? avatar = null;
+        var coverTask = LoadOptionalImageAsync(media.CoverUrl, media, "live_cover", cancellationToken);
+        var avatarTask = LoadOptionalImageAsync(Value(media, "anchor_avatar_url"), media, "live_avatar", cancellationToken, avatarSize: 32);
+        var pendantTask = LoadOptionalImageAsync(Value(media, "anchor_pendant_url"), media, "live_pendant", cancellationToken, avatarSize: PendantSize);
         try
         {
-            cover = await LoadImageAsync(media.CoverUrl, media, "live_cover", cancellationToken).ConfigureAwait(false);
-            avatar = await LoadImageAsync(Value(media, "anchor_avatar_url"), media, "live_avatar", cancellationToken, avatarSize: 44).ConfigureAwait(false);
-            var status = Value(media, "live_status") == "1" ? "直播中" : "未开播";
-            var model = new BiliLiveCardViewModel
-            {
-                Cover = cover,
-                Avatar = avatar,
-                StatusText = status,
-                RoomIdText = Value(media, "room_id"),
-                Title = media.Title ?? "Bilibili 直播",
-                AnchorName = media.AuthorName ?? string.Empty,
-                AudienceText = Value(media, "audience_text"),
-                WatchedText = Value(media, "watched"),
-                LiveStartTimeText = Value(media, "live_start"),
-                LiveDurationText = Value(media, "duration"),
-            };
-            return await context.HostServices.RenderCardUriAsync<BiliLiveCard>(model, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
+            await Task.WhenAll(coverTask, avatarTask, pendantTask).ConfigureAwait(false);
+            var model = CreateLiveViewModel(media, await coverTask.ConfigureAwait(false), await avatarTask.ConfigureAwait(false),
+                await pendantTask.ConfigureAwait(false));
+            return await context.HostServices.RenderCardUriAsync<MediaCard>(model, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
-            cover?.Dispose();
-            avatar?.Dispose();
+            if (coverTask.IsCompletedSuccessfully) coverTask.Result?.Dispose();
+            if (avatarTask.IsCompletedSuccessfully) avatarTask.Result?.Dispose();
+            if (pendantTask.IsCompletedSuccessfully) pendantTask.Result?.Dispose();
         }
     }
 
     private async Task<string> RenderArticleAsync(ParsedMedia media, CancellationToken cancellationToken)
     {
-        var bitmaps = new List<Bitmap>();
+        if (Value(media, "is_dynamic") == "true") return await RenderDynamicAsync(media, cancellationToken).ConfigureAwait(false);
+
+        var bitmaps = new ConcurrentBag<Bitmap>();
+        using var slots = new SemaphoreSlim(4);
+
+        async Task<Bitmap?> LoadAsync(string? url, string name, double avatarSize = 0)
+        {
+            if (string.IsNullOrWhiteSpace(url)) return null;
+            await slots.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                var bitmap = await LoadOptionalImageAsync(url, media, name, cancellationToken, avatarSize).ConfigureAwait(false);
+                if (bitmap is not null) bitmaps.Add(bitmap);
+                return bitmap;
+            }
+            finally { slots.Release(); }
+        }
+
         try
         {
-            var avatar = await LoadImageAsync(Value(media, "author_avatar_url"), media, "avatar", cancellationToken, avatarSize: 46).ConfigureAwait(false);
-            if (avatar is not null) bitmaps.Add(avatar);
-            var blocks = new List<BiliArticleDocumentBlockViewModel>();
-            foreach (var block in media.Content)
+            var coverTask = LoadAsync(media.CoverUrl, "article_cover");
+            var avatarTask = LoadAsync(Value(media, "author_avatar_url"), "article_avatar", 40);
+            var pendantTask = LoadAsync(Value(media, "author_pendant_url"), "article_pendant", 70);
+            var blocksTask = Task.WhenAll(media.Content.Select(async (block, index) =>
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (block.Kind == MediaContentKind.Image)
+                switch (block.Kind)
                 {
-                    var image = await LoadImageAsync(block.Url, media, $"article_{blocks.Count:D2}", cancellationToken).ConfigureAwait(false);
-                    if (image is not null) bitmaps.Add(image);
-                    blocks.Add(new BiliArticleDocumentBlockViewModel
-                    {
-                        Image = image, IsImage = image is not null, Text = block.Text, Caption = block.Caption,
-                        Height = image is null ? 0 : 260,
-                    });
-                    continue;
+                    case MediaContentKind.Image:
+                        var bitmap = await LoadAsync(block.Url, $"article_{index:D2}").ConfigureAwait(false);
+                        return bitmap is null ? null : BiliArticleBlockViewModel.Picture(bitmap, block.Caption ?? string.Empty);
+                    case MediaContentKind.Heading:
+                        return string.IsNullOrWhiteSpace(block.Text) ? null : BiliArticleBlockViewModel.Heading(block.Text.Trim(), block.Level);
+                    case MediaContentKind.Quote:
+                        return string.IsNullOrWhiteSpace(block.Text) ? null : BiliArticleBlockViewModel.Quote(block.Text.Trim());
+                    case MediaContentKind.Video:
+                        return null;
+                    default:
+                        return string.IsNullOrWhiteSpace(block.Text) ? null : BiliArticleBlockViewModel.Paragraph(block.Text.Trim());
                 }
+            }));
+            // Observe every image load before the bitmaps are disposed, including when one fails.
+            await Task.WhenAll(coverTask, avatarTask, pendantTask, blocksTask).ConfigureAwait(false);
 
-                if (string.IsNullOrWhiteSpace(block.Text)) continue;
-                var fontSize = block.Kind == MediaContentKind.Heading ? 23 : 15;
-                blocks.Add(new BiliArticleDocumentBlockViewModel
-                {
-                    Text = block.Text,
-                    IsHeading = block.Kind == MediaContentKind.Heading,
-                    IsQuote = block.Kind == MediaContentKind.Quote,
-                    FontSize = fontSize,
-                    Height = Math.Clamp((block.Text.Length / 30 + 1) * 26, 42, 420),
-                });
-            }
+            var meta = new List<string>();
+            if (DateTimeOffset.TryParse(Value(media, "publish_time"), CultureInfo.InvariantCulture, DateTimeStyles.None, out var published))
+                meta.Add(published.ToOffset(TimeSpan.FromHours(8)).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + " 发布");
+            if (long.TryParse(Value(media, "words"), out var words) && words > 0) meta.Add(words.ToString("N0", CultureInfo.InvariantCulture) + " 字");
+            var fans = long.TryParse(Value(media, "author_fans"), out var fanCount) && fanCount > 0
+                ? FormatCount(fanCount.ToString(CultureInfo.InvariantCulture)) + "粉丝" : string.Empty;
 
-            var canvasHeight = Math.Clamp(blocks.Sum(block => block.Height) + 220, 520, 12000);
             var model = new BiliArticleDocumentViewModel
             {
-                CanvasHeight = canvasHeight,
-                Avatar = avatar,
-                KindText = "Bilibili 专栏",
-                Title = media.Title ?? "Bilibili 专栏",
+                Cover = await coverTask.ConfigureAwait(false),
+                Avatar = await avatarTask.ConfigureAwait(false),
+                AvatarPendant = await pendantTask.ConfigureAwait(false),
+                KindText = media.MediaId.StartsWith("opus", StringComparison.Ordinal) ? "动态" : "专栏",
+                Title = string.IsNullOrWhiteSpace(media.Title) ? "Bilibili 专栏" : media.Title.Trim(),
                 AuthorName = media.AuthorName ?? string.Empty,
-                MetaText = $"{media.Attributes.GetValueOrDefault("publish_time", string.Empty)} · {media.Attributes.GetValueOrDefault("words", string.Empty)} 字",
-                StatsText = $"阅读 {Value(media, "views")}  ·  点赞 {Value(media, "likes")}",
-                Blocks = blocks,
+                AuthorMeta = fans,
+                MetaText = string.Join(" · ", meta),
+                Tags = media.Tags.Where(tag => !string.IsNullOrWhiteSpace(tag)).Select(tag => "#" + tag.Trim().TrimStart('#')).ToArray(),
+                Metrics =
+                [
+                    new(MediaCardIcons.Play, "阅读", FormatCount(Value(media, "views"))),
+                    new(MediaCardIcons.ThumbUp, "点赞", FormatCount(Value(media, "likes"))),
+                    new(MediaCardIcons.Coin, "投币", FormatCount(Value(media, "coins"))),
+                    new(MediaCardIcons.Star, "收藏", FormatCount(Value(media, "favorites"))),
+                    new(MediaCardIcons.Comment, "评论", FormatCount(Value(media, "replies"))),
+                ],
+                Blocks = (await blocksTask.ConfigureAwait(false)).OfType<BiliArticleBlockViewModel>().ToArray(),
             };
             return await context.HostServices.RenderCardUriAsync<BiliArticleDocument>(model, media.ProviderId, media.MediaId, cancellationToken).ConfigureAwait(false);
         }

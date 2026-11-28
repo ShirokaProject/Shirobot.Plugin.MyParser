@@ -1,0 +1,80 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Shirobot.Plugin.MyParser.CardRendering"
+             x:Class="Shirobot.Plugin.MyParser.CardRendering.ForwardLongImage"
+             x:DataType="vm:ForwardLongImageViewModel"
+             Width="640"
+             HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
+    <Design.DataContext>
+        <vm:ForwardLongImageViewModel />
+    </Design.DataContext>
+
+    <!-- 聊天记录长图兜底：标题 + 副标题（共 N 项），下面逐项排文字和图片，底部署名 -->
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="Page" Color="#F5F6F8" />
+                    <SolidColorBrush x:Key="Placeholder" Color="#E9ECF1" />
+                    <SolidColorBrush x:Key="TextTitle" Color="#16181D" />
+                    <SolidColorBrush x:Key="TextBody" Color="#2E3138" />
+                    <SolidColorBrush x:Key="TextMeta" Color="#6B6F79" />
+                    <SolidColorBrush x:Key="BrandText" Color="#8C909A" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="Page" Color="#22242B" />
+                    <SolidColorBrush x:Key="Placeholder" Color="#2D3038" />
+                    <SolidColorBrush x:Key="TextTitle" Color="#F4F5F7" />
+                    <SolidColorBrush x:Key="TextBody" Color="#D9DBE0" />
+                    <SolidColorBrush x:Key="TextMeta" Color="#A3A7B0" />
+                    <SolidColorBrush x:Key="BrandText" Color="#8F939C" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Border CornerRadius="6" ClipToBounds="True" Background="{DynamicResource Page}">
+        <Grid>
+            <Border Background="{Binding AccentSoftGradient}" Opacity="0.6" />
+            <StackPanel Margin="40,30,40,18" Spacing="16">
+                <StackPanel Spacing="6">
+                    <Border Width="36" Height="4" CornerRadius="2" Background="{Binding AccentGradient}" HorizontalAlignment="Left" />
+                    <TextBlock Text="{Binding Title}" IsVisible="{Binding HasTitle}" Foreground="{DynamicResource TextTitle}"
+                               FontSize="22" FontWeight="Bold" LineHeight="30" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding Subtitle}" IsVisible="{Binding HasSubtitle}" Foreground="{DynamicResource TextMeta}" FontSize="13" />
+                </StackPanel>
+
+                <ItemsControl ItemsSource="{Binding Items}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Spacing="12" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ForwardLongImageItem">
+                            <Panel>
+                                <TextBlock IsVisible="{Binding IsText}" Text="{Binding Text}" Foreground="{DynamicResource TextBody}"
+                                           FontSize="16" LineHeight="27" TextWrapping="Wrap" />
+                                <Border IsVisible="{Binding IsImage}" CornerRadius="8" ClipToBounds="True"
+                                        Width="{Binding ImageWidth}" Height="{Binding ImageHeight}" HorizontalAlignment="Center"
+                                        Background="{DynamicResource Placeholder}">
+                                    <Panel>
+                                        <Image Source="{Binding Image}" Stretch="UniformToFill" IsVisible="{Binding HasBackdrop}" Margin="-24">
+                                            <Image.Effect>
+                                                <BlurEffect Radius="70" />
+                                            </Image.Effect>
+                                        </Image>
+                                        <Border Background="#4D000000" IsVisible="{Binding HasBackdrop}" />
+                                        <Image Source="{Binding Image}" Stretch="Uniform" />
+                                    </Panel>
+                                </Border>
+                            </Panel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <vm:CardBrandMark TextSize="10" Opacity="0.8" Margin="0,2,0,0" TextElement.Foreground="{DynamicResource BrandText}" />
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>

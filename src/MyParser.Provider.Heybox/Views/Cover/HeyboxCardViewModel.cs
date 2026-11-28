@@ -58,9 +58,6 @@ public sealed class HeyboxCardViewModel
         }
     }
 
-    public string BrandText { get; } = "By ShirokaProject && MyParser v" +
-        (typeof(HeyboxCardViewModel).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
-            .InformationalVersion.Split('+')[0] ?? "unknown");
 
     /// <summary>计数为空时不显示该项；0 显示为 0。</summary>
     public static IReadOnlyList<HeyboxStat> CreateStats(string? views, string? likes, string? favorites, string? comments) =>

@@ -8,7 +8,7 @@ internal static class BilibiliPresentationVerification
 {
     public static async Task RunAsync()
     {
-        foreach (var scenario in new[] { "dynamic-card", "dynamic-no-card", "live-info", "live-replay" })
+        foreach (var scenario in new[] { "dynamic-card", "dynamic-no-card", "dynamic-forward", "live-info", "live-replay" })
         {
             var services = DispatchProxy.Create<IProviderHostServices, BiliPresentationHost>();
             var host = (BiliPresentationHost)services;
@@ -25,6 +25,8 @@ internal static class BilibiliPresentationVerification
                     new() { Kind = MediaContentKind.Image, Url = "https://example.com/image1.jpg" },
                     new() { Kind = MediaContentKind.Image, Url = "https://example.com/image2.jpg" }],
                 Assets = live ? [new() { Kind = MediaAssetKind.LiveStream, Url = "https://example.com/live.m3u8" }] : [],
+                // 图文动态：卡片之后把全部原图按聊天记录发出。
+                Attributes = scenario == "dynamic-forward" ? new Dictionary<string, string> { ["is_dynamic"] = "true" } : [],
             };
             var type = typeof(MyParser.Provider.Douyin.Parsing.DouyinParser).Assembly
                 .GetType("Shirobot.Plugin.MyParser.MessageHandling.UnifiedMediaMessageHandler", true)!;
@@ -38,15 +40,17 @@ internal static class BilibiliPresentationVerification
                 .Invoke(handler, [source, media, false, CancellationToken.None])!).WaitAsync(TimeSpan.FromSeconds(5));
             var expectedImages = scenario == "dynamic-no-card" ? 2 : 1;
             if (host.ImagesSent != expectedImages) throw new Exception("Bilibili sent duplicate/missing article images: " + scenario);
-            if (host.TextReplies != (scenario == "dynamic-no-card" ? 1 : 0) || ((GalleryMessages)messages).Forwards != 0)
-                throw new Exception("Bilibili sent redundant dynamic text or live stream-count text: " + scenario);
-            if (host.ImageDownloads != (scenario == "dynamic-no-card" ? 2 : 0)) throw new Exception("Rendered dynamic images were downloaded a second time.");
+            if (host.TextReplies != (scenario == "dynamic-no-card" ? 1 : 0)
+                || ((GalleryMessages)messages).Forwards != (scenario == "dynamic-forward" ? 1 : 0))
+                throw new Exception("Bilibili sent redundant dynamic text, missed the original-image forward, or sent live stream-count text: " + scenario);
+            if (host.ImageDownloads != (scenario is "dynamic-no-card" or "dynamic-forward" ? 2 : 0))
+                throw new Exception("Dynamic original images were not downloaded exactly once: " + scenario);
             if (host.ReplayDownloads != (scenario == "live-replay" ? 1 : 0) || host.VideoBuilds != host.ReplayDownloads)
                 throw new Exception("Removing live status text affected replay delivery.");
             if (scenario == "dynamic-card" && card.Purpose != ProviderCardPurpose.Article)
                 throw new Exception("Dynamic did not render a full article card.");
         }
-        Console.WriteLine("Bilibili dynamic cards avoid duplicate text/images; disabled cards preserve content; live status stays silent and replay delivery remains enabled.");
+        Console.WriteLine("Bilibili dynamic cards avoid duplicate text/images and forward all originals once; disabled cards preserve content; live status stays silent and replay delivery remains enabled.");
     }
 }
 

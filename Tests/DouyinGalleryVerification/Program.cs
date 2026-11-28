@@ -116,6 +116,8 @@ await GalleryVerification.RunAsync();
 await GalleryParsingVerification.RunAsync();
 await ArticleForwardVerification.RunAsync();
 await BilibiliPresentationVerification.RunAsync();
+await ForwardFallbackVerification.RunAsync();
+await VoiceFallbackVerification.RunAsync();
 
 internal sealed class DetailCapture : DelegatingHandler
 {

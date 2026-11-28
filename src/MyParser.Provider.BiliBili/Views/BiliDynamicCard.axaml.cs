@@ -3,9 +3,9 @@ using Avalonia.Markup.Xaml;
 
 namespace MyParser.Provider.BiliBili.Views;
 
-public partial class BiliLiveCard : UserControl
+public partial class BiliDynamicCard : UserControl
 {
-    public BiliLiveCard()
+    public BiliDynamicCard()
     {
         InitializeComponent();
     }

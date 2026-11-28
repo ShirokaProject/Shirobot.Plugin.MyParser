@@ -29,6 +29,8 @@ public sealed class BilibiliLiveParser(HttpClient http, PluginConfig? config = n
         }
 
         var liveStatus = roomData.GetInt32OrDefault("live_status");
+        var anchorUid = roomData.GetInt64OrDefault("uid");
+        var pendantTask = GetAnchorPendantAsync(anchorUid, realRoomId, cancellationToken);
         JsonElement? infoData = null;
         try
         {
@@ -80,6 +82,7 @@ public sealed class BilibiliLiveParser(HttpClient http, PluginConfig? config = n
             LiveStatus = liveStatus == 0 ? infoRoomInfo?.GetInt32OrDefault("live_status") ?? 0 : liveStatus,
             Title = FirstNonEmpty(infoRoomInfo?.GetStringOrDefault("title"), playRoomInfo?.GetStringOrDefault("title")),
             AnchorName = FirstNonEmpty(anchorInfo?.GetStringOrDefault("uname"), playRoomInfo?.GetPropertyOrDefault("anchor_info")?.GetPropertyOrDefault("base_info")?.GetStringOrDefault("uname")),
+            AnchorPendantUrl = await pendantTask,
             AnchorAvatarUrl = FirstNonEmpty(anchorInfo?.GetStringOrDefault("face"), playRoomInfo?.GetPropertyOrDefault("anchor_info")?.GetPropertyOrDefault("base_info")?.GetStringOrDefault("face")),
             CoverUrl = FirstNonEmpty(
                 infoRoomInfo?.GetStringOrDefault("cover"),
@@ -88,6 +91,11 @@ public sealed class BilibiliLiveParser(HttpClient http, PluginConfig? config = n
                 playRoomInfo?.GetStringOrDefault("cover"),
                 playRoomInfo?.GetStringOrDefault("user_cover"),
                 playRoomInfo?.GetStringOrDefault("keyframe")),
+            AreaName = FirstNonEmpty(infoRoomInfo?.GetStringOrDefault("area_name")),
+            ParentAreaName = FirstNonEmpty(infoRoomInfo?.GetStringOrDefault("parent_area_name")),
+            Tags = (infoRoomInfo?.GetStringOrDefault("tags") ?? string.Empty)
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Distinct().Take(6).ToArray(),
             OnlineCount = infoRoomInfo?.GetInt64OrDefault("online") ?? 0,
             RoomAudienceCount = audienceEntry?.GetInt64OrDefault("count") ?? 0,
             RoomAudienceText = audienceEntry?.GetStringOrDefault("count_text"),
@@ -187,6 +195,28 @@ public sealed class BilibiliLiveParser(HttpClient http, PluginConfig? config = n
             ("http_hls", "fmp4", "av1") => 6,
             _ => 99,
         };
+    }
+
+    /// <summary>主播头像框：用户名片接口的 pendant.image，取不到不影响解析。</summary>
+    private async Task<string?> GetAnchorPendantAsync(long uid, string roomId, CancellationToken cancellationToken)
+    {
+        if (uid <= 0) return null;
+        try
+        {
+            using var json = await GetJsonDocumentAsync(BilibiliConstants.UserCardApi, new Dictionary<string, string> { ["mid"] = uid.ToString() },
+                $"https://live.bilibili.com/{roomId}", cancellationToken);
+            var image = json.RootElement.GetPropertyOrDefault("data")?.GetPropertyOrDefault("card")?.GetPropertyOrDefault("pendant")?.GetStringOrDefault("image");
+            return string.IsNullOrWhiteSpace(image) ? null : image;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            global::Shirobot.Plugin.MyParser.DiagnosticLog.Warning($"MyParser Bilibili 主播头像框加载失败: room_id={roomId}, error={ex.GetType().Name}");
+            return null;
+        }
     }
 
     private async Task<JsonDocument> GetJsonDocumentAsync(string url, Dictionary<string, string> parameters, string referer, CancellationToken cancellationToken)

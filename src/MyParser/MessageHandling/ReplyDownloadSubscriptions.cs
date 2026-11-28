@@ -3,7 +3,7 @@ using ShiroBot.SDK.Plugin;
 
 namespace Shirobot.Plugin.MyParser.MessageHandling;
 
-// Keep subscriptions bounded and release them when the plugin is unloaded.
+// 回复关键词触发的订阅（回复 mp3 取音频、回复 原图 取全部内容）：数量有上限，插件卸载时全部释放。
 internal sealed class ReplyDownloadSubscriptions : IDisposable
 {
     private const int Capacity = 1024;
@@ -12,8 +12,9 @@ internal sealed class ReplyDownloadSubscriptions : IDisposable
     private bool _disposed;
 
     public void Register(IMessageContext messages, MessageEvent source, string messageId,
-        TimeSpan lifetime, Func<MessageEvent, Task> upload)
+        TimeSpan lifetime, Func<MessageEvent, Task> upload, Func<string, bool>? matches = null)
     {
+        matches ??= IsDownloadKeyword;
         if (string.IsNullOrWhiteSpace(messageId) || lifetime <= TimeSpan.Zero) return;
         lock (_gate)
         {
@@ -25,7 +26,7 @@ internal sealed class ReplyDownloadSubscriptions : IDisposable
             var reference = new MessageReference(source.InstanceId ?? source.Platform, source.Channel, messageId);
             var subscription = messages.SubscribeReply(reference, lifetime, async reply =>
             {
-                if (!reply.GetPlainText().Trim().Equals("dl", StringComparison.OrdinalIgnoreCase)) return;
+                if (!matches(reply.GetPlainText())) return;
                 if (reply.InstanceId != source.InstanceId || reply.Platform != source.Platform
                     || reply.Channel.Type != source.Channel.Type || reply.Channel.Id != source.Channel.Id) return;
                 lock (_gate)
@@ -36,6 +37,13 @@ internal sealed class ReplyDownloadSubscriptions : IDisposable
             }, disposeOnReply: false);
             _entries.Enqueue((expiresAt, subscription));
         }
+    }
+
+    /// <summary>回复「mp3」或「dl」（不区分大小写）获取音频文件。卡片上提示的是 mp3，dl 保留兼容。</summary>
+    public static bool IsDownloadKeyword(string text)
+    {
+        var value = text.Trim();
+        return value.Equals("mp3", StringComparison.OrdinalIgnoreCase) || value.Equals("dl", StringComparison.OrdinalIgnoreCase);
     }
 
     public void Dispose()

@@ -61,6 +61,11 @@
     </ItemGroup>
 
     <ItemGroup>
+        <EmbeddedResource Include="Assets\ShiroBot.png" LogicalName="MyParser.ShiroBot.png" />
+        <EmbeddedResource Include="..\MyParser.Provider.BiliBili\Assets\BangumiAvatar.jpg" LogicalName="MyParser.Bilibili.BangumiAvatar.jpg" />
+    </ItemGroup>
+
+    <ItemGroup>
         <Compile Include="..\MyParser.Provider.*\**\*.cs"
                  Exclude="..\MyParser.Provider.*\bin\**;..\MyParser.Provider.*\obj\**"
                  Link="Providers\%(RecursiveDir)%(Filename)%(Extension)" />

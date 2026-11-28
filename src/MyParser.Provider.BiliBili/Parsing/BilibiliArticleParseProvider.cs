@@ -58,8 +58,12 @@ public sealed class BilibiliArticleParseProvider(BilibiliParser parser) : IProvi
             {
                 ["cvid"] = result.Cvid.ToString(), ["opus_id"] = result.OpusId ?? string.Empty,
                 ["views"] = result.ViewCount.ToString(), ["likes"] = result.LikeCount.ToString(),
+                ["coins"] = result.CoinCount.ToString(), ["favorites"] = result.FavoriteCount.ToString(),
+                ["replies"] = result.ReplyCount.ToString(), ["shares"] = result.ShareCount.ToString(),
+                ["is_dynamic"] = result.IsDynamic ? "true" : "false", ["author_official"] = result.AuthorOfficial ?? string.Empty,
                 ["words"] = result.Words.ToString(), ["publish_time"] = result.PublishTime?.ToString("O") ?? string.Empty,
-                ["author_avatar_url"] = result.AuthorAvatarUrl ?? string.Empty, ["author_fans"] = result.AuthorFans.ToString(),
+                ["author_avatar_url"] = result.AuthorAvatarUrl ?? string.Empty,
+                ["author_pendant_url"] = result.AuthorPendantUrl ?? string.Empty, ["author_fans"] = result.AuthorFans.ToString(),
             },
         };
     }

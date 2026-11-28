@@ -107,7 +107,19 @@ public sealed class BilibiliBangumiParseProvider(BilibiliBangumiParser parser, B
             ["pages"] = episodes.Length.ToString(),
             ["requested_page"] = current.ToString(),
             ["preview_only"] = preview ? "true" : "false",
+            ["play_count"] = bangumi.ViewCount.ToString(),
+            ["follow_count"] = bangumi.FollowCount.ToString(),
+            ["rating_score"] = bangumi.RatingScore ?? string.Empty,
+            ["rating_count"] = bangumi.RatingCount.ToString(),
         };
+        if (current >= 1 && current <= bangumi.Episodes.Count)
+        {
+            var episode = bangumi.Episodes[current - 1];
+            // B 站的 title 多是集数 "3"，long_title 才是本集标题
+            var number = int.TryParse(episode.Title, out var index) ? $"第{index}话" : episode.Title;
+            attributes["episode_title"] = string.Join(" ", new[] { number, episode.LongTitle }
+                .Where(value => !string.IsNullOrWhiteSpace(value)));
+        }
         for (var index = 0; index < episodes.Length; index++)
             attributes[$"episode_url_{index + 1}"] = episodes[index].Url;
         return attributes;

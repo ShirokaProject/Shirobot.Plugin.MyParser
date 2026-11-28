@@ -3,6 +3,7 @@ using System.Diagnostics;
 using ShiroBot.SDK.Models;
 using ShiroBot.SDK.Plugin;
 using Shirobot.Plugin.MyParser.Parsing;
+using Shirobot.Plugin.MyParser.CardRendering;
 using MyParser.Provider.BiliBili.Parsing;
 
 namespace Shirobot.Plugin.MyParser.MessageHandling;
@@ -12,6 +13,13 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
     private readonly ProviderMediaCardRenderer _cardRenderer = new(context.BotContext, context.HostServices);
     private readonly Func<MessageEvent, string, Task>? _replyPreviewHandler = context.ReplyPreviewHandler;
     private readonly ReplyDownloadSubscriptions _audioDownloads = new();
+    private readonly ReplyDownloadSubscriptions _contentReplies = new();
+    private ForwardFallbackSender? _forwardSender;
+    /// <summary>聊天记录的多平台兜底发送：合并转发 → 单条多媒体 → 长图 → 回复「原图」才发。</summary>
+    private ForwardFallbackSender ForwardSender => _forwardSender ??= new ForwardFallbackSender(BotContext?.Message, HostServices, _contentReplies);
+    private VoiceFallbackSender? _voiceSender;
+    /// <summary>语音的多平台兜底发送：原音频语音 → Silk 语音 → 上传 MP3 文件。</summary>
+    private VoiceFallbackSender VoiceSender => _voiceSender ??= new VoiceFallbackSender(BotContext?.Message, HostServices, Config);
     public override string ProviderId => PrimaryProvider.Id;
 
     protected override async Task PresentAsync(
@@ -38,7 +46,8 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
                 && media.Assets.Where(asset => asset.Kind == MediaAssetKind.Image).Select((_, index) => index)
                     .Any(index => !Config.IsVideoDeliveryEnabled()
                         || string.IsNullOrWhiteSpace(media.Attributes.GetValueOrDefault($"gallery_live_photo_{index}")));
-        var recordPreparation = prepareVoice && audioDownload is not null
+        // 只有要发 Silk 的会话（QQ 且开启 Silk 编码）才提前编码；其他平台直接发原音频。
+        var recordPreparation = prepareVoice && audioDownload is not null && VoiceSender.NeedsSilk(message)
             ? Task.Run(async () => await PrepareTrackSegmentsAsync(media,
                 await audioDownload.ConfigureAwait(false), preparationCts.Token).ConfigureAwait(false), preparationCts.Token)
             : null;
@@ -75,12 +84,15 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
             && (!Config.IsVideoDeliveryEnabled()
                 || string.IsNullOrWhiteSpace(media.Attributes.GetValueOrDefault("gallery_live_photo_0")));
         var coverEnabled = Config.IsCoverEnabled(media.ProviderId) && !singlePictureGallery;
-        var coverSent = false;
-        if (coverEnabled && !(media.ProviderId == "heybox" && media.Kind == ParsedMediaKind.Article && !SupportsArticleForward(message)))
+        string? coverMessageId = null;
+        // 小黑盒文章在只能走长图的平台上，长图本身就是完整文章，不再额外发封面卡片。
+        if (coverEnabled && !(media.ProviderId == "heybox" && media.Kind == ParsedMediaKind.Article
+                              && ForwardSender.PredictLevel(message) >= ForwardDeliveryLevel.LongImage))
         {
-            coverSent = await SendCoverAsync(message, media, cancellationToken).ConfigureAwait(false);
+            coverMessageId = await SendCoverAsync(message, media, cancellationToken, audioDownload).ConfigureAwait(false);
         }
 
+        var coverSent = coverMessageId is not null;
         using var commentsCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var hasComments = media.Content.Any(block => block.Attributes.GetValueOrDefault("category") == "comment");
         var commentsTask = hasComments ? PrepareCommentsCardAsync(media, commentsCts.Token) : null;
@@ -135,6 +147,8 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
                         await SendArticleForwardAsync(message, media, cancellationToken).ConfigureAwait(false);
                     else if (media.ProviderId != "bilibili-article" || !coverSent)
                         await SendContentAsync(message, media, cancellationToken).ConfigureAwait(false);
+                    else if (media.Attributes.GetValueOrDefault("is_dynamic") == "true")
+                        await SendDynamicImagesAsync(message, media, coverMessageId, cancellationToken).ConfigureAwait(false);
                     break;
                 case ParsedMediaKind.Gallery:
                     await SendGalleryAsync(message, media, cancellationToken, galleryDownload, audioDownload, recordPreparation).ConfigureAwait(false);
@@ -156,7 +170,12 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
             {
                 var commentsCard = await commentsTask.ConfigureAwait(false);
                 if (!string.IsNullOrWhiteSpace(commentsCard))
-                    await SendImageAsync(message, new ImageSegment(commentsCard)).ConfigureAwait(false);
+                {
+                    var sentCard = await SendImageAsync(message, new ImageSegment(commentsCard)).ConfigureAwait(false);
+                    // 评论卡片里的图片是缩略图：回复卡片「原图」再下载原图，按聊天记录发出。
+                    if (sentCard.IsSuccess && !string.IsNullOrWhiteSpace(sentCard.MessageId))
+                        RegisterCommentImagesReply(message, sentCard.MessageId, media);
+                }
                 else
                     await SendContentAsync(message, media with
                     {
@@ -171,6 +190,49 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
                 try { await commentsTask.ConfigureAwait(false); } catch (Exception) { }
         }
 
+    }
+
+    private void RegisterCommentImagesReply(MessageEvent message, string cardMessageId, ParsedMedia media)
+    {
+        var comments = media.Content.Where(block => block.Attributes.GetValueOrDefault("category") == "comment"
+            && !string.IsNullOrWhiteSpace(block.Attributes.GetValueOrDefault("image_url"))).Take(30).ToArray();
+        if (comments.Length == 0) return;
+        ForwardSender.RegisterReplyFor(message, cardMessageId, async (reply, cancellationToken) =>
+        {
+            using var gate = new SemaphoreSlim(4);
+            var nodes = await Task.WhenAll(comments.Select(async (block, index) =>
+            {
+                await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    var image = await HostServices.BuildProviderImageAsync(new ProviderImageBuildRequest(
+                        media.ProviderName, block.Attributes["image_url"], media.SourceUrl, $"{media.ProviderId}_{media.MediaId}_comment_original_{index:D2}",
+                        request => ApplyHeaders(request, GetImageHeaders(media)), PersistLocalFile: false), cancellationToken).ConfigureAwait(false);
+                    if (string.IsNullOrWhiteSpace(image.Uri)) return null;
+                    // 每条评论一个节点：「昵称：内容」+ 原图，发送者显示评论者昵称。
+                    var name = string.IsNullOrWhiteSpace(block.Caption) ? media.ProviderName : block.Caption!;
+                    var segments = new List<MessageSegment>();
+                    if (!string.IsNullOrWhiteSpace(block.Text)) segments.Add(new TextSegment($"{name}：{block.Text!.Trim()}"));
+                    segments.Add(new ImageSegment(image.Uri));
+                    return new OutgoingForwardedMessage(reply.Sender.Id, name, segments);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    BotLog.Warning($"MyParser 评论原图下载失败: media_id={media.MediaId}, index={index}, error={ex.Message}");
+                    return null;
+                }
+                finally { gate.Release(); }
+            })).ConfigureAwait(false);
+            var content = nodes.OfType<OutgoingForwardedMessage>().ToArray();
+            return content.Length == 0 ? null : new ForwardPackage(content, "评论区图片")
+            {
+                Preview = content.Take(4).Select(node => node.SenderName + "：[图片]").ToArray(),
+                Summary = $"共 {content.Length} 张", Prompt = $"{media.ProviderName}评论区图片",
+                ProviderId = media.ProviderId, MediaId = media.MediaId + "_comments",
+                Platform = media.ProviderId.StartsWith("bilibili", StringComparison.Ordinal) ? MediaCardPlatform.Bilibili
+                    : media.ProviderId == "douyin" ? MediaCardPlatform.Douyin : null,
+            };
+        });
     }
 
     private async Task<string?> PrepareCommentsCardAsync(ParsedMedia media, CancellationToken cancellationToken)
@@ -194,17 +256,44 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
         }
     }
 
-    private async Task<bool> SendCoverAsync(MessageEvent message, ParsedMedia media, CancellationToken cancellationToken)
+    /// <summary>发送封面卡片，返回卡片消息 ID；没发出去返回 null。</summary>
+    private async Task<string?> SendCoverAsync(MessageEvent message, ParsedMedia media, CancellationToken cancellationToken,
+        Task<string?>? audioDownload = null)
     {
-        if (string.IsNullOrWhiteSpace(media.CoverUrl)) return false;
+        if (string.IsNullOrWhiteSpace(media.CoverUrl)) return null;
 
         var purpose = media.Kind == ParsedMediaKind.Article && media.ProviderId != "heybox" ? ProviderCardPurpose.Article : ProviderCardPurpose.Main;
         var uri = await RenderCardAsync(media, purpose, cancellationToken).ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(uri)) return false;
+        if (string.IsNullOrWhiteSpace(uri)) return null;
         var sent = await SendImageAsync(message, new ImageSegment(uri)).ConfigureAwait(false);
         if (media.ProviderId is ("bilibili" or "bilibili-bangumi") && int.TryParse(media.Attributes.GetValueOrDefault("pages"), out var pageCount))
             RegisterMediaSelection(message, sent, media, pageCount);
-        return sent.IsSuccess;
+        // 网易云卡片上提示「回复 mp3 获取 MP3 文件」：回复卡片和回复语音一样能拿到下载好的原音频。
+        if (media.ProviderId == "neteasecloudmusic" && sent.IsSuccess && audioDownload is not null)
+            RegisterAudioFileReply(message, sent.MessageId, media, () => audioDownload);
+        return sent.IsSuccess && !string.IsNullOrWhiteSpace(sent.MessageId) ? sent.MessageId : null;
+    }
+
+    /// <summary>60 分钟内回复这条消息「mp3」（或 dl）上传下载好的原音频文件。</summary>
+    private void RegisterAudioFileReply(MessageEvent message, string messageId, ParsedMedia media, Func<Task<string?>> pathProvider)
+    {
+        _audioDownloads.Register(BotContext.Message, message, messageId, TimeSpan.FromMinutes(60), async reply =>
+        {
+            string? path = null;
+            try
+            {
+                path = await pathProvider().ConfigureAwait(false);
+                if (string.IsNullOrWhiteSpace(path)) throw new FileNotFoundException("音频还没有下载完成。");
+                await HostServices.UploadLocalFileAsync(Config, reply, path,
+                    media.ProviderName, media.MediaId, preferBase64: Config.FileProtocol == 0).ConfigureAwait(false);
+            }
+            catch (Exception error)
+            {
+                BotLog.Warning($"MyParser 网易云原音频上传失败: media_id={media.MediaId}, error={error.Message}");
+                await HostServices.ReplyTextAsync(Config, reply,
+                    path is not null && File.Exists(path) ? "音频文件上传失败，请稍后重试。" : "音频缓存已过期，请重新解析歌曲后再回复 mp3。").ConfigureAwait(false);
+            }
+        });
     }
 
     private void RegisterMediaSelection(MessageEvent source, SentMessage sent, ParsedMedia media, int pageCount)
@@ -224,6 +313,7 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
     {
         if (ProviderId is "bilibili" or "bilibili-bangumi") BilibiliMultiPageReplyCache.Clear();
         _audioDownloads.Dispose();
+        _contentReplies.Dispose();
         base.Dispose();
     }
 
@@ -373,25 +463,27 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
         return localPath;
     }
 
+    /// <summary>提前编码 Silk 语音（QQ）。</summary>
     private async Task<IReadOnlyList<RecordOutgoingSegment>> PrepareTrackSegmentsAsync(
         ParsedMedia media, string? localPath, CancellationToken cancellationToken)
     {
         if (localPath is null) throw new InvalidOperationException("音频下载未生成本地文件。");
         var timer = Stopwatch.StartNew();
-        global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 语音准备开始: media_id={media.MediaId}, silk={Config.EnableSilkEncoding}");
-        var audio = media.Assets.First(asset => asset.Kind == MediaAssetKind.Audio);
-        var paths = Config.EnableSilkEncoding
-            ? (await HostServices.BuildSilkRecordVariantsAsync(Config,
-                new ProviderRecordBuildRequest(media.ProviderId, media.ProviderName, media.MediaId, localPath,
-                    audio.FileNamePrefix ?? media.Title ?? media.MediaId), cancellationToken).ConfigureAwait(false)).Select(variant => variant.Path)
-            : [localPath];
-        var records = new List<RecordOutgoingSegment>();
-        foreach (var path in paths)
-            records.Add(new RecordOutgoingSegment(await HostServices.BuildRecordUriAsync(path, cancellationToken).ConfigureAwait(false)));
-        global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 语音准备完成: media_id={media.MediaId}, elapsed_ms={timer.ElapsedMilliseconds}");
+        global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser Silk 语音准备开始: media_id={media.MediaId}");
+        var records = await VoiceSender.EncodeSilkAsync(CreateVoicePackage(media, localPath), cancellationToken).ConfigureAwait(false);
+        global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser Silk 语音准备完成: media_id={media.MediaId}, elapsed_ms={timer.ElapsedMilliseconds}");
         return records;
     }
 
+    private static VoicePackage CreateVoicePackage(ParsedMedia media, string localPath,
+        Task<IReadOnlyList<RecordOutgoingSegment>>? preparedSilk = null, Action<string>? onVoiceSent = null)
+    {
+        var audio = media.Assets.First(asset => asset.Kind == MediaAssetKind.Audio);
+        return new VoicePackage(media.ProviderId, media.ProviderName, media.MediaId, localPath,
+            audio.FileNamePrefix ?? media.Title ?? media.MediaId, preparedSilk, onVoiceSent);
+    }
+
+    /// <summary>语音三级兜底：原音频直接发语音 → 需要的地方编码 Silk → 都不行上传原 MP3 文件。</summary>
     private async Task<bool> SendTrackAsync(MessageEvent message, ParsedMedia media, CancellationToken cancellationToken,
         string? existingPath = null, Task<string?>? preparedDownload = null,
         Task<IReadOnlyList<RecordOutgoingSegment>>? preparedRecords = null)
@@ -399,42 +491,17 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
         var audio = media.Assets.FirstOrDefault(asset => asset.Kind == MediaAssetKind.Audio);
         if (audio is null) return true;
 
-        string? localAudioPath = existingPath;
-
         try
         {
-            if (localAudioPath is null)
-            {
-                localAudioPath = await (preparedDownload ?? DownloadTrackAsync(media, cancellationToken)).ConfigureAwait(false);
-            }
-            var records = await (preparedRecords ?? PrepareTrackSegmentsAsync(media, localAudioPath, cancellationToken)).ConfigureAwait(false);
-            foreach (var record in records)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                var timer = Stopwatch.StartNew();
-                global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 语音发送开始: media_id={media.MediaId}");
-                var sent = await HostServices.SendSegmentsAsync(message, [record]).ConfigureAwait(false);
-                if (string.IsNullOrWhiteSpace(sent.MessageId)) throw new InvalidOperationException("音频发送没有返回消息 ID。");
-                if (media.ProviderId == "neteasecloudmusic")
-                {
-                    var path = localAudioPath;
-                    _audioDownloads.Register(BotContext.Message, message, sent.MessageId, TimeSpan.FromMinutes(60), async reply =>
-                    {
-                        try
-                        {
-                            await HostServices.UploadLocalFileAsync(Config, reply, path,
-                                media.ProviderName, media.MediaId, preferBase64: Config.FileProtocol == 0).ConfigureAwait(false);
-                        }
-                        catch (Exception error)
-                        {
-                            BotLog.Warning($"MyParser 网易云原音频上传失败: media_id={media.MediaId}, error={error.Message}");
-                            await HostServices.ReplyTextAsync(Config, reply,
-                                File.Exists(path) ? "音频文件上传失败，请稍后重试。" : "音频缓存已过期，请重新解析歌曲后再回复 dl。").ConfigureAwait(false);
-                        }
-                    });
-                }
-                global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 语音发送完成: media_id={media.MediaId}, elapsed_ms={timer.ElapsedMilliseconds}");
-            }
+            var localAudioPath = existingPath ?? await (preparedDownload ?? DownloadTrackAsync(media, cancellationToken)).ConfigureAwait(false)
+                ?? throw new InvalidOperationException("音频下载未生成本地文件。");
+            // 网易云每条语音都登记「回复 mp3 获取文件」。
+            Action<string>? onVoiceSent = media.ProviderId == "neteasecloudmusic"
+                ? messageId => RegisterAudioFileReply(message, messageId, media, () => Task.FromResult<string?>(localAudioPath))
+                : null;
+            var level = await VoiceSender.SendAsync(message, CreateVoicePackage(media, localAudioPath, preparedRecords, onVoiceSent),
+                cancellationToken).ConfigureAwait(false);
+            if (level == VoiceDeliveryLevel.File) await ReactAsync(message, "426", ReactionPlatformName).ConfigureAwait(false);
             return true;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -444,18 +511,6 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
         catch (Exception ex)
         {
             BotLog.Warning($"MyParser {media.ProviderName} 音频投递失败: media_id={media.MediaId}, error={ex.Message}");
-            try
-            {
-                var upload = await HostServices.UploadLocalFileAsync(Config, message, localAudioPath,
-                    media.ProviderName, media.MediaId, preferBase64: Config.FileProtocol == 0).ConfigureAwait(false);
-                global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 音频已回退文件上传: media_id={media.MediaId}, {upload}");
-                await ReactAsync(message, "426", ReactionPlatformName).ConfigureAwait(false);
-                return true;
-            }
-            catch (Exception uploadException)
-            {
-                BotLog.Warning($"MyParser {media.ProviderName} 音频文件回退失败: media_id={media.MediaId}, error={uploadException.Message}");
-            }
             await ReportFailureAsync(message, ProviderFailureKind.MediaDelivery, ex, $"media_id={media.MediaId}").ConfigureAwait(false);
             await ReactAsync(message, "9", ReactionPlatformName).ConfigureAwait(false);
             return false;
@@ -464,11 +519,8 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
 
     private async Task SendArticleForwardAsync(MessageEvent message, ParsedMedia media, CancellationToken cancellationToken)
     {
-        if (!SupportsArticleForward(message))
-        {
-            await SendArticleDocumentAsync(message, media, cancellationToken).ConfigureAwait(false);
-            return;
-        }
+        // 只能走长图的平台用文章长图兜底，长图里画不了视频，就不提前下载正文视频了。
+        var downloadVideos = ForwardSender.PredictLevel(message) < ForwardDeliveryLevel.LongImage;
         using var gate = new SemaphoreSlim(4);
         var nodes = await Task.WhenAll(media.Content.Select(async (block, index) =>
         {
@@ -488,7 +540,7 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
                 else if (block.Kind == MediaContentKind.Video && !string.IsNullOrWhiteSpace(block.Url))
                 {
                     var video = media.Assets.FirstOrDefault(asset => asset.Kind == MediaAssetKind.Video && asset.Url == block.Url);
-                    if (video is not null && Config.IsVideoDeliveryEnabled())
+                    if (video is not null && Config.IsVideoDeliveryEnabled() && downloadVideos)
                     {
                         var (fileUri, path) = await DownloadVideoAsync(media with { Kind = ParsedMediaKind.Video, Assets = [video] }, cancellationToken).ConfigureAwait(false);
                         var local = await HostServices.BuildLocalVideoSegmentAsync(Config,
@@ -513,33 +565,56 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
         var title = string.IsNullOrWhiteSpace(media.Title) ? "小黑盒文章" : TextPreviewFormatter.TrimLine(media.Title, 48);
         var preview = media.Content.Where(block => !string.IsNullOrWhiteSpace(block.Text)).Take(3)
             .Select(block => TextPreviewFormatter.TrimLine(block.Text!, 48)).ToArray();
-        try
+        // 不支持合并转发、也不能一条发多图的平台，第 3 级用文章长图（含正文排版），比通用长图好看。
+        await ForwardSender.SendAsync(message, new ForwardPackage(content, title)
         {
-            var sent = await BotContext.Message.ReplyAsync(message,
-                new ForwardOutgoingSegment(content, title, preview, $"共 {content.Length} 条", "小黑盒文章")).ConfigureAwait(false);
-            if (string.IsNullOrWhiteSpace(sent.MessageId)) throw new InvalidOperationException("文章合并转发未返回消息 ID。");
-        }
-        catch (NotSupportedException)
-        {
-            await SendArticleDocumentAsync(message, media, cancellationToken).ConfigureAwait(false);
-        }
+            Preview = preview, Summary = $"共 {content.Length} 条", Prompt = "小黑盒文章",
+            ProviderId = media.ProviderId, MediaId = media.MediaId,
+            RenderLongImageAsync = token => CardRenderer is null
+                ? Task.FromResult<string?>(null)
+                : CardRenderer.RenderAsync(media, ProviderCardPurpose.Article, token),
+        }, cancellationToken).ConfigureAwait(false);
     }
 
-    private bool SupportsArticleForward(MessageEvent message) =>
-        string.Equals(message.Platform, "qq", StringComparison.OrdinalIgnoreCase)
-        && !string.IsNullOrWhiteSpace(message.InstanceId)
-        && BotContext.Message.GetMessageCapabilities(new ChannelReference(message.InstanceId, message.Channel))
-            .NativeFeatures.HasFlag(MessageFeatures.Raw);
-
-    private async Task SendArticleDocumentAsync(MessageEvent message, ParsedMedia media, CancellationToken cancellationToken)
+    /// <summary>B 站动态：卡片之后把全部原图按聊天记录发出（QQ 合并转发，其他平台逐级兜底；最后一级挂在卡片上回复「原图」）。</summary>
+    private async Task SendDynamicImagesAsync(MessageEvent message, ParsedMedia media, string? cardMessageId, CancellationToken cancellationToken)
     {
-        // An article document must contain the body; the generic preview card is not a valid fallback.
-        var uri = CardRenderer is null ? null
-            : await CardRenderer.RenderAsync(media, ProviderCardPurpose.Article, cancellationToken).ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(uri)) throw new InvalidOperationException("文章长图卡片渲染失败。");
+        var urls = media.Content.Where(block => block.Kind == MediaContentKind.Image && !string.IsNullOrWhiteSpace(block.Url))
+            .Select(block => block.Url!).Distinct(StringComparer.Ordinal).ToArray();
+        if (urls.Length == 0) return;
+        using var gate = new SemaphoreSlim(4);
+        var senderName = string.IsNullOrWhiteSpace(media.AuthorName) ? media.ProviderName : media.AuthorName!;
+        var nodes = await Task.WhenAll(urls.Select(async (url, index) =>
+        {
+            await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                var image = await HostServices.BuildProviderImageAsync(new ProviderImageBuildRequest(
+                    media.ProviderName, url, media.SourceUrl, $"{media.ProviderId}_{media.MediaId}_original_{index:D2}",
+                    request => ApplyHeaders(request, GetImageHeaders(media)), PersistLocalFile: false), cancellationToken).ConfigureAwait(false);
+                return string.IsNullOrWhiteSpace(image.Uri)
+                    ? null
+                    : new OutgoingForwardedMessage(message.Sender.Id, senderName, [new ImageSegment(image.Uri)]);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+            catch (Exception ex)
+            {
+                BotLog.Warning($"MyParser 动态原图下载失败: media_id={media.MediaId}, index={index}, error={ex.Message}");
+                return null;
+            }
+            finally { gate.Release(); }
+        })).ConfigureAwait(false);
+        var content = nodes.OfType<OutgoingForwardedMessage>().ToArray();
+        if (content.Length == 0) return;
         cancellationToken.ThrowIfCancellationRequested();
-        var sent = await SendImageAsync(message, new ImageSegment(uri)).ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(sent.MessageId)) throw new InvalidOperationException("文章长图卡片发送未返回消息 ID。");
+        await ForwardSender.SendAsync(message, new ForwardPackage(content, $"{senderName} 的动态原图")
+        {
+            Preview = content.Take(4).Select((_, index) => $"图片 {index + 1}").ToArray(),
+            Summary = $"共 {content.Length} 张", Prompt = "哔哩哔哩动态",
+            ProviderId = media.ProviderId, MediaId = media.MediaId,
+            Platform = MediaCardPlatform.Bilibili,
+            ReplyAnchorMessageId = cardMessageId,
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task SendContentAsync(MessageEvent message, ParsedMedia media, CancellationToken cancellationToken)
@@ -711,9 +786,14 @@ internal sealed class UnifiedMediaMessageHandler(ProviderMessageHandlerContext c
         {
             var title = string.IsNullOrWhiteSpace(media.Title) ? media.ProviderName : TextPreviewFormatter.TrimLine(media.Title, 48);
             var preview = images.Take(4).Select((_, index) => $"图片 {index + 1}").ToArray();
-            var forward = new ForwardOutgoingSegment(galleryMessages, title, preview, $"共 {galleryMessages.Count} 张", media.ProviderName);
-            var sent = await BotContext.Message.ReplyAsync(message, forward).ConfigureAwait(false);
-            if (string.IsNullOrWhiteSpace(sent.MessageId)) throw new InvalidOperationException("图文合并转发未返回消息 ID。");
+            await ForwardSender.SendAsync(message, new ForwardPackage(galleryMessages, title)
+            {
+                Preview = preview, Summary = $"共 {galleryMessages.Count} 张", Prompt = media.ProviderName,
+                ProviderId = media.ProviderId, MediaId = media.MediaId,
+                Platform = media.ProviderId == "douyin" ? MediaCardPlatform.Douyin : null,
+                // 图集是主内容：合并转发 → 单条多图 → 长图，不做回复获取。
+                ReplyOnDemand = false,
+            }, cancellationToken).ConfigureAwait(false);
         }
 
         global::Shirobot.Plugin.MyParser.DiagnosticLog.Info($"MyParser 图文媒体发送完成: media_id={media.MediaId}, elapsed_ms={gallerySendTimer.ElapsedMilliseconds}");

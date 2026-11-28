@@ -25,6 +25,7 @@ try
     var model = CreateViewModel(media);
     Check(model.VideoMeta == "2026-10-10 发布 · 搞笑 · BV1rxp86jEYH", "Publish time/category/BVID did not reach the card.");
     Check(model.AuthorMeta == "IP属地：云南", "APP pub_location did not reach the card.");
+    Check(media.Attributes["author_pendant_url"] == "https://example.com/pendant.png", "Author pendant did not reach the media attributes.");
     Check(model.Tags.SequenceEqual(new[] { "#搞笑", "#原创" }), "Actual tags were lost or replaced with stream quality.");
     Check(model.ViewCount == "14.8万" && model.LikeCount == "2.6万" && model.CoinCount == "7,305" && model.CollectCount == "9,142", "Statistics did not reach the card.");
     Check(model.AuthorName == "测试UP" && model.DurationText == "2:50", "Author/duration did not reach the card.");
@@ -76,7 +77,7 @@ try
         MessageId="source", Sender=new User("tester"), Segments=[new TextSegment("link")] };
     var fakeServices = DispatchProxy.Create<IProviderHostServices, RecordingHostServices>();
     var recorder = (RecordingHostServices)fakeServices;
-    var handlerType = typeof(BiliCardViewModel).Assembly.GetType("Shirobot.Plugin.MyParser.MessageHandling.UnifiedMediaMessageHandler", true)!;
+    var handlerType = typeof(BiliArticleDocumentViewModel).Assembly.GetType("Shirobot.Plugin.MyParser.MessageHandling.UnifiedMediaMessageHandler", true)!;
     var presenter = Activator.CreateInstance(handlerType,
         [new ProviderMessageHandlerContext(null!, new PluginConfig(), provider, fakeServices, new PreviewCardRenderer())])!;
     await (Task)handlerType.GetMethod("PresentAsync", BindingFlags.NonPublic|BindingFlags.Instance)!
@@ -202,10 +203,11 @@ try
         && shortSeason.Attributes["requested_page"] == "1", "Short ss ID did not play the same first episode.");
     Check(episodePreview.Attributes["preview_only"] == "true" && episodePreview.Assets.Count == 0
         && episodePreview.Attributes["requested_page"] == "2", "Episode preview requested playback or lost episode index.");
-    var rendererType = typeof(BiliCardViewModel).Assembly.GetType("MyParser.Provider.BiliBili.BilibiliMediaCardRenderer", true)!;
-    var seasonModel = (BiliCardViewModel)rendererType.GetMethod("CreateBangumiViewModel", BindingFlags.Static|BindingFlags.NonPublic)!
-        .Invoke(null, [episodePreview, null])!;
-    Check(seasonModel.CurrentPageText == "当前解析 第2/2集" && seasonModel.Avatar is null, "Episode card model did not match selected episode.");
+    var rendererType = typeof(BiliArticleDocumentViewModel).Assembly.GetType("MyParser.Provider.BiliBili.BilibiliMediaCardRenderer", true)!;
+    var seasonModel = (MediaCardViewModel)rendererType.GetMethod("CreateBangumiViewModel", BindingFlags.Static|BindingFlags.NonPublic)!
+        .Invoke(null, [episodePreview, null, null])!;
+    Check(seasonModel.ExtraText == "当前解析 第2/2集" && seasonModel.BadgeText == "全 2 集" && seasonModel.CompactAvatar && seasonModel.AuthorName == "哔哩哔哩番剧"
+        && seasonModel.ExtraHint.Length > 0, "Episode card model did not match selected episode.");
     var episodeUrls = new List<string>();
     var bangumiConfig = new PluginConfig();
     var bangumiPresenter = (IDisposable)Activator.CreateInstance(handlerType,
@@ -241,7 +243,7 @@ try
     Check(recorder.Messages.SequenceEqual(new[]{"text"}), "Disabled bangumi cover did not send one text preview.");
     await subscriptions.Handler!(numeric with { Segments=[new QuoteSegment("text-1"),new TextSegment("1")] });
     Check(episodeUrls[^1] == "https://www.bilibili.com/bangumi/play/ep100138", "Text episode preview lost reply subscription.");
-    var cacheType = typeof(BiliCardViewModel).Assembly.GetType("MyParser.Provider.BiliBili.Parsing.BilibiliMultiPageReplyCache", true)!;
+    var cacheType = typeof(BiliArticleDocumentViewModel).Assembly.GetType("MyParser.Provider.BiliBili.Parsing.BilibiliMultiPageReplyCache", true)!;
     cacheType.GetMethod("RegisterSelections")!.Invoke(null,
         [source, "native-bangumi-card", new[]{"https://www.bilibili.com/bangumi/play/ep100138", "https://www.bilibili.com/bangumi/play/ep100139"}, null, null]);
     Check(module.TryBuildParseText(numeric with { Segments=[new QuoteSegment("native-bangumi-card"),new TextSegment("2")] })
@@ -292,8 +294,8 @@ finally { cookieProperty.SetValue(null, previousCookie); }
 
 static VideoCardView CreateViewModel(ParsedMedia media)
 {
-    var renderer = typeof(BiliCardViewModel).Assembly.GetType("MyParser.Provider.BiliBili.BilibiliMediaCardRenderer", true)!;
-    var card = (MediaCardViewModel)renderer.GetMethod("CreateVideoViewModel", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, [media, null, null])!;
+    var renderer = typeof(BiliArticleDocumentViewModel).Assembly.GetType("MyParser.Provider.BiliBili.BilibiliMediaCardRenderer", true)!;
+    var card = (MediaCardViewModel)renderer.GetMethod("CreateVideoViewModel", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, [media, null, null, null])!;
     string Metric(string label) => card.Metrics.Single(metric => metric.Label == label).Value;
     return new VideoCardView(card.Title, card.Meta, card.AuthorName, card.AuthorMeta, card.HasAuthorMeta, card.BadgeText,
         card.Tags, card.HasTags, card.HasExtra, card.ExtraText,
@@ -328,7 +330,7 @@ sealed class MetadataHandler : HttpMessageHandler
             LastPlayCid = request.RequestUri.Query.TrimStart('?').Split('&')
                 .Select(part => part.Split('=', 2)).FirstOrDefault(pair => pair[0] == "cid")?[1];
         }
-        var supplementary = path is "/x/v2/view" or "/x/web-interface/view/detail/tag";
+        var supplementary = path is "/x/v2/view" or "/x/web-interface/view/detail/tag" or "/x/web-interface/card";
         if (path == "/x/v2/view") Interlocked.Increment(ref AppRequests);
         if (path == "/x/web-interface/view/detail/tag") Interlocked.Increment(ref TagRequests);
         if (supplementary && CancelSupplementary) await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
@@ -348,6 +350,7 @@ sealed class MetadataHandler : HttpMessageHandler
                 """,
             "/x/v2/view" => """{"code":0,"data":{"tname":"搞笑","pub_location":"云南"}}""",
             "/x/web-interface/view/detail/tag" => """{"code":0,"data":[{"tag_name":"搞笑"},{"tag_name":"原创"},{"tag_name":"搞笑"}]}""",
+            "/x/web-interface/card" => """{"code":0,"data":{"card":{"mid":"123","pendant":{"pid":1,"name":"测试头像框","image":"https://example.com/pendant.png"}}}}""",
             "/x/web-interface/nav" => """{"code":0,"data":{"wbi_img":{"img_url":"https://i0.hdslb.com/bfs/wbi/7cd084941338484aae1ad9425b84077c.png","sub_url":"https://i0.hdslb.com/bfs/wbi/4932caff0ff746eab6f01bf08b70ac45.png"}}}""",
             "/x/player/wbi/playurl" => """{"code":0,"data":{"dash":{"video":[{"id":80,"baseUrl":"https://example.com/video.m4s"}],"audio":[{"id":30280,"baseUrl":"https://example.com/audio.m4s"}]}}}""",
             _ => throw new InvalidOperationException("Unexpected endpoint " + path),

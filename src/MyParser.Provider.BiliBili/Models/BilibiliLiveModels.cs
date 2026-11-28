@@ -16,7 +16,16 @@ public sealed class BilibiliLiveParseResult
 
     public string? AnchorAvatarUrl { get; init; }
 
+    /// <summary>主播头像框（装扮挂件）图片，没有佩戴时为空。</summary>
+    public string? AnchorPendantUrl { get; init; }
+
     public string? CoverUrl { get; init; }
+
+    public string? AreaName { get; init; }
+
+    public string? ParentAreaName { get; init; }
+
+    public IReadOnlyList<string> Tags { get; init; } = [];
 
     public long OnlineCount { get; init; }
 

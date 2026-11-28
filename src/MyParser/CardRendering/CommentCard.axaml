@@ -85,37 +85,6 @@
             <Border Background="{Binding AccentTintGradient}" />
 
             <StackPanel Margin="14,14,14,12" Spacing="12">
-                <!-- ===== 头部：作品缩略图 + 评论区 + 数量胶囊 ===== -->
-                <Grid ColumnDefinitions="Auto,*,Auto">
-                    <Border Width="44" Height="44" CornerRadius="11" ClipToBounds="True"
-                            BorderBrush="{DynamicResource PanelBorder}" BorderThickness="0.75"
-                            IsVisible="{Binding HasCover}">
-                        <Image Source="{Binding Cover}" Stretch="UniformToFill" />
-                    </Border>
-                    <Border Width="44" Height="44" CornerRadius="11" Background="{Binding AccentGradient}"
-                            IsVisible="{Binding HasNoCover}">
-                        <Path Data="{Binding PlatformIcon, Converter={x:Static vm:MediaCardGeometryConverter.Instance}}"
-                              Fill="#FFFFFF" Stretch="Uniform" Width="20" Height="20" />
-                    </Border>
-
-                    <StackPanel Grid.Column="1" Margin="10,0,8,0" VerticalAlignment="Center" Spacing="2">
-                        <StackPanel Orientation="Horizontal" Spacing="5">
-                            <Path Data="{Binding Source={x:Static vm:MediaCardIcons.Fire}, Converter={x:Static vm:MediaCardGeometryConverter.Instance}}"
-                                  Fill="{Binding AccentGradient}" Stretch="Uniform" Width="12" Height="12"
-                                  VerticalAlignment="Center" />
-                            <TextBlock Text="热门评论" Foreground="{DynamicResource TextTitle}"
-                                       FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
-                        </StackPanel>
-                        <TextBlock Text="{Binding SourceTitle}" Foreground="{DynamicResource TextMeta}"
-                                   FontSize="10" FontWeight="Medium" TextTrimming="CharacterEllipsis" MaxLines="1" />
-                    </StackPanel>
-
-                    <Border Grid.Column="2" Background="{Binding AccentGradient}" CornerRadius="10"
-                            Padding="9,4" VerticalAlignment="Center" IsVisible="{Binding HasCountText}">
-                        <TextBlock Text="{Binding CountText}" Foreground="#FFFFFF" FontSize="10" FontWeight="SemiBold" />
-                    </Border>
-                </Grid>
-
                 <!-- ===== 评论列表：一整块毛玻璃面板，条目之间细分隔线 ===== -->
                 <Border Background="{DynamicResource PanelBg}" BorderBrush="{DynamicResource PanelBorder}"
                         BorderThickness="1" CornerRadius="14" Padding="12,2">
@@ -202,8 +171,20 @@
                     </ItemsControl>
                 </Border>
 
-                <!-- ===== 底部：平台徽标 + 说明 / 署名 ===== -->
+                <!-- ===== 底部：（回复原图提示）平台徽标 + 说明 / 署名 ===== -->
                 <Grid ColumnDefinitions="Auto,*" Margin="2,0">
+                    <StackPanel Spacing="7" VerticalAlignment="Bottom">
+                    <!-- 评论里有图片时：回复卡片「原图」获取评论图片原图 -->
+                    <Border IsVisible="{Binding HasImageHint}" HorizontalAlignment="Left"
+                            Background="{DynamicResource PanelBg}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1"
+                            CornerRadius="10" Padding="7,3,9,3">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <Path Data="{Binding Source={x:Static vm:MediaCardIcons.Image}, Converter={x:Static vm:MediaCardGeometryConverter.Instance}}"
+                                  Fill="{Binding AccentGradient}" Stretch="Uniform" Width="10" Height="10" VerticalAlignment="Center" />
+                            <TextBlock Text="回复 原图 获取评论图片" Foreground="{DynamicResource TextMeta}" FontSize="9"
+                                       FontWeight="Medium" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Border>
                     <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                         <Border Width="16" Height="16" CornerRadius="8" Background="#FFFFFF"
                                 IsVisible="{Binding IsBilibili}">
@@ -218,9 +199,9 @@
                         <TextBlock Text="{Binding FooterText}" Foreground="{DynamicResource TextMeta}"
                                    FontSize="9" FontWeight="Medium" VerticalAlignment="Center" />
                     </StackPanel>
-                    <TextBlock Grid.Column="1" Text="{Binding BrandText}" Foreground="{DynamicResource BrandText}"
-                               FontSize="7" Opacity="0.8" VerticalAlignment="Center" HorizontalAlignment="Right"
-                               TextAlignment="Right" TextWrapping="Wrap" Margin="8,0,0,0" />
+                    </StackPanel>
+                    <vm:CardBrandMark Grid.Column="1" TextSize="8" Opacity="0.8" Margin="8,0,0,0" VerticalAlignment="Bottom"
+                                      TextElement.Foreground="{DynamicResource BrandText}" />
                 </Grid>
             </StackPanel>
         </Grid>

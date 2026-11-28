@@ -7,6 +7,7 @@ public static class BilibiliConstants
     public const string NavApi = "https://api.bilibili.com/x/web-interface/nav";
     public const string ViewApi = "https://api.bilibili.com/x/web-interface/view";
     public const string AppViewApi = "https://app.bilibili.com/x/v2/view";
+    public const string UserCardApi = "https://api.bilibili.com/x/web-interface/card";
     public const string VideoTagsApi = "https://api.bilibili.com/x/web-interface/view/detail/tag";
     public const string PlayUrlApi = "https://api.bilibili.com/x/player/wbi/playurl";
     public const string CommentMainApi = "https://api.bilibili.com/x/v2/reply/wbi/main";

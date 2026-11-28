@@ -55,7 +55,6 @@ internal sealed class NetEaseMediaCardRenderer(ProviderCardRenderContext context
             DurationText = NetEaseMusicCardViewModel.FormatDuration(Value(media, "duration_ms")),
             Credits = credits,
             Lyrics = lyrics,
-            SongIdText = media.MediaId,
         };
     }
 

@@ -111,6 +111,7 @@ public sealed class BilibiliParseProvider(BilibiliParser parser) : IIncomingMess
                 Attributes = new Dictionary<string, string>
                 {
                     ["author_avatar_url"] = video.AuthorAvatarUrl ?? string.Empty,
+                    ["author_pendant_url"] = video.AuthorPendantUrl ?? string.Empty,
                     ["pages"] = video.PageCount.ToString(), ["requested_page"] = video.Page.ToString(),
                     ["preview_only"] = video.IsPreview ? "true" : "false",
                     ["publish_timestamp"] = video.PublishTimestamp.ToString(),

@@ -5,6 +5,8 @@ public sealed record BilibiliArticleParseResult
     public required long Cvid { get; init; }
     public string? OpusId { get; init; }
     public bool IsOpus { get; init; }
+    /// <summary>没有标题的 opus 图文动态（不是专栏文章），用动态卡片渲染。</summary>
+    public bool IsDynamic { get; init; }
     public string? SourceUrl { get; init; }
     public string? Title { get; init; }
     public string? Summary { get; init; }
@@ -16,6 +18,10 @@ public sealed record BilibiliArticleParseResult
     public string? AuthorName { get; init; }
     public string? AuthorId { get; init; }
     public string? AuthorAvatarUrl { get; init; }
+    /// <summary>头像框（装扮挂件）图片，没有佩戴时为空。</summary>
+    public string? AuthorPendantUrl { get; init; }
+    /// <summary>认证信息，如「哔哩哔哩漫画官方账号」。</summary>
+    public string? AuthorOfficial { get; init; }
     public long AuthorFans { get; init; }
     public long ViewCount { get; init; }
     public long LikeCount { get; init; }

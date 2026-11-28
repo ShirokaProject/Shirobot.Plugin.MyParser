@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- 一键渲染全部卡片预览（亮色 / 暗色两张集合图），不参与 CI；运行方式见 Program.cs 开头 -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Headless" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/MyParser/Shirobot.Plugin.MyParser.csproj"
+                      AdditionalProperties="ShiroBotPluginPackagingEnabled=false" />
+  </ItemGroup>
+</Project>

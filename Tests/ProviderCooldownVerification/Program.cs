@@ -2,7 +2,7 @@ using System.Reflection;
 using MyParser.Provider.BiliBili.Views;
 using ShiroBot.SDK.Models;
 
-var managerType = typeof(BiliCard).Assembly.GetType("Shirobot.Plugin.MyParser.ParseTaskManager", true)!;
+var managerType = typeof(BiliArticleDocument).Assembly.GetType("Shirobot.Plugin.MyParser.ParseTaskManager", true)!;
 var manager = Activator.CreateInstance(managerType, nonPublic: true)!;
 var enter = managerType.GetMethod("TryEnterProviderCooldown")!;
 const string video = "https://www.bilibili.com/video/BV1rxp86jEYH/";

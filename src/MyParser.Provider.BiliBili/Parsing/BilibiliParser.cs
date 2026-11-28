@@ -163,6 +163,7 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
             AuthorName = owner?.GetStringOrDefault("name"),
             AuthorId = owner?.GetInt64OrDefault("mid").ToString(),
             AuthorAvatarUrl = owner?.GetStringOrDefault("face"),
+            AuthorPendantUrl = metadata.PendantUrl,
             CoverUrl = pageCover,
             DurationSeconds = pageJson.GetInt64OrDefault("duration") > 0 ? pageJson.GetInt64OrDefault("duration") : view.GetInt64OrDefault("duration"),
             ViewCount = stat?.GetInt64OrDefault("view") ?? 0,
@@ -255,7 +256,7 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
         return json.RootElement.GetPropertyOrDefault("data")?.Clone() ?? throw new BilibiliParseException("B站 view 接口未返回 data。");
     }
 
-    private async Task<(string? CategoryName, string? Location, IReadOnlyList<string> Tags)> GetVideoMetadataAsync(
+    private async Task<(string? CategoryName, string? Location, IReadOnlyList<string> Tags, string? PendantUrl)> GetVideoMetadataAsync(
         string bvid, JsonElement view, long cid, CancellationToken cancellationToken)
     {
         var referer = $"https://www.bilibili.com/video/{bvid}/";
@@ -269,9 +270,14 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
             ["bvid"] = bvid,
             ["cid"] = cid.ToString(),
         }, referer, cancellationToken);
-        await Task.WhenAll(appTask, tagsTask);
+        var ownerMid = view.GetPropertyOrDefault("owner")?.GetInt64OrDefault("mid") ?? 0;
+        var cardTask = ownerMid > 0
+            ? TryGetSupplementaryDataAsync(BilibiliConstants.UserCardApi, new Dictionary<string, string> { ["mid"] = ownerMid.ToString() }, referer, cancellationToken)
+            : Task.FromResult<JsonElement?>(null);
+        await Task.WhenAll(appTask, tagsTask, cardTask);
         var app = await appTask;
         var tagsData = await tagsTask;
+        var pendant = (await cardTask)?.GetPropertyOrDefault("card")?.GetPropertyOrDefault("pendant")?.GetStringOrDefault("image");
         var category = FirstNonEmpty(view.GetStringOrDefault("tname"), app?.GetStringOrDefault("tname"),
             view.GetStringOrDefault("tname_v2"), app?.GetStringOrDefault("tnamev2"));
         var location = FirstNonEmpty(app?.GetStringOrDefault("pub_location"), view.GetStringOrDefault("pub_location"));
@@ -280,7 +286,7 @@ public sealed class BilibiliParser : IParserHttpClientAccessor, IVideoDownloadGa
                 .Where(name => !string.IsNullOrWhiteSpace(name)).Select(name => name!.Trim())
                 .Distinct(StringComparer.Ordinal).ToArray()
             : [];
-        return (category, location, tags);
+        return (category, location, tags, string.IsNullOrWhiteSpace(pendant) ? null : pendant);
     }
 
     private async Task<JsonElement?> TryGetSupplementaryDataAsync(string url, IReadOnlyDictionary<string, string> parameters,

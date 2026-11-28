@@ -19,6 +19,8 @@ public sealed record BilibiliParseResult
     public string? AuthorName { get; init; }
     public string? AuthorId { get; init; }
     public string? AuthorAvatarUrl { get; init; }
+    /// <summary>头像框（装扮挂件）图片，没有佩戴时为空。</summary>
+    public string? AuthorPendantUrl { get; init; }
     public string? CoverUrl { get; init; }
     public long DurationSeconds { get; init; }
     public long ViewCount { get; init; }

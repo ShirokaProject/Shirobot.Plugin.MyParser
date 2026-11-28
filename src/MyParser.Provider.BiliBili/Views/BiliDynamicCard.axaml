@@ -1,0 +1,159 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:MyParser.Provider.BiliBili.Views"
+             xmlns:cr="using:Shirobot.Plugin.MyParser.CardRendering"
+             x:Class="MyParser.Provider.BiliBili.Views.BiliDynamicCard"
+             x:DataType="vm:BiliDynamicCardViewModel"
+             Width="520"
+             HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
+
+    <Design.DataContext>
+        <vm:BiliDynamicCardViewModel />
+    </Design.DataContext>
+
+    <!-- B 站动态（没有标题的图文动态）：帖子样式。宽 520，内容宽 472；
+         头像 + 名字 + 认证 / 时间 → 正文 → 图片宫格 → 转发 / 评论 / 点赞 → 时间与署名 -->
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="Page" Color="#F5F6F8" />
+                    <SolidColorBrush x:Key="Placeholder" Color="#E9ECF1" />
+                    <SolidColorBrush x:Key="TextTitle" Color="#16181D" />
+                    <SolidColorBrush x:Key="TextBody" Color="#2E3138" />
+                    <SolidColorBrush x:Key="TextMeta" Color="#6B6F79" />
+                    <SolidColorBrush x:Key="TagText" Color="#363941" />
+                    <SolidColorBrush x:Key="PanelBg" Color="#B8FFFFFF" />
+                    <SolidColorBrush x:Key="PanelBorder" Color="#0D101828" />
+                    <SolidColorBrush x:Key="MetricLabel" Color="#6B6F79" />
+                    <SolidColorBrush x:Key="MetricNumber" Color="#16181D" />
+                    <SolidColorBrush x:Key="BrandText" Color="#8C909A" />
+                    <SolidColorBrush x:Key="AvatarGap" Color="#F5F6F8" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="Page" Color="#22242B" />
+                    <SolidColorBrush x:Key="Placeholder" Color="#2D3038" />
+                    <SolidColorBrush x:Key="TextTitle" Color="#F4F5F7" />
+                    <SolidColorBrush x:Key="TextBody" Color="#D9DBE0" />
+                    <SolidColorBrush x:Key="TextMeta" Color="#A3A7B0" />
+                    <SolidColorBrush x:Key="TagText" Color="#E6E8EC" />
+                    <SolidColorBrush x:Key="PanelBg" Color="#17FFFFFF" />
+                    <SolidColorBrush x:Key="PanelBorder" Color="#1AFFFFFF" />
+                    <SolidColorBrush x:Key="MetricLabel" Color="#B3B7C0" />
+                    <SolidColorBrush x:Key="MetricNumber" Color="#F4F5F7" />
+                    <SolidColorBrush x:Key="BrandText" Color="#8F939C" />
+                    <SolidColorBrush x:Key="AvatarGap" Color="#22242B" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <Style Selector="Border.glass">
+            <Setter Property="Background" Value="#570B0D12" />
+            <Setter Property="CornerRadius" Value="13" />
+            <Setter Property="BackdropEffect">
+                <BlurEffect Radius="16" />
+            </Setter>
+        </Style>
+    </UserControl.Styles>
+
+    <Border CornerRadius="6" ClipToBounds="True" Background="{DynamicResource Page}">
+        <Grid>
+            <Border Background="{Binding AccentSoftGradient}" Opacity="0.6" />
+
+            <StackPanel Margin="24,22,24,18" Spacing="14">
+                <!-- ===== 作者 + 平台标识 ===== -->
+                <Grid ColumnDefinitions="*,Auto">
+                    <Grid ColumnDefinitions="Auto,*" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="{Binding AvatarColumnMargin}">
+                        <Ellipse Width="{Binding AvatarSize}" Height="{Binding AvatarSize}" IsVisible="{Binding HasAvatar}">
+                            <Ellipse.Fill>
+                                <ImageBrush Source="{Binding Avatar}" Stretch="UniformToFill" />
+                            </Ellipse.Fill>
+                        </Ellipse>
+                        <Ellipse Width="{Binding AvatarSize}" Height="{Binding AvatarSize}" IsVisible="{Binding !HasAvatar}"
+                                 Fill="{Binding AccentSoftGradient}" />
+                        <TextBlock Text="{Binding AvatarInitial}" IsVisible="{Binding !HasAvatar}" Foreground="{Binding PrimaryBrush}"
+                                   FontSize="16" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <Image Source="{Binding AvatarPendant}" IsVisible="{Binding HasAvatarPendant}"
+                               Width="{Binding PendantSize}" Height="{Binding PendantSize}" Margin="{Binding PendantMargin}" Stretch="Uniform" />
+                        <StackPanel Grid.Column="1" Margin="{Binding AuthorTextMargin}" VerticalAlignment="Center" Spacing="2">
+                            <TextBlock Text="{Binding AuthorName}" Foreground="{DynamicResource TextTitle}" FontSize="15" FontWeight="Bold"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{Binding AuthorMeta}" IsVisible="{Binding HasAuthorMeta}" Foreground="{DynamicResource TextMeta}"
+                                       FontSize="11" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </Grid>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="12,0,0,0">
+                        <Border Width="20" Height="20" CornerRadius="10" Background="{Binding AccentGradient}">
+                            <Viewbox Width="12" Height="12">
+                                <Path Fill="#FFFFFF" Width="24" Height="24"
+                                      Data="{Binding Source={x:Static cr:MediaCardIcons.BilibiliTv}, Converter={x:Static cr:MediaCardGeometryConverter.Instance}}" />
+                            </Viewbox>
+                        </Border>
+                        <TextBlock Text="动态" Foreground="{DynamicResource TextMeta}" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- ===== 正文 ===== -->
+                <TextBlock Text="{Binding Text}" IsVisible="{Binding HasText}" Foreground="{DynamicResource TextBody}"
+                           FontSize="15" LineHeight="24" TextWrapping="Wrap" MaxLines="18" TextTrimming="CharacterEllipsis" />
+
+                <!-- ===== 图片宫格：1 张整宽；2、4 张两列；其余三列，最多 9 格 ===== -->
+                <ItemsControl ItemsSource="{Binding Tiles}" IsVisible="{Binding HasTiles}" Width="{Binding GridWidth}" HorizontalAlignment="Left">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel ItemSpacing="4" LineSpacing="4" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:BiliDynamicTileViewModel">
+                            <Border Width="{Binding Width}" Height="{Binding Height}" CornerRadius="6" ClipToBounds="True"
+                                    Background="{DynamicResource Placeholder}">
+                                <Panel>
+                                    <Image Source="{Binding Image}" Stretch="UniformToFill" IsVisible="{Binding HasBackdrop}" Margin="-24">
+                                        <Image.Effect>
+                                            <BlurEffect Radius="70" />
+                                        </Image.Effect>
+                                    </Image>
+                                    <Border Background="#4D000000" IsVisible="{Binding HasBackdrop}" />
+                                    <Image Source="{Binding Image}" Stretch="Uniform" IsVisible="{Binding HasBackdrop}" />
+                                    <Image Source="{Binding Image}" Stretch="UniformToFill" IsVisible="{Binding !HasBackdrop}" />
+                                    <!-- 超过 9 张：最后一格压暗并显示剩余数量 -->
+                                    <Border Background="#80000000" IsVisible="{Binding HasMore}">
+                                        <TextBlock Text="{Binding MoreText}" Foreground="#FFFFFF" FontSize="24" FontWeight="Bold"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+                                </Panel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- ===== 底部：左边转发 / 评论 / 点赞（/ 投币），右边署名 ===== -->
+                <Grid ColumnDefinitions="*,Auto" Margin="0,2,0,0">
+                    <ItemsControl ItemsSource="{Binding Metrics}" IsVisible="{Binding HasMetrics}" VerticalAlignment="Center">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" Spacing="16" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="cr:MediaCardMetric">
+                                <StackPanel Orientation="Horizontal" Spacing="5">
+                                    <Path Data="{Binding Icon, Converter={x:Static cr:MediaCardGeometryConverter.Instance}}"
+                                          Fill="{Binding $parent[UserControl].((vm:BiliDynamicCardViewModel)DataContext).AccentGradient}"
+                                          Stretch="Uniform" Width="14" Height="14" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding Value}" Foreground="{DynamicResource MetricNumber}"
+                                               FontSize="13" FontWeight="Bold" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <cr:CardBrandMark Grid.Column="1" TextSize="9" Opacity="0.8" Margin="12,0,0,0" VerticalAlignment="Center"
+                                      TextElement.Foreground="{DynamicResource BrandText}" />
+                </Grid>
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>

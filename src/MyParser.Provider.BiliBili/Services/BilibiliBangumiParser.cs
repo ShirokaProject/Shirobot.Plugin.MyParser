@@ -110,6 +110,10 @@ public sealed class BilibiliBangumiParser(HttpClient http, PluginConfig config)
             RatingText = BuildRatingText(rating),
             PlayText = FormatCountText(FirstPositive(stat?.GetInt64OrDefault("views") ?? 0, stat?.GetInt64OrDefault("view") ?? 0), "播放"),
             FollowText = FormatCountText(FirstPositive(stat?.GetInt64OrDefault("favorites") ?? 0, stat?.GetInt64OrDefault("follow") ?? 0), "追番"),
+            ViewCount = FirstPositive(stat?.GetInt64OrDefault("views") ?? 0, stat?.GetInt64OrDefault("view") ?? 0) ?? 0,
+            FollowCount = FirstPositive(stat?.GetInt64OrDefault("favorites") ?? 0, stat?.GetInt64OrDefault("follow") ?? 0) ?? 0,
+            RatingScore = rating is { ValueKind: JsonValueKind.Object } ? GetScoreText(rating.Value.GetPropertyOrDefault("score")) : null,
+            RatingCount = rating is { ValueKind: JsonValueKind.Object } ? rating.Value.GetInt64OrDefault("count") : 0,
             Styles = styles,
             Episodes = episodes.Select((item, index) => new BilibiliBangumiEpisodeInfo
             {
